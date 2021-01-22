@@ -1,0 +1,136 @@
+
+
+import requests
+import sseclient
+import numpy as np
+from enum import Enum
+from collections import deque
+import access.dataCommon as dc
+
+import log.setupLogger as ls
+
+
+logger = ls.get_logger(__name__)
+
+
+class ProtoHeader(Enum):
+	VARNAME=0
+	TIME_DT=1
+	VAL_DT=2
+	NB_SMP=3
+
+
+class VarType(Enum):
+	pon="P"
+	dan="D"
+	sdn="S"
+
+
+class RTStreamer:
+	def __init__(self, uname, passwd):
+		self.urlX = 'https://controls.iter.org/dashboard/backend/sse'
+		self.params = None
+		self.username = uname
+		self.password = passwd
+		self.auth = (self.username, self.password)
+		self.headers = {'User-Agent': 'it_script_basic'}
+		self.vardata={}
+		self.maxsizeP=100
+		self.maxsize=1000
+		##logging.basicConfig(filename="/tmp/output_pro.log", format='%(asctime)s -%(levelname)s-%(funcName)s-%(message)s', datefmt='%Y-%m-%dT%H:%M:%S', level=logging.DEBUG)
+		##self.logger = logging.getLogger(__name__)
+	def __setParams(self, params=[]):
+		if params is not None and len(params)>0:
+			self.params = "variables="+",".join(params)
+
+	def __convertType(self, utype):
+
+		if utype == "D" or utype == "PD":
+			return dc.DataType.DA_TYPE_DOUBLE
+
+		elif utype == "L":
+			return dc.DataType.DA_TYPE_LONG
+		elif utype == "S" or utype == "PS":
+			return dc.DataType.DA_TYPE_STRING
+
+	def __parseData(self, data,counter):
+		q = None
+		if data.startswith("heartbeat"):
+			return
+		line = data.split(" ")
+
+		xtype = dc.DataType.DA_TYPE_ULONG
+		xlabel = "Time"
+		ylabel = ""
+		xunit = "ns"
+		yunit = ""
+		drank = 1
+
+		ytype = self.__convertType(line[ProtoHeader.VAL_DT.value])
+		if ytype == dc.DataType.DA_TYPE_STRING:
+			logger.warning("string not currently supported for streaming, skipping")
+			return
+
+		val = data.split(" V ")
+		xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
+		ydata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
+		d = dc.DataObj()
+		d.setA(xtype, ytype, xlabel, ylabel, xunit, yunit, drank)
+		for i in range(int(line[ProtoHeader.NB_SMP.value])):
+			xdata[i] = int(line[ProtoHeader.NB_SMP.value+i+1])*1000000
+			ydata[i] = float(val[i+1].split(" ")[0])
+
+		d.setData(xdata, 1)
+		d.setData(ydata, 2)
+		if counter % 10 == 0:
+			logger.debug("queue length %d and timestamp %d and val=%f", len(self.vardata[line[ProtoHeader.VARNAME.value]]), xdata[0], ydata[0])
+		if len(self.vardata.keys()) == 0 or self.vardata.get(line[ProtoHeader.VARNAME.value]) is None:
+			if line[ProtoHeader.VAL_DT.value].startswith(VarType.pon.value):
+				self.vardata[line[ProtoHeader.VARNAME.value]] = deque([d], self.maxsizeP)
+			else:
+				self.vardata[line[ProtoHeader.VARNAME.value]] = deque([d], self.maxsize)
+		else:
+			self.vardata[line[ProtoHeader.VARNAME.value]].append(d)
+
+	def startSubscription(self, params=[]):
+		self.__setParams(params)
+		url1 = self.urlX+'?' + self.params
+		logger.debug(self.headers)
+		response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
+		#print(response.status_code)
+		#print(response.headers)
+		client = sseclient.SSEClient(response)
+		i = 0
+		for event in client.events():
+			self.__parseData(event.data, i)
+			if i < 1000:
+				i = i + 1
+
+	def getNextData(self, vname=None):
+		if vname is None:
+			dobj = dc.DataObj()
+			dobj.setEmpty("Varname is empty")
+			return dobj
+		if vname in self.vardata.keys():
+			try:
+				dobj = self.vardata[vname].pop()
+				logger.debug("timestamp %d and val=%f", dobj.xdata[0], dobj.ydata[0])
+			except IndexError:
+				dobj = dc.DataObj()
+				dobj.setEmpty("No data found")
+			return dobj
+		else:
+			dobj = dc.DataObj()
+			dobj.setEmpty("varname not in the keys")
+			return dobj
+
+	def stopSubscription(self):
+		client.close()
+		response.close()
+		if self.vardata is not None:
+			for k in self.vardata.keys():
+				self.vadata[k].clear()
+
+
+
+
