@@ -17,6 +17,8 @@ class udaAccess:
         self.UCR=None
         self.connected=False
         self.__NODATAFOUND = "Requested data cannot be located"
+        self.__NODATAFOUND1 = "data cannot be retrieved"
+        self.__NODATAFOUND2 = "could not retrieve data"
 
     def connectSource(self,connectionString):
         myconn=connectionString.split(",")
@@ -160,7 +162,8 @@ class udaAccess:
         if (handle < 0):
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
-            if self.__NODATAFOUND in self.errdesc:
+            logger.info("could not retrieve data and %s",self.errdesc)
+            if self.__NODATAFOUND in self.errdesc or self.__NODATAFOUND1 in self.errdesc or self.__NODATAFOUND2:
                 self.UCR.releaseData(handle)
             else:
                 self.UCR.resetAll()
@@ -180,8 +183,8 @@ class udaAccess:
             dobj.setData(self.UCR.getDataNativeRank(handle), 2, myprocList, myprocName)
         if (dobj.ydata is None):
             self.UCR.releaseData(handle)
-            self.errdescr = "no data found {}for query ".format(query)
-            self.errdescr = -1
+            self.errdesc = "no data found {}for query ".format(query)
+            self.errdesc = -1
             self.UCR.resetAll()
             dobj.setErr(self.errcode, self.errdesc)
 
