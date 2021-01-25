@@ -2,6 +2,7 @@
 
 import requests
 import sseclient
+import getpass
 import numpy as np
 from enum import Enum
 from collections import deque
@@ -27,13 +28,14 @@ class VarType(Enum):
 
 
 class RTStreamer:
-	def __init__(self, uname, passwd):
-		self.urlX = 'https://controls.iter.org/dashboard/backend/sse'
+	def __init__(self, uname=None, passwd=None):
+		self.urlX = 'http://io-ls-udaweb1.iter.org/dashboard/backend/sse'
 		self.params = None
 		self.username = uname
 		self.password = passwd
 		self.auth = (self.username, self.password)
-		self.headers = {'User-Agent': 'it_script_basic'}
+		#self.headers = {'User-Agent': 'it_script_basic'}
+		self.headers = {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
 		self.vardata={}
 		self.maxsizeP=100
 		self.maxsize=1000
@@ -96,7 +98,8 @@ class RTStreamer:
 		self.__setParams(params)
 		url1 = self.urlX+'?' + self.params
 		logger.debug(self.headers)
-		response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
+		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
+		response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
 		#print(response.status_code)
 		#print(response.headers)
 		client = sseclient.SSEClient(response)
