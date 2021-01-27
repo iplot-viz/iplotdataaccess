@@ -13,6 +13,8 @@ import log.setupLogger as ls
 
 logger = ls.get_logger(__name__)
 
+class RTStreamerException(Exception):
+    pass
 
 class ProtoHeader(Enum):
 	VARNAME=0
@@ -28,19 +30,29 @@ class VarType(Enum):
 
 
 class RTStreamer:
-	def __init__(self, uname=None, passwd=None):
-		self.urlX = 'http://io-ls-udaweb1.iter.org/dashboard/backend/sse'
+	def __init__(self, url=None, headers=None, auth=None):
+		self.urlX = url or 'http://io-ls-udaweb1.iter.org/dashboard/backend/sse'
 		self.params = None
-		self.username = uname
-		self.password = passwd
-		self.auth = (self.username, self.password)
+		self.username = None
+		self.password = None
+		self.auth = auth
+		self.response = None
+		self.client = None
+		self.__status = "INIT"
 		#self.headers = {'User-Agent': 'it_script_basic'}
-		self.headers = {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
+		self.headers = headers or {}
+		###headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
 		self.vardata={}
 		self.maxsizeP=100
 		self.maxsize=1000
 		##logging.basicConfig(filename="/tmp/output_pro.log", format='%(asctime)s -%(levelname)s-%(funcName)s-%(message)s', datefmt='%Y-%m-%dT%H:%M:%S', level=logging.DEBUG)
 		##self.logger = logging.getLogger(__name__)
+
+	def __checkAndFillHeaders(self):
+		for k, v in self.headers.items:
+			if v == "$USERNAME":
+				self.headers[k] = getpass.getuser()
+
 	def __setParams(self, params=[]):
 		if params is not None and len(params)>0:
 			self.params = "variables="+",".join(params)
@@ -94,17 +106,30 @@ class RTStreamer:
 		else:
 			self.vardata[line[ProtoHeader.VARNAME.value]].append(d)
 
+	def getStatus(self):
+		return self.__status
+
 	def startSubscription(self, params=[]):
+		if self.__status == "STARTED":
+			logger.error("Subscription is already started, needs to be stopped first or launch a new RTStreamer")
+			raise RTStreamerException(" Streamer already started")
 		self.__setParams(params)
-		url1 = self.urlX+'?' + self.params
+		url1 = self.urlX + '?' + self.params
 		logger.debug(self.headers)
+
 		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
-		response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
-		#print(response.status_code)
-		#print(response.headers)
-		client = sseclient.SSEClient(response)
+		try:
+			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
+		except ConnectionError as ce:
+			logger.error("got connection error %s with errcode = %d ", ce, self.response.status_code)
+			self.__status = "ERROR"
+			raise RTStreamerException(" could not connect - see log for more details")
+			#print(response.headers)
+
+		self.client = sseclient.SSEClient(self.response)
 		i = 0
-		for event in client.events():
+		self.__status = "STARTED"
+		for event in self.client.events():
 			self.__parseData(event.data, i)
 			if i < 1000:
 				i = i + 1
@@ -128,12 +153,15 @@ class RTStreamer:
 			return dobj
 
 	def stopSubscription(self):
-		client.close()
-		response.close()
-		if self.vardata is not None:
-			for k in self.vardata.keys():
-				self.vadata[k].clear()
-
+		if self.__status == "STARTED":
+			self.client.close()
+			self.response.close()
+			if self.vardata is not None:
+				for k in self.vardata.keys():
+					self.vadata[k].clear()
+			self.__status = "STOPPED"
+		else:
+			logger.warning("subscriber is either already stopped or not started", self.__status)
 
 
 

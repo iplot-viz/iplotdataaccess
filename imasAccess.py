@@ -145,18 +145,19 @@ class IMASDataAccess:
             time_type=-1
             dobj.setData(self.__input.partial_get(ids_name=res[-2],data_path=res[-1]), 2)
             if dobj.ydata is not None:
-                dobj.setData( self.__getTimeData(idsn=res[-2],idsp=res[-1]), 1)
+                dobj.setData(self.__getTimeData(idsn=res[-2],idsp=res[-1]), 1)
+                dobj.yunit = self.__getUnits(res[-2], res[-1])
+                dobj.xunit = self.__getUnits(res[-2], "time")
+                if dobj.yunit is not None:
+                    logger.debug(" found unit %s", dobj.yunit)
+                if dobj.xdata is None:
+                    logger.debug(" xdata is NONE ")
+                else:
+                    logger.debug(" xdata is NOT NONE %d ", len(dobj.xdata))
             else:
                 dobj.xdata=[]
                 dobj.ydata=[]
-            dobj.yunit=self.__getUnits(res[-2], res[-1])
-            dobj.xunit=self.__getUnits(res[-2], "time")
-            if dobj.yunit is not None:
-                logger.debug(" found unit %s",dobj.yunit)
-            if dobj.xdata is None:
-                logger.debug(" xdata is NONE %s ", res[- 2])
-            else:
-                logger.debug(" xdata is NOT NONE %d ", len(dobj.xdata))
+
 
             dobj.errcode=0
             self.close()
@@ -167,13 +168,13 @@ class IMASDataAccess:
             dobj.ydata=[]
             dobj.xdata=[]
         except NameError as ne:
-            logger.debug("Invalid attribute: %s", ne)
+            logger.debug("Invalid name: %s", ne)
             dobj.errcode = -1
             dobj.errdescr = "Invalid IDS path"
             dobj.ydata = []
             dobj.xdata = []
         except imas.hli_exception.ALException as ale:
-            logger.debug("Invalid attribute: %s",ale)
+            logger.debug("Invalid hli exc: %s",ale)
         return dobj
 
     def close(self):
