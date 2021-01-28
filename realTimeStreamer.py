@@ -130,6 +130,7 @@ class RTStreamer:
 		i = 0
 		self.__status = "STARTED"
 		for event in self.client.events():
+			logger.debug("found new data %s",event.data)
 			self.__parseData(event.data, i)
 			if i < 1000:
 				i = i + 1
@@ -141,7 +142,7 @@ class RTStreamer:
 			return dobj
 		if vname in self.vardata.keys():
 			try:
-				dobj = self.vardata[vname].pop()
+				dobj = self.vardata[vname].popleft()
 				logger.debug("timestamp %d and val=%f", dobj.xdata[0], dobj.ydata[0])
 			except IndexError:
 				dobj = dc.DataObj()
