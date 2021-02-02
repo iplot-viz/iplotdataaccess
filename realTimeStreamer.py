@@ -40,7 +40,7 @@ class RTStreamer:
 		self.client = None
 		self.__status = "INIT"
 		#self.headers = {'User-Agent': 'it_script_basic'}
-		self.headers = headers or {}
+		self.headers = headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
 		###headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
 		self.vardata={}
 		self.maxsizeP=100
@@ -159,7 +159,7 @@ class RTStreamer:
 			self.response.close()
 			if self.vardata is not None:
 				for k in self.vardata.keys():
-					self.vadata[k].clear()
+					self.vardata[k].clear()
 			self.__status = "STOPPED"
 		else:
 			logger.warning("subscriber is either already stopped or not started", self.__status)

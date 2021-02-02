@@ -102,7 +102,11 @@ class DataSource:
             self.RTHandler = access.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
+            logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
         except ModuleNotFoundError:
+            self.rterrcode = -1
+            self.rtStatus = "UNEXISTING"
+        except AttributeError:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
 
@@ -111,8 +115,8 @@ class DataSource:
     def connect(self):
         if self.dtype == "IMAS_UDA":
             try:
-                self.daHandler=access.imasAccess.IMASDataAccess()
-                self.connected=self.daHandler.connectSource(connectionString=self.connectionString)
+                self.daHandler = access.imasAccess.IMASDataAccess()
+                self.connected = self.daHandler.connectSource(connectionString=self.connectionString)
             except ModuleNotFoundError:
                 self.errcode = -1
                 self.connected = False
@@ -129,6 +133,7 @@ class DataSource:
 
         if self.rtu is not None:
             try:
+                logger.debug("setRHandler")
                 self.setRTHandler()
             except RTHException as rte:
                 logger.error(" RTHException %s ", rte)
@@ -143,9 +148,10 @@ class DataSource:
         return self.rtStatus
 
     def startSubscription (self,**kwargs):
-        if self.rtStatus == "INITIALIZED" or self.rtStatus == "STOPPED":
+        if self.rtStatus == "INITIALISED" or self.rtStatus == "STOPPED":
             try:
                 self.rtStatus == "STARTED"
+                logger.debug("startSubscription ")
                 self.RTHandler.startSubscription(**kwargs)
             except access.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
