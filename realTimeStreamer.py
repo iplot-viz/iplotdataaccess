@@ -96,8 +96,7 @@ class RTStreamer:
 
 		d.setData(xdata, 1)
 		d.setData(ydata, 2)
-		if counter % 10 == 0:
-			logger.debug("queue length %d and timestamp %d and val=%f", len(self.vardata[line[ProtoHeader.VARNAME.value]]), xdata[0], ydata[0])
+
 		if len(self.vardata.keys()) == 0 or self.vardata.get(line[ProtoHeader.VARNAME.value]) is None:
 			if line[ProtoHeader.VAL_DT.value].startswith(VarType.pon.value):
 				self.vardata[line[ProtoHeader.VARNAME.value]] = deque([d], self.maxsizeP)
@@ -105,6 +104,9 @@ class RTStreamer:
 				self.vardata[line[ProtoHeader.VARNAME.value]] = deque([d], self.maxsize)
 		else:
 			self.vardata[line[ProtoHeader.VARNAME.value]].append(d)
+			if counter % 10 == 0:
+				logger.debug("queue length %d and timestamp %d and val=%f",
+							 len(self.vardata[line[ProtoHeader.VARNAME.value]]), xdata[0], ydata[0])
 
 	def getStatus(self):
 		return self.__status
