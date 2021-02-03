@@ -147,22 +147,22 @@ class DataSource:
     def getRTStatus(self):
         return self.rtStatus
 
-    def startSubscription (self,**kwargs):
+    def startSubscription(self,**kwargs):
         if self.rtStatus == "INITIALISED" or self.rtStatus == "STOPPED":
             try:
-                self.rtStatus == "STARTED"
+                self.rtStatus = "STARTED"
                 logger.debug("startSubscription ")
                 self.RTHandler.startSubscription(**kwargs)
             except access.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
-
-    def stopSubscription (self):
+    def stopSubscription(self):
+        logger.debug("stopSubscription Y %s ",self.rtStatus)
         if self.rtStatus == "STARTED":
             try:
-
-                self.RTHandler.stopSubscription(**kwargs)
+                logger.debug("stopSubscription Z ")
+                self.RTHandler.stopSubscription()
                 self.rtStatus == "STOPPED"
             except access.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
@@ -339,8 +339,9 @@ class DataAccess:
         if dataSName is not None and dataSName in self.dslist.keys():
             self.dslist[dataSName].startSubscription(**kwargs)
 
-    def stopSubscription(self):
+    def stopSubscription(self,dataSName):
         if dataSName is not None and dataSName in self.dslist.keys():
+            logger.debug("stopSubscription A ")
             self.dslist[dataSName].stopSubscription()
 
     def getNextData(self, dataSName, vname):

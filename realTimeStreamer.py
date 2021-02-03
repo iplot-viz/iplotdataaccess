@@ -7,7 +7,7 @@ import numpy as np
 from enum import Enum
 from collections import deque
 import access.dataCommon as dc
-
+import time
 import log.setupLogger as ls
 
 
@@ -133,9 +133,17 @@ class RTStreamer:
 		self.__status = "STARTED"
 		for event in self.client.events():
 			logger.debug("found new data %s",event.data)
+			if self.__status == "STOPPING":
+				break
 			self.__parseData(event.data, i)
 			if i < 1000:
 				i = i + 1
+		self.client.close()
+		self.response.close()
+		if self.vardata is not None:
+			for k in self.vardata.keys():
+				self.vardata[k].clear()
+		self.__status = "STOPPED"
 
 	def getNextData(self, vname=None):
 		if vname is None:
@@ -156,15 +164,18 @@ class RTStreamer:
 			return dobj
 
 	def stopSubscription(self):
+		logger.warning("receving stop subscription")
 		if self.__status == "STARTED":
-			self.client.close()
-			self.response.close()
-			if self.vardata is not None:
-				for k in self.vardata.keys():
-					self.vardata[k].clear()
-			self.__status = "STOPPED"
+			self.__status = "STOPPING"
+			logger.warning(" stopping subscription %s",self.__status)
 		else:
-			logger.warning("subscriber is either already stopped or not started", self.__status)
+			if self.__status != "STOPPING":
+				logger.warning("subscriber is being stopped or not started %s ", self.__status)
+				return
+		while self.__status != "STOPPED":
+			time.sleep(0.1)
+
+		logger.warning("subscriber is  stopped %s ", self.__status)
 
 
 
