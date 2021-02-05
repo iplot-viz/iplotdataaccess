@@ -276,12 +276,13 @@ class DataAccess:
 
     def getData(self,dataSName,**kwargs):
         ##we can use the varprefix to get the data source while we introduce
+        logger.debug("entering getdata  %s", dataSName)
         if dataSName is not None and dataSName in self.dslist.keys():
             if self.dslist[dataSName] is None:
                 dobj = DataObj()
 
                 dobj.setEmpty("Invalid data source pointer for ds name " + dataSName)
-
+                logger.debug("Invalid data source pointer for ds name  %s", dataSName)
                 return dobj
             else:
                 ep=exprProcessing()

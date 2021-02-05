@@ -139,7 +139,7 @@ class udaAccess:
             if decType is None:
                 query = "variable={},pulse={},tsFormat={},decSamples={}".format(varname, pulsenb, tsFormat,nbp)
             else:
-                query = "variable={},pulse={},tsFormat={}},decSamples={},decType={}".format(varname, pulsenb, tsFormat,nbp,decType)
+                query = "variable={},pulse={},tsFormat={},decSamples={},decType={}".format(varname, pulsenb, tsFormat,nbp,decType)
         else:
             if pulsenb is None or pulsenb=="None":
                 if decType is None:
