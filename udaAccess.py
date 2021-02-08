@@ -203,8 +203,9 @@ class udaAccess:
                      myprocName=None):
         dmax = None
         dmin = None
-        dmax = self.getData(varname, pulsenb, nbp, tsS, tsE, tsFormat,decType="max")
-        if dmax.getErr()(0) == 0:
-            dmin = self.getData(varname, pulsenb, nbp, tsS, tsE, tsFormat,decType="min")
+        dmax = self.getData(varname=varname, pulse=pulsenb, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="max")
+
+        if dmax.getErr()[0] == 0:
+            dmin = self.getData(varname=varname, pulse=pulsenb, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="min")
 
         return dmin, dmax

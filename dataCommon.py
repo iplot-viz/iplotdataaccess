@@ -76,5 +76,6 @@ class DataObj():
         self.errcode=errc
         self.errdesc=errd
        
-
+    def getErr(self):
+        return self.errcode, self.errdesc
     
