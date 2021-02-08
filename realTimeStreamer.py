@@ -117,7 +117,7 @@ class RTStreamer:
 			raise RTStreamerException(" Streamer already started")
 		self.__setParams(params)
 		url1 = self.urlX + '?' + self.params
-		logger.debug(self.headers)
+		logger.debug("starting sub header=%s and uri=%s",self.headers)
 
 		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
 		try:

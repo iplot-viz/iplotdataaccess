@@ -172,7 +172,11 @@ class DataSource:
         return self.RTHandler.getNextData(vname)
 
 
+
     @cached(cache=LRUCache(maxsize=100))
+    def __getDataI(self,**kwargs):
+        return self.daHandler.getData(**kwargs)
+
     def getData(self, **kwargs):
         dobj=None
         logger.debug("getdata of data source and type %s",self.dtype)
@@ -182,17 +186,109 @@ class DataSource:
                 dobj = dc.DataObj()
                 dobj.setEmpty( self.dtype+"_DataHandler is null")
             else:
-                dobj=self.daHandler.getData(**kwargs)
+                ep = exprProcessing()
+                myexpr = kwargs.get("varname")
+                logger.debug("myexprZZ=%s", myexpr)
+                ##we set expression and it is compiled
+                try:
+                    ep.setExpr(myexpr)
+                    if ep.isExpr:
+                        vm = {}
+                        for s in ep.vardict.keys():
+
+                            kwargs["varname"] = s
+                            if s is None:
+                                dobj = DataObj()
+                                dobj.setEmpty("issue when calling data access no varname provided")
+                                return dobj
+                            logger.debug("varname=%s", s)
+                            dobj = self.__getDataI(**kwargs)
+                            ##we need to make a copy of the object otherwise if it is in the cache, processing is applied n times..
+                            dobjBis = copy.deepcopy(dobj)
+
+                            vm[s] = dobjBis.ydata
+                            if len(dobjBis.ydata) > 0:
+                                logger.debug("type %s", dobjBis.ydata.dtype)
+                                logger.debug("type %s", type(dobjBis.ydata))
+
+                        ep.substituteExpr(vm)
+                        ep.evalExpr()
+                        dobjBis.ydata = ep.result
+
+                        return dobjBis
+                    else:
+                        return  self.__getDataI(**kwargs)
+
+                except ProcParsingException:
+                    logger.warning("parsing exception ")
+                    dobj = DataObj()
+                    dobj.setEmpty("Invalid expression " + myexpr)
+                    return dobj
+
         except ModuleNotFoundError:
                 dobj=dc.DataObj()
                 dobj.setEmpty("ModuleNotFound_"+self.dtype)
         logger.debug("exiting getdata")
         return dobj
 
+    @cached(cache=LRUCache(maxsize=100))
+    def __getEnvelopeI(self,**kwargs):
+        return self.daHandler.getEnvelope(**kwargs)
+
     def getEnvelope (self, **kwargs):
         ret = (None, None)
         try:
-            ret= self.daHandler.getEnvelope(**kwargs)
+            ep = exprProcessing()
+            myexpr = kwargs.get("varname")
+            logger.debug("myexprZZ=%s", myexpr)
+            ##we set expression and it is compiled
+            try:
+                ep.setExpr(myexpr)
+                if ep.isExpr:
+                    vmMin = {}
+                    vmMax={}
+                    for s in ep.vardict.keys():
+
+                        kwargs["varname"] = s
+                        if s is None:
+                            dobj = DataObj()
+                            dobj.setEmpty("issue when calling data access no varname provided")
+                            return dobj
+                        logger.debug("varname=%s", s)
+                        ret= self.__getEnvelopeI(**kwargs)
+                        ##we need to make a copy of the object otherwise if it is in the cache, processing is applied n times..
+
+                        dobjMin = copy.deepcopy(ret[0])
+                        dobjMax = copy.deepcopy(ret[1])
+
+                        vmMin[s] = dobjBisMin.ydata
+                        vmMax[s] = dobjBisMax.ydata
+                        if len(dobjBisMin.ydata) > 0:
+                            logger.debug("type %s", dobjBisMin.ydata.dtype)
+                            logger.debug("type %s", type(dobjBisMin.ydata))
+
+                    ep.substituteExpr(vmMin)
+                    ep.evalExpr()
+                    dobjBisMin.ydata = ep.result
+
+                    ep.substituteExpr(vmMax)
+                    ep.evalExpr()
+                    dobjBisMax.ydata = ep.result
+
+                    return dobjBisMin,dobjBisMax
+                else:
+                    return self.__getEnvelopeI(**kwargs)
+
+            except ProcParsingException:
+                logger.warning("parsing exception ")
+                dobjMin = DataObj()
+                dobjMin.setEmpty("Invalid expression " + myexpr)
+
+                dobjMax = DataObj()
+                dobjMax.setEmpty("Invalid expression " + myexpr)
+                return dobjMin,dobjMax
+
+
         except ModuleNotFoundError:
             logger.warning("ModuleNotFound_%s", self.dtype)
         return ret
@@ -285,44 +381,9 @@ class DataAccess:
                 logger.debug("Invalid data source pointer for ds name  %s", dataSName)
                 return dobj
             else:
-                ep=exprProcessing()
-                myexpr=kwargs.get("varname")
-                logger.debug ("myexprZZ=%s", myexpr)
-                ##we set expression and it is compiled
-                try:
-                    ep.setExpr(myexpr)
-                    if ep.isExpr:
-                        vm={}
-                        for s in ep.vardict.keys():
 
-                            kwargs["varname"] = s
-                            if s is None:
-                                dobj = DataObj()
-                                dobj.setEmpty("issue when calling data access no varname provided")
-                                return dobj
-                            logger.debug("varname=%s", s)
-                            dobj=self.dslist[dataSName].getData(**kwargs)
-                            ##we need to make a copy of the object otherwise if it is in the cache, processing is applied n times..
-                            dobjBis = copy.deepcopy(dobj)
-
-                            vm[s]=dobjBis.ydata
-                            if len(dobjBis.ydata) > 0:
-                                logger.debug("type %s", dobjBis.ydata.dtype)
-                                logger.debug("type %s", type(dobjBis.ydata))
-
-                        ep.substituteExpr(vm)
-                        ep.evalExpr()
-                        dobjBis.ydata = ep.result
-
-                        return dobjBis
-                    else:
-                        return self.dslist[dataSName].getData(**kwargs)
-
-                except ProcParsingException:
-                    logger.warning("parsing exception ")
-                    dobj = DataObj()
-                    dobj.setEmpty("Invalid expression " + myexpr)
-                    return dobj
+                dobj=self.dslist[dataSName].getData(**kwargs)
+                return dobj
         else:
             if dataSName not in self.dslist.keys():
                 logger.warning(" Invalid data source found %s ", dataSName)
