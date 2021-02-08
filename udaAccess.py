@@ -40,7 +40,7 @@ class udaAccess:
             self.connected=False
         else:
             self.connected=True
-        self.UCR.resetAll()
+        #self.UCR.resetAll()
 
         return self.connected
         #self.dataR=DataObj()
@@ -108,10 +108,11 @@ class udaAccess:
         return self.getDataI(varname,pulse,nbp,tsS,tsE,tsFormat,decType)
 
     def __parsePulse(self,pulse):
-        p=pulse
+
         if pulse is None:
-            return p
-        res=pulse.split("/")
+            return pulse
+        p = str(pulse)
+        res=p.split("/")
         reslen=len(res)
         if reslen>1:
             ## if last 2 are numeric means pulse nb/run nb
@@ -163,7 +164,7 @@ class udaAccess:
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
             logger.info("could not retrieve data and %s",self.errdesc)
-            if self.__NODATAFOUND in self.errdesc or self.__NODATAFOUND1 in self.errdesc or self.__NODATAFOUND2:
+            if self.__NODATAFOUND in self.errdesc or self.__NODATAFOUND1 in self.errdesc or self.__NODATAFOUND2 in self.errdesc:
                 self.UCR.releaseData(handle)
             else:
                 self.UCR.resetAll()
@@ -185,7 +186,7 @@ class udaAccess:
             self.UCR.releaseData(handle)
             self.errdesc = "no data found {}for query ".format(query)
             self.errdesc = -1
-            self.UCR.resetAll()
+            ##self.UCR.resetAll()
             dobj.setErr(self.errcode, self.errdesc)
 
             return dobj
@@ -199,13 +200,15 @@ class udaAccess:
         dobj.setErr(0, "OK")
         return dobj
 
-    def getEnveloppe(self, varname="", pulsenb=0, nbp=100, tsS=0, tsE=0, tsFormat="relative",decType=None, myprocList=None,
+    def getEnvelope(self, varname="", pulse=0, nbp=100, tsS=0, tsE=0, tsFormat="relative",decType=None, myprocList=None,
                      myprocName=None):
         dmax = None
         dmin = None
-        dmax = self.getData(varname=varname, pulse=pulsenb, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="max")
+        dmax = self.getData(varname=varname, pulse=pulse, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="max")
 
         if dmax.getErr()[0] == 0:
-            dmin = self.getData(varname=varname, pulse=pulsenb, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="min")
-
+            dmin = self.getData(varname=varname, pulse=pulse, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="min")
+        else:
+            dmin = dc.DataObj()
+            dmin.setEmpty("No data found ")
         return dmin, dmax

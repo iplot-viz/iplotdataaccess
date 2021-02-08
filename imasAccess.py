@@ -182,10 +182,10 @@ class IMASDataAccess:
             self.__input.close()
             self.__isConnected=False
 
-    def getEnveloppe(self, **kwargs):
-       dmin = self.getData(self, **kwargs)
+    def getEnvelope(self, **kwargs):
+       dmin = self.getData( **kwargs)
        dmax=dmin
-       logger.debug("enveloppe function returning %d", len(dmin))
+       logger.debug("envelope function returning %d", len(dmin))
        return dmin,dmax
 
 

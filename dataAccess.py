@@ -189,10 +189,10 @@ class DataSource:
         logger.debug("exiting getdata")
         return dobj
 
-    def getEnveloppe (self, **kwargs):
+    def getEnvelope (self, **kwargs):
         ret = (None, None)
         try:
-            ret= self.daHandler.getEnveloppe(**kwargs)
+            ret= self.daHandler.getEnvelope(**kwargs)
         except ModuleNotFoundError:
             logger.warning("ModuleNotFound_%s", self.dtype)
         return ret
@@ -354,7 +354,7 @@ class DataAccess:
             return dobj
 
 
-    def getEnveloppe(self,dataSName,**kwargs):
+    def getEnvelope(self,dataSName,**kwargs):
         if dataSName is not None and dataSName in self.dslist.keys():
             if self.dslist[dataSName] is None:
                 dmin=DataObj()
@@ -363,7 +363,7 @@ class DataAccess:
                 dmax.setEmpty("Invalid data source pointer for ds name " + dataSName)
                 return dmin.dmax
             else:
-                return self.dslist[dataSName].getEnveloppe(**kwargs)
+                return self.dslist[dataSName].getEnvelope(**kwargs)
         else:
             if dataSName not in self.dslist.keys():
                 logger.warning("Invalid data source found %s ",dataSName)
@@ -374,7 +374,7 @@ class DataAccess:
                 return dmin,dmax
             if self.defaultds is not None:
                 logger.info("default source used ")
-                return self.defaultds.getEnveloppe(**kwargs)
+                return self.defaultds.getEnvelope(**kwargs)
 
         return None,None
 
