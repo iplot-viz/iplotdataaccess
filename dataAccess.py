@@ -200,7 +200,10 @@ class DataSource:
             for s in exp.vardict.keys():
                 dobj = self.RTHandler.getNextData(s)
                 dobjBis = copy.deepcopy(dobj)
+                if len(dobjBis.ydata)==0:
+                    return dobjBis
                 vm[s] = dobjBis.ydata
+                logger.debug("type of data %s and len %d",type(dobjBis.ydata),len(dobjBis.ydata))
             exp.substituteExpr(vm)
             exp.evalExpr()
             dobjBis.ydata = exp.result
@@ -297,8 +300,8 @@ class DataSource:
                         ret= self.__getEnvelopeI(**kwargs)
                         ##we need to make a copy of the object otherwise if it is in the cache, processing is applied n times..
 
-                        dobjMin = copy.deepcopy(ret[0])
-                        dobjMax = copy.deepcopy(ret[1])
+                        dobjBisMin = copy.deepcopy(ret[0])
+                        dobjBisMax = copy.deepcopy(ret[1])
 
                         vmMin[s] = dobjBisMin.ydata
                         vmMax[s] = dobjBisMax.ydata
