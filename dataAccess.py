@@ -52,6 +52,7 @@ class DataSource:
         self.rth = None
         self.rta = None
         self.rtu = None
+        self.__varexpr = {}
         if name is None:
             self.name = "DS _" + str(id(self))
         else:
@@ -147,13 +148,35 @@ class DataSource:
     def getRTStatus(self):
         return self.rtStatus
 
+    def __checkIfExpr(self,var=[]):
+        newparam = []
+        cnt=0
+        for i in range (len(var)):
+            ep = exprProcessing()
+            ep.setExpr(var[i])
+            if ep.isExpr:
+                self.__varexpr[var[i]]=ep
+
+                for s in ep.vardict.keys():
+                    newparam.append(s)
+            else:
+                newparam.append(var[i])
+        return newparam
+
+
+
+
+
     def startSubscription(self,**kwargs):
         if self.rtStatus == "INITIALISED" or self.rtStatus == "STOPPED":
             try:
                 self.rtStatus = "STARTED"
                 logger.debug("startSubscription ")
+                newparams=self.__checkIfExpr(kwargs.get("params"))
+                kwargs["params"] = newparams
                 self.RTHandler.startSubscription(**kwargs)
             except access.realTimeStreamer.RTStreamerException as rtse:
+                self.__varexpr.clear()
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
@@ -163,13 +186,29 @@ class DataSource:
             try:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stopSubscription()
+                self.__varexpr.clear()
                 self.rtStatus == "STOPPED"
             except access.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
     def getNextData (self, vname=None):
-        return self.RTHandler.getNextData(vname)
+        logger.debug("receive getnextdata for varname=%s",vname)
+        if vname in self.__varexpr.keys():
+            exp=self.__varexpr[vname]
+            vm = {}
+            for s in exp.vardict.keys():
+                dobj = self.RTHandler.getNextData(s)
+                dobjBis = copy.deepcopy(dobj)
+                vm[s] = dobjBis.ydata
+            exp.substituteExpr(vm)
+            exp.evalExpr()
+            dobjBis.ydata = exp.result
+            return dobjBis
+
+
+        else:
+            return self.RTHandler.getNextData(vname)
 
 
 
