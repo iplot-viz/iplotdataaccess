@@ -33,6 +33,8 @@ class RTStreamer:
 	def __init__(self, url=None, headers=None, auth=None):
 		self.urlX = url or 'http://io-ls-udaweb1.iter.org/dashboard/backend/sse'
 		self.params = None
+		self.origparams =[]
+		self.origparams1 = []
 		self.username = None
 		self.password = None
 		self.auth = auth
@@ -54,6 +56,7 @@ class RTStreamer:
 				self.headers[k] = getpass.getuser()
 
 	def __setParams(self, params=[]):
+		self.origparams1 = params
 		if params is not None and len(params)>0:
 			self.params = "variables="+",".join(params)
 
@@ -67,7 +70,41 @@ class RTStreamer:
 		elif utype == "S" or utype == "PS":
 			return dc.DataType.DA_TYPE_STRING
 
-	def __parseData(self, data,counter):
+	def __checkIfduplicate(self,varname,params=[]):
+		vKeysIdx=[]
+		idx=0
+		idx1=0
+
+		if varname in params:
+			##logger.debug("entering check duplicate vname=%s params=%s", varname, params)
+			while idx < len(params):
+				try :
+					idx = params.index(varname,idx1)
+					vKeysIdx.append(idx)
+					idx1 = idx+1
+				except ValueError as ve:
+					idx = len(params) +10
+
+		##logger.debug("check duplicate %s %s %s",varname,params,vKeysIdx)
+		return vKeysIdx
+
+	def __createQueues(self,vkeys,vtype,data,params=[]):
+		for i in range(len(vkeys)):
+			sname=params[i]+'@'+str(i)
+			logger.debug("create queue for vname=%s", sname)
+			if vtype.startswith(VarType.pon.value):
+
+				self.vardata[sname] = deque([data], self.maxsizeP)
+			else:
+				self.vardata[sname] = deque([data], self.maxsize)
+
+	def __appendData(self,vkeys,d,params=[]):
+		for i in range(len(vkeys)):
+			sname=params[i]+'@'+str(i)
+			self.vardata[sname].append(d)
+
+
+	def __parseData(self, data,counter,params=[]):
 		q = None
 		if data.startswith("heartbeat"):
 			return
@@ -96,28 +133,25 @@ class RTStreamer:
 
 		d.setData(xdata, 1)
 		d.setData(ydata, 2)
-
+		##logger.debug("before calling check duplocate")
+		vkeys = self.__checkIfduplicate(line[ProtoHeader.VARNAME.value], params=params)
 		if len(self.vardata.keys()) == 0 or self.vardata.get(line[ProtoHeader.VARNAME.value]) is None:
-			if line[ProtoHeader.VAL_DT.value].startswith(VarType.pon.value):
-				self.vardata[line[ProtoHeader.VARNAME.value]] = deque([d], self.maxsizeP)
-			else:
-				self.vardata[line[ProtoHeader.VARNAME.value]] = deque([d], self.maxsize)
+
+			self.__createQueues(vkeys,line[ProtoHeader.VAL_DT.value],d,params=params)
 		else:
-			self.vardata[line[ProtoHeader.VARNAME.value]].append(d)
-			if counter % 10 == 0:
-				logger.debug("queue length %d and timestamp %d and val=%f",
-							 len(self.vardata[line[ProtoHeader.VARNAME.value]]), xdata[0], ydata[0])
+			self.__appendData(vkeys,d,params=params)
+
 
 	def getStatus(self):
 		return self.__status
 
-	def startSubscription(self, params=[]):
+	def startSubscription(self, params=[],origparams=[]):
 		if self.__status == "STARTED":
 			logger.error("Subscription is already started, needs to be stopped first or launch a new RTStreamer")
 			raise RTStreamerException(" Streamer already started")
 		self.__setParams(params)
 		url1 = self.urlX + '?' + self.params
-		logger.debug("starting sub header=%s and uri=%s",self.headers)
+		logger.debug("starting sub header=%s and uri=%s",self.headers,url1)
 
 		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
 		try:
@@ -127,7 +161,8 @@ class RTStreamer:
 			self.__status = "ERROR"
 			raise RTStreamerException(" could not connect - see log for more details")
 			#print(response.headers)
-
+		self.origparams=origparams
+		logger.debug(" origparm %s  self=%s ", self.origparams,self)
 		self.client = sseclient.SSEClient(self.response)
 		i = 0
 		self.__status = "STARTED"
@@ -135,7 +170,7 @@ class RTStreamer:
 			logger.debug("found new data %s",event.data)
 			if self.__status == "STOPPING":
 				break
-			self.__parseData(event.data, i)
+			self.__parseData(event.data, i,params=params)
 			if i < 1000:
 				i = i + 1
 		self.client.close()
@@ -145,23 +180,42 @@ class RTStreamer:
 				self.vardata[k].clear()
 		self.__status = "STOPPED"
 
+	def __getNextDataI(self,vname):
+		idx=-1
+		dobj = None
+		try:
+			#logger.debug(" origparm %s  self=%s ", self.origparams,self)
+
+			idx=self.origparams.index(vname)
+			sname=self.origparams1[idx]+"@"+str(idx)
+			if sname in self.vardata.keys():
+				dobj = self.vardata[sname].popleft()
+			else:
+				dobj = dc.DataObj()
+				dobj.setEmpty("varname not in the keys")
+
+		except ValueError:
+			dobj = dc.DataObj()
+			dobj.setEmpty("Value error : varname not in the keys")
+			logger.warning("invalid get next data call variable %s not in the list",vname)
+		return dobj
+
+	###expect orig name with expression -> handle the case where we subscribe to the same variable but different expressions are applied to them
 	def getNextData(self, vname=None):
 		if vname is None:
 			dobj = dc.DataObj()
 			dobj.setEmpty("Varname is empty")
 			return dobj
-		if vname in self.vardata.keys():
-			try:
-				dobj = self.vardata[vname].popleft()
-				logger.debug("timestamp %d and val=%f", dobj.xdata[0], dobj.ydata[0])
-			except IndexError:
-				dobj = dc.DataObj()
-				dobj.setEmpty("No data found")
-			return dobj
-		else:
+
+		try:
+			dobj = self.__getNextDataI(vname)
+			logger.debug("timestamp %d and val=%f", dobj.xdata[0], dobj.ydata[0])
+		except IndexError:
 			dobj = dc.DataObj()
-			dobj.setEmpty("varname not in the keys")
-			return dobj
+			dobj.setEmpty("No data found")
+		#logger.debug("object err = %s ",dobj.errdesc)
+		return dobj
+
 
 	def stopSubscription(self):
 		logger.warning("receving stop subscription")

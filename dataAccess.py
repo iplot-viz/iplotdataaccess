@@ -173,7 +173,11 @@ class DataSource:
                 self.rtStatus = "STARTED"
                 logger.debug("startSubscription ")
                 newparams=self.__checkIfExpr(kwargs.get("params"))
+
+
+                kwargs["origparams"] = copy.deepcopy(kwargs.get("params"))
                 kwargs["params"] = newparams
+                logger.debug("start sub with params=%s and origparams=%s",kwargs["params"] ,kwargs["origparams"])
                 self.RTHandler.startSubscription(**kwargs)
             except access.realTimeStreamer.RTStreamerException as rtse:
                 self.__varexpr.clear()
@@ -193,12 +197,13 @@ class DataSource:
                 self.rterrcode = -2
 
     def getNextData (self, vname=None):
-        logger.debug("receive getnextdata for varname=%s",vname)
+
         if vname in self.__varexpr.keys():
+            logger.debug("expression case receive getnextdata for varname=%s", vname)
             exp=self.__varexpr[vname]
             vm = {}
             for s in exp.vardict.keys():
-                dobj = self.RTHandler.getNextData(s)
+                dobj = self.RTHandler.getNextData(vname)
                 dobjBis = copy.deepcopy(dobj)
                 if len(dobjBis.ydata)==0:
                     return dobjBis
@@ -211,6 +216,7 @@ class DataSource:
 
 
         else:
+            logger.debug("not an expression receive getnextdata for varname=%s", vname)
             return self.RTHandler.getNextData(vname)
 
 
