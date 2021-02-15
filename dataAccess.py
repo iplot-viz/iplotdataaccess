@@ -199,7 +199,7 @@ class DataSource:
     def getNextData (self, vname=None):
 
         if vname in self.__varexpr.keys():
-            logger.debug("expression case receive getnextdata for varname=%s", vname)
+            #logger.debug("expression case receive getnextdata for varname=%s", vname)
             exp=self.__varexpr[vname]
             vm = {}
             for s in exp.vardict.keys():
@@ -208,7 +208,7 @@ class DataSource:
                 if len(dobjBis.ydata)==0:
                     return dobjBis
                 vm[s] = dobjBis.ydata
-                logger.debug("type of data %s and len %d",type(dobjBis.ydata),len(dobjBis.ydata))
+                #logger.debug("type of data %s and len %d",type(dobjBis.ydata),len(dobjBis.ydata))
             exp.substituteExpr(vm)
             exp.evalExpr()
             dobjBis.ydata = exp.result
@@ -216,7 +216,7 @@ class DataSource:
 
 
         else:
-            logger.debug("not an expression receive getnextdata for varname=%s", vname)
+            #logger.debug("not an expression receive getnextdata for varname=%s", vname)
             return self.RTHandler.getNextData(vname)
 
 

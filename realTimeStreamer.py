@@ -58,7 +58,8 @@ class RTStreamer:
 	def __setParams(self, params=[]):
 		self.origparams1 = params
 		if params is not None and len(params)>0:
-			self.params = "variables="+",".join(params)
+			p1=set(params)
+			self.params = "variables="+",".join(p1)
 
 	def __convertType(self, utype):
 
@@ -76,7 +77,7 @@ class RTStreamer:
 		idx1=0
 
 		if varname in params:
-			##logger.debug("entering check duplicate vname=%s params=%s", varname, params)
+			#logger.debug("entering check duplicate vname=%s params=%s", varname, params)
 			while idx < len(params):
 				try :
 					idx = params.index(varname,idx1)
@@ -85,18 +86,23 @@ class RTStreamer:
 				except ValueError as ve:
 					idx = len(params) +10
 
-		##logger.debug("check duplicate %s %s %s",varname,params,vKeysIdx)
+		logger.debug("check duplicate %s %s %s",varname,params,vKeysIdx)
 		return vKeysIdx
 
 	def __createQueues(self,vkeys,vtype,data,params=[]):
+		logger.debug("create XXX queue for vkeys=%s", vkeys)
 		for i in range(len(vkeys)):
-			sname=params[i]+'@'+str(i)
-			logger.debug("create queue for vname=%s", sname)
-			if vtype.startswith(VarType.pon.value):
-
-				self.vardata[sname] = deque([data], self.maxsizeP)
+			sname=params[vkeys[i]]+'@'+str(vkeys[i])
+			if self.vardata.get(sname) is not None:
+				logger.debug("adding data to queue for vname=%s", sname)
+				self.vardata[sname].append(data)
 			else:
-				self.vardata[sname] = deque([data], self.maxsize)
+				logger.debug("create queue for vname=%s", sname)
+				if vtype.startswith(VarType.pon.value):
+
+					self.vardata[sname] = deque([data], self.maxsizeP)
+				else:
+					self.vardata[sname] = deque([data], self.maxsize)
 
 	def __appendData(self,vkeys,d,params=[]):
 		for i in range(len(vkeys)):
@@ -135,12 +141,7 @@ class RTStreamer:
 		d.setData(ydata, 2)
 		##logger.debug("before calling check duplocate")
 		vkeys = self.__checkIfduplicate(line[ProtoHeader.VARNAME.value], params=params)
-		if len(self.vardata.keys()) == 0 or self.vardata.get(line[ProtoHeader.VARNAME.value]) is None:
-
-			self.__createQueues(vkeys,line[ProtoHeader.VAL_DT.value],d,params=params)
-		else:
-			self.__appendData(vkeys,d,params=params)
-
+		self.__createQueues(vkeys,line[ProtoHeader.VAL_DT.value],d,params=params)
 
 	def getStatus(self):
 		return self.__status
@@ -162,7 +163,8 @@ class RTStreamer:
 			raise RTStreamerException(" could not connect - see log for more details")
 			#print(response.headers)
 		self.origparams=origparams
-		logger.debug(" origparm %s  self=%s ", self.origparams,self)
+		paramsT = params
+		logger.debug(" origparm %s  param=%s ", self.origparams,self.params)
 		self.client = sseclient.SSEClient(self.response)
 		i = 0
 		self.__status = "STARTED"
@@ -170,7 +172,7 @@ class RTStreamer:
 			logger.debug("found new data %s",event.data)
 			if self.__status == "STOPPING":
 				break
-			self.__parseData(event.data, i,params=params)
+			self.__parseData(event.data, i,params=paramsT)
 			if i < 1000:
 				i = i + 1
 		self.client.close()
@@ -184,7 +186,7 @@ class RTStreamer:
 		idx=-1
 		dobj = None
 		try:
-			#logger.debug(" origparm %s  self=%s ", self.origparams,self)
+			#logger.debug(" vname=%s origparm %s  self=%s ", vname,self.origparams,self.origparams1)
 
 			idx=self.origparams.index(vname)
 			sname=self.origparams1[idx]+"@"+str(idx)
@@ -202,6 +204,7 @@ class RTStreamer:
 
 	###expect orig name with expression -> handle the case where we subscribe to the same variable but different expressions are applied to them
 	def getNextData(self, vname=None):
+		#logger.debug("got a call vanme=%s",vname)
 		if vname is None:
 			dobj = dc.DataObj()
 			dobj.setEmpty("Varname is empty")
@@ -209,7 +212,7 @@ class RTStreamer:
 
 		try:
 			dobj = self.__getNextDataI(vname)
-			logger.debug("timestamp %d and val=%f", dobj.xdata[0], dobj.ydata[0])
+			logger.debug("vname=%s timestamp %d and val=%f", vname,dobj.xdata[0], dobj.ydata[0])
 		except IndexError:
 			dobj = dc.DataObj()
 			dobj.setEmpty("No data found")
