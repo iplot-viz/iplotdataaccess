@@ -4,7 +4,8 @@ import access.dataCommon as dc
 #import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
 import log.setupLogger as ls
-
+import dateutil.parser as dp
+from datetime import timezone
 logger = ls.get_logger(__name__)
 
 ###class to interface with data source - here UDA
@@ -76,13 +77,36 @@ class udaAccess:
         elif utype == uc.RAW_TYPE_UNSGINED_INT:
             return dc.DataType.DA_TYPE_UINT
 
+    def convertToNanos(self,tsE):
+        parsed_t=None
+        if "T" in tsE and "." in tsE:
+            try:
+
+                parsed_t = dp.parse(tsE)
+
+                t_in_nsec = parsed_t.replace(tzinfo=timezone.utc).timestamp()*1000000000
+
+
+                return format(t_in_nsec,'.0f')
+            except OverflowError as ofe:
+                logger.error("overflow error got invalid date %s ",tsE)
+                return -1
+            except ValueError as ofe:
+                logger.error("value error got invalid date %s ",tsE)
+                return -1
+        else:
+            return tsE
+
+
     def getData(self,**kwargs):
         varname=""
         pulsenb=None
         nbp=1000
         decType=None
-        tsS=0
-        tsE=0
+        tsSN=0
+        tsEN=0
+        tsS = 0
+        tsE = 0
         tsFormat="relative"
         varprefix=None
         pulse=None
@@ -101,11 +125,15 @@ class udaAccess:
             decType = kwargs.get("decType")
         if kwargs.get("tsS"):
             tsS = kwargs.get("tsS")
+            tsSN=self.convertToNanos(tsS)
         if kwargs.get("tsE"):
             tsE = kwargs.get("tsE")
+            tsEN = self.convertToNanos(tsE)
+
         if kwargs.get("tsFormat"):
             tsFormat = kwargs.get("tsFormat")
-        return self.getDataI(varname,pulse,nbp,tsS,tsE,tsFormat,decType)
+        logger.debug("init timestamp tSS=%s and tsE=%s ",tsS,tsE)
+        return self.getDataI(varname,pulse,nbp,tsSN,tsEN,tsFormat,decType)
 
     def __parsePulse(self,pulse):
 
