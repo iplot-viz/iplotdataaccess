@@ -79,6 +79,8 @@ class udaAccess:
 
     def convertToNanos(self,tsE):
         parsed_t=None
+        if isinstance(tsE, float) or isinstance(tsE, int) :
+            return tsE
         if "T" in tsE and "." in tsE:
             try:
 
