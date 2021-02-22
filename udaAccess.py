@@ -17,9 +17,8 @@ class udaAccess:
         self.errdesc=""
         self.UCR=None
         self.connected=False
-        self.__NODATAFOUND = "Requested data cannot be located"
-        self.__NODATAFOUND1 = "data cannot be retrieved"
-        self.__NODATAFOUND2 = "could not retrieve data"
+        self.__NODATAFOUND = ["Requested data cannot be located","data cannot be retrieved","could not retrieve data","Incorrect time"]
+
 
     def connectSource(self,connectionString):
         myconn=connectionString.split(",")
@@ -190,13 +189,17 @@ class udaAccess:
         handle = self.UCR.fetchData(query)
         self.errcode = 0
         self.errdesc = ""
-        if (handle < 0):
+        found=0
+        if handle < 0:
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
             logger.info("could not retrieve data and %s",self.errdesc)
-            if self.__NODATAFOUND in self.errdesc or self.__NODATAFOUND1 in self.errdesc or self.__NODATAFOUND2 in self.errdesc:
-                self.UCR.releaseData(handle)
-            else:
+            for s in self.__NODATAFOUND:
+                if s in self.errdesc:
+                    self.UCR.releaseData(handle)
+                    found=1
+                    break
+            if found==0 :
                 self.UCR.resetAll()
 
             dobj.setErr(self.errcode, self.errdesc)

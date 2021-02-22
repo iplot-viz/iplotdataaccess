@@ -1,5 +1,6 @@
 
 import re
+import numpy as np
 import imas
 from access.dataCommon import DataObj,DataType
 import log.setupLogger as ls
@@ -78,6 +79,8 @@ class IMASDataAccess:
         idspath=""
         mycfg=[]
         varname=""
+        tsS=None
+        tsE=None
         if kwargs.get("varname"):
             varname1=kwargs.get("varname")
             if varprefix is not None and len(varprefix) > 0:
@@ -87,8 +90,12 @@ class IMASDataAccess:
         if kwargs.get("pulse"):
             mycfg.append("pulseIdent="+kwargs.get("pulse"))
             self.configure(mycfg)
+        if kwargs.get("tsS"):
+            tsS=kwargs.get("tsS")
+        if kwargs.get("tsE"):
+            tsE=kwargs.get("tsE")
         self.connect()
-        return self.getDataI(varname)
+        return self.getDataI(varname,tsS,tsE)
 
     def __getUnits(self,idsn,idsp):
         ### this function does not work if we provide indexes on array so indices should be removed ...
@@ -118,7 +125,7 @@ class IMASDataAccess:
 
         return timevec
 
-    def getDataI(self,idspath_o=None):
+    def getDataI(self,idspath_o=None,tsS=None,tsE=None):
         dobj = DataObj()
         if idspath_o is None:
             return dobj
@@ -143,17 +150,34 @@ class IMASDataAccess:
         dobj.setA(DataType.DA_TYPE_FLOAT, DataType.DA_TYPE_FLOAT, 'Time', '', '', '', 1)
         try:
             time_type=-1
+            idx=None
             dobj.setData(self.__input.partial_get(ids_name=res[-2],data_path=res[-1]), 2)
             if dobj.ydata is not None:
                 dobj.setData(self.__getTimeData(idsn=res[-2],idsp=res[-1]), 1)
                 dobj.yunit = self.__getUnits(res[-2], res[-1])
-                dobj.xunit = self.__getUnits(res[-2], "time")
+                dobj.xunit = self.__getUnits(res[-2], "time (s)")
                 if dobj.yunit is not None:
                     logger.debug(" found unit %s", dobj.yunit)
                 if dobj.xdata is None:
                     logger.debug(" xdata is NONE ")
                 else:
                     logger.debug(" xdata is NOT NONE %d ", len(dobj.xdata))
+                if tsS is not None and tsE is not None:
+                    idx = np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
+                    dobj.xdata=dobj.xdata.take(idx)
+                    dobj.ydata = dobj.ydata.take(idx)
+                    #logger.debug(" idx  %s and ydata=%s ", idx,dobj.ydata)
+
+                else:
+                    if tsE is not None:
+                        idx = np.where( dobj.xdata <= tsE)
+                        dobj.xdata = dobj.xdata.take(idx)
+                        dobj.ydata = dobj.ydata.take(idx)
+                    elif tsS is not None:
+                        idx = np.where(dobj.xdata >= tsS)
+                        dobj.xdata = dobj.xdata.take(idx)
+                        dobj.ydata = dobj.ydata.take(idx)
+
             else:
                 dobj.xdata=[]
                 dobj.ydata=[]
