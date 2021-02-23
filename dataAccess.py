@@ -100,7 +100,7 @@ class DataSource:
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
-            self.RTHandler = access.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta)
+            self.RTHandler = access.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,udaA=self.daHandler)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -208,7 +208,7 @@ class DataSource:
                 if len(dobjBis.ydata)==0:
                     return dobjBis
                 vm[s] = dobjBis.ydata
-                #logger.debug("type of data %s and len %d",type(dobjBis.ydata),len(dobjBis.ydata))
+                logger.debug("type of data %s and len %d and unit %s ",type(dobjBis.ydata),len(dobjBis.ydata),dobjBis.yunit)
             exp.substituteExpr(vm)
             exp.evalExpr()
             dobjBis.ydata = exp.result

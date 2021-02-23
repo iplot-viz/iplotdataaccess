@@ -30,7 +30,7 @@ class VarType(Enum):
 
 
 class RTStreamer:
-	def __init__(self, url=None, headers=None, auth=None):
+	def __init__(self, url=None, headers=None, auth=None,udaA=None):
 		self.urlX = url or 'http://io-ls-udaweb1.iter.org/dashboard/backend/sse'
 		self.params = None
 		self.origparams =[]
@@ -41,17 +41,23 @@ class RTStreamer:
 		self.response = None
 		self.client = None
 		self.__status = "INIT"
+		self.__units = {}
 		#self.headers = {'User-Agent': 'it_script_basic'}
 		self.headers = headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
 		###headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
 		self.vardata={}
+
 		self.maxsizeP=100
 		self.maxsize=1000
+		self.udaAccess=udaA
+		self.__checkAndFillHeaders()
+
 		##logging.basicConfig(filename="/tmp/output_pro.log", format='%(asctime)s -%(levelname)s-%(funcName)s-%(message)s', datefmt='%Y-%m-%dT%H:%M:%S', level=logging.DEBUG)
 		##self.logger = logging.getLogger(__name__)
 
 	def __checkAndFillHeaders(self):
-		for k, v in self.headers.items:
+		logger.debug("headers is %s and type is %s ",self.headers,type(self.headers))
+		for k, v in self.headers.items():
 			if v == "$USERNAME":
 				self.headers[k] = getpass.getuser()
 
@@ -60,6 +66,13 @@ class RTStreamer:
 		if params is not None and len(params)>0:
 			p1=set(params)
 			self.params = "variables="+",".join(p1)
+			if self.udaAccess is None:
+				logger.warning(" no uda data access defined cannot get the units")
+				return
+			for s in p1:
+				self.__units[s]=self.udaAccess.getUnit(s)
+
+
 
 	def __convertType(self, utype):
 
@@ -132,6 +145,7 @@ class RTStreamer:
 		xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
 		ydata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
 		d = dc.DataObj()
+		yunit=self.__units.get(line[ProtoHeader.VARNAME.value])
 		d.setA(xtype, ytype, xlabel, ylabel, xunit, yunit, drank)
 		for i in range(int(line[ProtoHeader.NB_SMP.value])):
 			xdata[i] = int(line[ProtoHeader.NB_SMP.value+i+1])*1000000

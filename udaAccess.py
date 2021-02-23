@@ -150,9 +150,22 @@ class udaAccess:
         logger.debug("parse pulse %s", str(p))
         return p
 
+    def getUnit(self,varname,tsmp='-1'):
+        unitval=None
+        if varname is None:
+            return unitval
+        if not self.connected:
+            self.connect(self.udahost)
+        MetaData = self.UCR.getMeta(varname, tsmp)
+        for i in MetaData:
+            if i.name.lower() == "units":
+                unitval=i.value
+                break
+        return unitval
+
     def getDataI(self, varname="", pulsenb=None, nbp=100, tsS=0, tsE=0, tsFormat="relatve",decType=None, myprocList=None, myprocName=None):
         dobj = dc.DataObj()
-        if (self.connected == False):
+        if not self.connected:
             self.connect(self.udahost)
             if self.errcode == -1:
                 dobj.setErr(self.errcode, self.errdesc)
