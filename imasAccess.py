@@ -13,8 +13,8 @@ class IMASDataAccess:
     user_or_path='public'
     imas_backend=imas.imasdef.MDSPLUS_BACKEND
     __input=None
-    pulse         = 130012
-    run          = 2
+    pulse         = None
+    run          = None
     #user_or_path = 'public'
     #database     = 'iter'
     __isConnected=False
@@ -56,6 +56,11 @@ class IMASDataAccess:
 
     def connect(self):
         try:
+            if self.pulse is None or self.run is None:
+                logger.warning("not connected to imas db,pulse or pulse is empty")
+                self.__isConnected = False
+                self.__input = None
+                return
             self.__input = imas.DBEntry(self.imas_backend, self.database, self.pulse, self.run, self.user_or_path)
             [err, n] = self.__input.open()
             if err != 0:
