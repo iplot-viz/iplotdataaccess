@@ -245,7 +245,10 @@ class RTStreamer:
 				return
 		while self.__status != "STOPPED":
 			time.sleep(0.1)
-
+		self.origparams.clear()
+		self.origparams1.clear()
+		self.vardata.clear()
+		self.__units.clear()
 		logger.warning("subscriber is  stopped %s ", self.__status)
 
 
