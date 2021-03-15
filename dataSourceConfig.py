@@ -1,5 +1,4 @@
-import sys
-import log.setupLogger as ls
+import iplotlib.log.setupLogger as ls
 logger = ls.get_logger(__name__)
 class dataSourceConfig:
 
@@ -10,7 +9,7 @@ class dataSourceConfig:
         ##check CODAC UDA module is installed
         try:
             import uda_client_reader
-            import access.udaAccess
+            import iplotlib.access.udaAccess
             logger.info("module 'uda client' is installed")
             self.supportedDataSources.append("CODAC_UDA")
         except ModuleNotFoundError:
@@ -18,7 +17,7 @@ class dataSourceConfig:
 
         try:
             import imas
-            import access.imasAccess
+            import iplotlib.access.imasAccess
             logger.info("module imas is installed")
             self.supportedDataSources.append("IMAS_UDA")
         except ModuleNotFoundError:

@@ -6,9 +6,9 @@ import getpass
 import numpy as np
 from enum import Enum
 from collections import deque
-import access.dataCommon as dc
+import iplotlib.access.dataCommon as dc
 import time
-import log.setupLogger as ls
+import iplotlib.log.setupLogger as ls
 
 
 logger = ls.get_logger(__name__)
@@ -245,10 +245,7 @@ class RTStreamer:
 				return
 		while self.__status != "STOPPED":
 			time.sleep(0.1)
-		self.origparams.clear()
-		self.origparams1.clear()
-		self.vardata.clear()
-		self.__units.clear()
+
 		logger.warning("subscriber is  stopped %s ", self.__status)
 
 

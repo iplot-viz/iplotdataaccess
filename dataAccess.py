@@ -1,34 +1,32 @@
-import sys
-
 import os
 import copy
-from cachetools import cached, LRUCache, TTLCache
-import access.dataSourceConfig as dsc
-from access.dataCommon import DataObj
-from proc.basicProcessing import exprProcessing, ProcParsingException
-import log.setupLogger as ls
+from cachetools import cached, LRUCache
+import iplotlib.access.dataSourceConfig as dsc
+from iplotlib.access.dataCommon import DataObj
+from iplotlib.proc.basicProcessing import exprProcessing, ProcParsingException
+import iplotlib.log.setupLogger as ls
 
 logger = ls.get_logger(__name__)
 
 ##should import possible data sources like IMAS UDA and CODAC UDA
 try:
     import imas
-    import access.imasAccess
+    import iplotlib.access.imasAccess
 except ModuleNotFoundError:
     logger.warning("import 'imas client' is not installed")
 
 try:
     import uda_client_reader
-    import access.udaAccess
+    import iplotlib.access.udaAccess
 except ModuleNotFoundError:
     logger.warning("import'uda client' is not installed")
 
 try:
-    import access.realTimeStreamer
+    import iplotlib.access.realTimeStreamer
 except ModuleNotFoundError:
     logger.warning("import'uda RT streamer' is not installed")
 
-import access.dataCommon as dc
+import iplotlib.access.dataCommon as dc
 
 
 class RTHException(Exception):
@@ -100,7 +98,7 @@ class DataSource:
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
-            self.RTHandler = access.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,udaA=self.daHandler)
+            self.RTHandler = iplotlib.access.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta, udaA=self.daHandler)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -116,7 +114,7 @@ class DataSource:
     def connect(self):
         if self.dtype == "IMAS_UDA":
             try:
-                self.daHandler = access.imasAccess.IMASDataAccess()
+                self.daHandler = iplotlib.access.imasAccess.IMASDataAccess()
                 self.connected = self.daHandler.connectSource(connectionString=self.connectionString)
             except ModuleNotFoundError:
                 self.errcode = -1
@@ -124,7 +122,7 @@ class DataSource:
 
         if self.dtype == "CODAC_UDA":
             try:
-                self.daHandler = access.udaAccess.udaAccess()
+                self.daHandler = iplotlib.access.udaAccess.udaAccess()
                 logger.info("connect %s ", self.connectionString)
                 self.connected = self.daHandler.connectSource(connectionString=self.connectionString)
 
@@ -179,7 +177,7 @@ class DataSource:
                 kwargs["params"] = newparams
                 logger.debug("start sub with params=%s and origparams=%s",kwargs["params"] ,kwargs["origparams"])
                 self.RTHandler.startSubscription(**kwargs)
-            except access.realTimeStreamer.RTStreamerException as rtse:
+            except iplotlib.access.realTimeStreamer.RTStreamerException as rtse:
                 self.__varexpr.clear()
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
@@ -191,8 +189,8 @@ class DataSource:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stopSubscription()
                 self.__varexpr.clear()
-                self.rtStatus = "STOPPED"
-            except access.realTimeStreamer.RTStreamerException as rtse:
+                self.rtStatus == "STOPPED"
+            except iplotlib.access.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
