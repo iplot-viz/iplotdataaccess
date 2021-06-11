@@ -6,9 +6,9 @@ import getpass
 import numpy as np
 from enum import Enum
 from collections import deque
-import iplotlib.access.dataCommon as dc
+import dataAccess.dataCommon as dc
 import time
-import iplotlib.log.setupLogger as ls
+import logging2.setupLogger as ls
 
 
 logger = ls.get_logger(__name__)
