@@ -2,7 +2,7 @@
 import re
 import numpy as np
 import imas
-from dataCommon import DataObj,DataType
+from dataAccess.dataCommon import DataObj,DataType
 import logging2.setupLogger as ls
 
 logger = ls.get_logger(__name__)

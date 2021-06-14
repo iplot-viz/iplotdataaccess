@@ -247,7 +247,7 @@ class DataSource:
                             dobjBis = copy.deepcopy(dobj)
 
                             vm[s] = dobjBis.ydata
-                            if len(dobjBis.ydata) > 0:
+                            if dobjBis.ydata is not None and len(dobjBis.ydata) > 0:
                                 logger.debug("type %s", dobjBis.ydata.dtype)
                                 logger.debug("type %s", type(dobjBis.ydata))
 
