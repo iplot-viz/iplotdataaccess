@@ -5,8 +5,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="dataAccess",
-    version="0.0.1",
-    author="Abadie Lana",
+    version="0.1.0",
+    author="Lana Abadie",
     author_email="lana.abadie@iter.org",
     description="Data access for applications using IDSs or CBS",
     long_description=long_description,
@@ -25,8 +25,8 @@ setuptools.setup(
     python_requires=">=3.8",
     install_requires=[
         "cachetools >= 4.2.1",
-        "logging2 >= 0.0.1",
-        "numpy >= 1.20.0",
-        "proc >= 0.0.1"
+        "logging2 >= 0.1.0",
+        "numpy >= 1.20.0", # I don't know if uda_client can work with numpy < 1.20.0
+        "proc >= 0.1.0"
     ]
 )
