@@ -9,7 +9,7 @@ setuptools.setup(
         "setuptools-git-versioning"
     ],
     version_config={
-        "starting_version": "0.0.1",
+        "starting_version": "0.1.0",
         "template": "{tag}",
         "dirty_template": "{tag}.{ccount}.{sha}",
     },
