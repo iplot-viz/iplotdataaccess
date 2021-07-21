@@ -33,7 +33,7 @@ setuptools.setup(
     install_requires=[
         "cachetools >= 4.2.1",
         "logging2 >= 0.1.0",
-        "numpy >= 1.20.0", # I don't know if uda_client can work with numpy < 1.20.0
+        "numpy >= 1.19.0",
         "proc >= 0.1.0"
     ]
 )
