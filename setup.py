@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="dataAccess",
+    name="iplotDataAccess",
     setup_requires=[
         "setuptools-git-versioning"
     ],
@@ -32,6 +32,6 @@ setuptools.setup(
     python_requires=">=3.8",
     install_requires=[
         "cachetools >= 4.2.0",
-        "proc >= 0.6.0"
+        "iplotProcessing >= 0.6.0"
     ]
 )
