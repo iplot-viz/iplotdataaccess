@@ -29,11 +29,9 @@ setuptools.setup(
     ],
     package_dir={"": "."},
     packages=setuptools.find_namespace_packages(where="."),
-    python_requires="=3.8",
+    python_requires=">=3.8",
     install_requires=[
-        "cachetools = 4.2.1",
-        "logging2 = 0.0.0",
-        "numpy = 1.19.0",
-        "proc = 0.0.0"
+        "cachetools >= 4.2.0",
+        "proc >= 0.6.0"
     ]
 )
