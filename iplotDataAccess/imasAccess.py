@@ -2,8 +2,8 @@
 import re
 import numpy as np
 import imas
-from dataAccess.dataCommon import DataObj,DataType
-import logging2.setupLogger as ls
+from iplotDataAccess.dataCommon import DataObj,DataType
+import iplotLogging.setupLogger as ls
 
 logger = ls.get_logger(__name__)
 

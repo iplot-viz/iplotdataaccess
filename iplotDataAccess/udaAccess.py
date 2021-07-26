@@ -1,7 +1,7 @@
-import dataAccess.dataCommon as dc
+import iplotDataAccess.dataCommon as dc
 #import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
-import logging2.setupLogger as ls
+import iplotLogging.setupLogger as ls
 import dateutil.parser as dp
 from datetime import timezone
 logger = ls.get_logger(__name__)
