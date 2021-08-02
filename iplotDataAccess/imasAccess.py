@@ -209,6 +209,16 @@ class IMASDataAccess:
             dobj.xdata = []
         except imas.hli_exception.ALException as ale:
             logger.debug("Invalid hli exc: %s",ale)
+            dobj.errcode = -1
+            dobj.errdescr = "Invalid IDS path"
+            dobj.ydata = []
+            dobj.xdata = []
+        except ValueError as ve:
+            logger.debug("Invalid hli exc: %s",ve)
+            dobj.errcode = -1
+            dobj.errdescr = "Invalid IDS path"
+            dobj.ydata = []
+            dobj.xdata = []
         return dobj
 
     def close(self):
