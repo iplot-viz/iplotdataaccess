@@ -43,15 +43,20 @@ class IMASDataAccess:
             if s.startswith("backend"):
                 temp = s.split("=")
                 if temp[1]=="MDSPLUS":
-                    self.imas_backend=imas.imasdef.MDSPLUS_BACKEND
+                    self.imas_backend = imas.imasdef.MDSPLUS_BACKEND
             if s.startswith("pulseIdent"):
-                temp=s.split("=")[1]
-                ret=temp.split("/")
-                self.pulse=int(ret[0])
-                if len(ret)==2:
-                    self.run=int(ret[1])
-                else:
-                    self.run=0
+                temp = s.split("=")[1]
+                ret = temp.split("/")
+                try:
+                    self.pulse = int(ret[0])
+                    if len(ret) == 2:
+                        self.run = int(ret[1])
+                    else:
+                        self.run=0
+                except ValueError:
+                    logger.error("got an invalid pulse identifier %s ", temp)
+                    self.run = 0
+                    self.pulse = 0
 
 
     def connect(self):
