@@ -6,7 +6,6 @@ from cachetools import LRUCache, cached
 import iplotDataAccess.dataSourceConfig as dsc
 import iplotLogging.setupLogger as ls
 from iplotDataAccess.dataCommon import DataObj
-from iplotProcessing.basicProcessing import ProcParsingException, exprProcessing
 
 logger = ls.get_logger(__name__)
 
@@ -53,7 +52,6 @@ class DataSource:
         self.rth = None
         self.rta = None
         self.rtu = None
-        self.__varexpr = {}
         if name is None:
             self.name = "DS _" + str(id(self))
         else:
@@ -147,34 +145,18 @@ class DataSource:
     def getRTStatus(self):
         return self.rtStatus
 
-    def __checkIfExpr(self, var=[]):
-        newparam = []
-        cnt = 0
-        for i in range(len(var)):
-            ep = exprProcessing()
-            ep.setExpr(var[i])
-            if ep.isExpr:
-                self.__varexpr[var[i]] = ep
-
-                for s in ep.vardict.keys():
-                    newparam.append(s)
-            else:
-                newparam.append(var[i])
-        return newparam
-
     def startSubscription(self, **kwargs):
         if self.rtStatus == "INITIALISED" or self.rtStatus == "STOPPED":
             try:
                 self.rtStatus = "STARTED"
                 logger.debug("startSubscription ")
-                newparams = self.__checkIfExpr(kwargs.get("params"))
+                newparams = kwargs.get("params")
 
                 kwargs["origparams"] = copy.deepcopy(kwargs.get("params"))
                 kwargs["params"] = newparams
                 logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
                 self.RTHandler.startSubscription(**kwargs)
             except iplotDataAccess.realTimeStreamer.RTStreamerException as rtse:
-                self.__varexpr.clear()
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
@@ -184,33 +166,19 @@ class DataSource:
             try:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stopSubscription()
-                self.__varexpr.clear()
-                self.rtStatus = "STOPPED"
+                self.rtStatus == "STOPPED"
             except iplotDataAccess.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
     def getNextData(self, vname=None):
-
-        if vname in self.__varexpr.keys():
-            # logger.debug("expression case receive getnextdata for varname=%s", vname)
-            exp = self.__varexpr[vname]
-            vm = {}
-            for s in exp.vardict.keys():
-                dobj = self.RTHandler.getNextData(vname)
-                dobjBis = copy.deepcopy(dobj)
-                if len(dobjBis.ydata) == 0:
-                    return dobjBis
-                vm[s] = dobjBis.ydata
-                logger.debug("type of data %s and len %d and unit %s ", type(dobjBis.ydata), len(dobjBis.ydata), dobjBis.yunit)
-            exp.substituteExpr(vm)
-            exp.evalExpr()
-            dobjBis.ydata = exp.result
-            return dobjBis
-
-
+        varnames = self.RTHandler.params[self.RTHandler.params.find("=") + 1:-1]
+        varnames = varnames.split(',')
+        if vname in varnames:
+            dobj = self.RTHandler.getNextData(vname)
+            logger.debug("type of data %s and len %d and unit %s ", type(dobj.ydata), len(dobj.ydata), dobj.yunit)
+            return dobj
         else:
-            # logger.debug("not an expression receive getnextdata for varname=%s", vname)
             return self.RTHandler.getNextData(vname)
 
     @cached(cache=LRUCache(maxsize=100))
@@ -226,44 +194,13 @@ class DataSource:
                 dobj = dc.DataObj()
                 dobj.setEmpty(self.dtype + "_DataHandler is null")
             else:
-                ep = exprProcessing()
-                myexpr = kwargs.get("varname")
-                logger.debug("myexprZZ=%s", myexpr)
-                ##we set expression and it is compiled
-                try:
-                    ep.setExpr(myexpr)
-                    if ep.isExpr:
-                        vm = {}
-                        for s in ep.vardict.keys():
+                varname = kwargs.get("varname")
+                logger.debug(f"varname: {varname}")
+                dobj = self.__getDataI(**kwargs)
 
-                            kwargs["varname"] = s
-                            if s is None:
-                                dobj = DataObj()
-                                dobj.setEmpty("issue when calling data access no varname provided")
-                                return dobj
-                            logger.debug("varname=%s", s)
-                            dobj = self.__getDataI(**kwargs)
-                            ##we need to make a copy of the object otherwise if it is in the cache, processing is applied n times..
-                            dobjBis = copy.deepcopy(dobj)
-
-                            vm[s] = dobjBis.ydata
-                            if dobjBis.ydata is not None and len(dobjBis.ydata) > 0:
-                                logger.debug("type %s", dobjBis.ydata.dtype)
-                                logger.debug("type %s", type(dobjBis.ydata))
-
-                        ep.substituteExpr(vm)
-                        ep.evalExpr()
-                        dobjBis.ydata = ep.result
-
-                        return dobjBis
-                    else:
-                        return self.__getDataI(**kwargs)
-
-                except ProcParsingException:
-                    logger.warning("parsing exception ")
-                    dobj = DataObj()
-                    dobj.setEmpty("Invalid expression " + myexpr)
-                    return dobj
+                if dobj.ydata is not None and len(dobj.ydata) > 0:
+                    logger.debug(f"dtype: {dobj.ydata.dtype}")
+                    logger.debug(f"actual dtype: {type(dobj.ydata)}")
 
         except ModuleNotFoundError:
             dobj = dc.DataObj()
@@ -277,57 +214,19 @@ class DataSource:
 
     def getEnvelope(self, **kwargs):
         ret = (None, None)
-        try:
-            ep = exprProcessing()
-            myexpr = kwargs.get("varname")
-            logger.debug("myexprZZ=%s", myexpr)
-            ##we set expression and it is compiled
-            try:
-                ep.setExpr(myexpr)
-                if ep.isExpr:
-                    vmMin = {}
-                    vmMax = {}
-                    for s in ep.vardict.keys():
+        try: 
+            if self.daHandler is None:
+                dobj = dc.DataObj()
+                dobj.setEmpty(self.dtype + "_DataHandler is null")
+            else:
+                varname = kwargs.get("varname")
+                logger.debug(f"varname: {varname}")
+                ret = self.__getEnvelopeI(**kwargs)
+                dobjMin = ret[0]
 
-                        kwargs["varname"] = s
-                        if s is None:
-                            dobj = DataObj()
-                            dobj.setEmpty("issue when calling data access no varname provided")
-                            return dobj
-                        logger.debug("varname=%s", s)
-                        ret = self.__getEnvelopeI(**kwargs)
-                        ##we need to make a copy of the object otherwise if it is in the cache, processing is applied n times..
-
-                        dobjBisMin = copy.deepcopy(ret[0])
-                        dobjBisMax = copy.deepcopy(ret[1])
-
-                        vmMin[s] = dobjBisMin.ydata
-                        vmMax[s] = dobjBisMax.ydata
-                        if len(dobjBisMin.ydata) > 0:
-                            logger.debug("type %s", dobjBisMin.ydata.dtype)
-                            logger.debug("type %s", type(dobjBisMin.ydata))
-
-                    ep.substituteExpr(vmMin)
-                    ep.evalExpr()
-                    dobjBisMin.ydata = ep.result
-
-                    ep.substituteExpr(vmMax)
-                    ep.evalExpr()
-                    dobjBisMax.ydata = ep.result
-
-                    return dobjBisMin, dobjBisMax
-                else:
-                    return self.__getEnvelopeI(**kwargs)
-
-            except ProcParsingException:
-                logger.warning("parsing exception ")
-                dobjMin = DataObj()
-                dobjMin.setEmpty("Invalid expression " + myexpr)
-
-                dobjMax = DataObj()
-                dobjMax.setEmpty("Invalid expression " + myexpr)
-                return dobjMin, dobjMax
-
+                if dobjMin.ydata is not None and len(dobjMin.ydata) > 0:
+                    logger.debug(f"dtype: {dobjMin.ydata.dtype}")
+                    logger.debug(f"actual dtype: {type(dobjMin.ydata)}")
 
         except ModuleNotFoundError:
             logger.warning("ModuleNotFound_%s", self.dtype)
