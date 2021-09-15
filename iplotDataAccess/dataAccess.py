@@ -185,7 +185,7 @@ class DataSource:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stopSubscription()
                 self.__varexpr.clear()
-                self.rtStatus == "STOPPED"
+                self.rtStatus = "STOPPED"
             except iplotDataAccess.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2

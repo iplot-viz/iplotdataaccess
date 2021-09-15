@@ -142,6 +142,16 @@ class RTStreamer:
 			return
 
 		val = data.split(" V ")
+        	##TODO 
+        	###protect the code in case of event mixing up 
+        	# ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513472231 ', '0.421761 NO_ALARM NO_ALARM']
+        	#['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513480496 ', '0.333320 NO_ALARM NO_ALARM']
+        	#['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513492192 ', '0.000000 NO_ALARM NO_ALARM']
+        	#['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ', '0.000000 NO_ALARM NO_ALARM']
+        	#['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ', '0.000000 NO_ALARM NO_ALARM']
+		if len(val)<int(line[ProtoHeader.NB_SMP.value])+1 :
+            		logger.warning("sline mixing event and data skipping %s",val)
+            		return
 		xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
 		ydata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
 		d = dc.DataObj()
