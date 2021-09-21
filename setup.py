@@ -32,6 +32,6 @@ setuptools.setup(
     python_requires=">=3.8",
     install_requires=[
         "cachetools >= 4.2.0",
-        "iplotProcessing >= 0.6.0"
+        "iplotProcessing >= 0.1.0"
     ]
 )
