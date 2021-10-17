@@ -261,6 +261,8 @@ class DataAccess:
                     dname = s[s.find("[") + 1:s.find("]")]
                     ds = DataSource(name=dname)
                     self.dslist[dname] = ds
+                    if self.defaultds is None:
+                        self.defaultds = self.dslist[dname]
 
                 if line.rstrip().startswith("conninfo"):
                     s = line.rstrip().split("=", 1)[1]
@@ -274,16 +276,16 @@ class DataAccess:
                 if line.rstrip().startswith("rtheaders"):
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTHeaders(s)
+                if line.rstrip().startswith("default"):
+                    s = line.rstrip().split("=", 1)[1]
+                    if s.lower() == 'true':
+                        if self.defaultds is None:
+                            self.defaultds = self.dslist[dname]
+                            logger.debug("found a default data source")
 
                 if line.rstrip().startswith("varprefix"):
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
-                    if len(s) == 0:
-                        if self.defaultds is None:
-                            self.defaultds = self.dslist[dname]
-                            logger.debug("found a default data source")
-                        else:
-                            logger.debug("already find a default data source discarding %s ", self.defaultds.name)
                     self.dslist[dname].setVarPrefix(s)
 
         # print("supported dslist ",self.dslist[0])
