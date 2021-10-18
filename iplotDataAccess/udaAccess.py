@@ -161,7 +161,7 @@ class udaAccess:
                 break
         return unitval
 
-    def getDataI(self, varname="", pulsenb=None, nbp=100, tsS=0, tsE=0, tsFormat="relatve",decType=None, myprocList=None, myprocName=None):
+    def getDataI(self, varname="", pulsenb=None, nbp=100, tsS=0, tsE=0, tsFormat="relatve",decType=None):
         dobj = dc.DataObj()
         if not self.connected:
             self.connect(self.udahost)
@@ -223,9 +223,9 @@ class udaAccess:
                   self.UCR.getRank(handle))
 
         if dobj.ytype == dc.DataType.DA_TYPE_STRING:
-            dobj.setData(self.UCR.getDataAsStrings(handle), 2, myprocList, myprocName)
+            dobj.setData(self.UCR.getDataAsStrings(handle), 2)
         else:
-            dobj.setData(self.UCR.getDataNativeRank(handle), 2, myprocList, myprocName)
+            dobj.setData(self.UCR.getDataNativeRank(handle), 2)
         if (dobj.ydata is None):
             self.UCR.releaseData(handle)
             self.errdesc = "no data found {}for query ".format(query)
@@ -244,8 +244,7 @@ class udaAccess:
         dobj.setErr(0, "OK")
         return dobj
 
-    def getEnvelope(self, varname="", pulse=0, nbp=100, tsS=0, tsE=0, tsFormat="relative",decType=None, myprocList=None,
-                     myprocName=None):
+    def getEnvelope(self, varname="", pulse=0, nbp=100, tsS=0, tsE=0, tsFormat="relative",decType=None):
         dmax = None
         dmin = None
         dmax = self.getData(varname=varname, pulse=pulse, nbp=nbp, tsS=tsS, tsE=tsE, tsFormat=tsFormat,decType="max")

@@ -44,14 +44,11 @@ class DataObj():
         self.errcode=0
         self.errdesc=""
 
-    def setData(self, data, type, myprocList=None, myprocName=None):
+    def setData(self, data, type):
         if type == 1 :
-            
             self.xdata=data
         else:
             self.ydata=data
-            #if myprocList!=None and myprocName!=None:
-             #   self.xdata=myprocList[myprocName])
 
     def setEmpty(self, mess=None):
         self.errcode = -1
