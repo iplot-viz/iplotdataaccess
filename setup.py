@@ -35,6 +35,6 @@ setuptools.setup(
         "cachetools >= 4.2.0",
         "iplotLogging >= 0.0.0",
         "requests >= 2.25.1",
-        "sseclient >= 0.0.27"
+        "sseclient-py >= 1.7"
     ]
 )
