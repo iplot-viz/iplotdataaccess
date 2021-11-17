@@ -71,7 +71,7 @@ class udaAccess:
             return dc.DataType.DA_TYPE_USHORT
         elif utype==uc.RAW_TYPE_INT:
             return dc.DataType.DA_TYPE_INT
-        elif utype == uc.RAW_TYPE_UNSGINED_INT:
+        elif utype == uc.RAW_TYPE_UNSIGNED_INT:
             return dc.DataType.DA_TYPE_UINT
 
     def convertToNanos(self,tsE):
