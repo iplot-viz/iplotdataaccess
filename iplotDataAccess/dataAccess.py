@@ -60,15 +60,15 @@ class DataSource:
             self.connectionString = "host=X,port=3090"
             self.dtype = "CODAC_UDA"
         elif type == "IMAS_UDA":
-            self.conectionString = "database=ITER,path=public,backend=MDSPLUS"
+            self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
             self.dtype = "IMAS_UDA"
 
     def setConnectionString(self, conninfo):
         self.connectionString = conninfo
         if conninfo.find("host"):
-            self.dtype = "IMAS_UDA"
-        elif conninfo.find("database"):
             self.dtype = "CODAC_UDA"
+        elif conninfo.find("database"):
+            self.dtype = "IMAS_UDA"
 
     def setVarPrefix(self, pref):
         self.varprefix = pref
