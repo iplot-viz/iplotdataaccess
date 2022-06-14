@@ -65,9 +65,9 @@ class DataSource:
 
     def setConnectionString(self, conninfo):
         self.connectionString = conninfo
-        if conninfo.find("host"):
+        if "host" in conninfo:
             self.dtype = "CODAC_UDA"
-        elif conninfo.find("database"):
+        elif "database" in conninfo:
             self.dtype = "IMAS_UDA"
 
     def setVarPrefix(self, pref):

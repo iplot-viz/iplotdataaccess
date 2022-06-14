@@ -172,22 +172,15 @@ class IMASDataAccess:
                     logger.debug(" xdata is NONE ")
                 else:
                     logger.debug(" xdata is NOT NONE %d ", len(dobj.xdata))
-                if tsS is not None and tsE is not None:
+                if tsE is not None or tsS is not None:
+                    if tsE is None:
+                        tsE=dobj.xdata[-1]
+                    if tsS is None:
+                        tsS=dobj.xdata[0]
+
                     idx = np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
-                    dobj.xdata=dobj.xdata.take(idx)
-                    dobj.ydata = dobj.ydata.take(idx)
-                    #logger.debug(" idx  %s and ydata=%s ", idx,dobj.ydata)
-
-                else:
-                    if tsE is not None:
-                        idx = np.where( dobj.xdata <= tsE)
-                        dobj.xdata = dobj.xdata.take(idx)
-                        dobj.ydata = dobj.ydata.take(idx)
-                    elif tsS is not None:
-                        idx = np.where(dobj.xdata >= tsS)
-                        dobj.xdata = dobj.xdata.take(idx)
-                        dobj.ydata = dobj.ydata.take(idx)
-
+                    dobj.xdata=dobj.xdata[idx]
+                    dobj.ydata = dobj.ydata[idx]
             else:
                 dobj.xdata=[]
                 dobj.ydata=[]
