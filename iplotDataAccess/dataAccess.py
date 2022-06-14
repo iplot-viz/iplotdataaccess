@@ -1,11 +1,11 @@
 import copy
 import os
 
-from cachetools import LRUCache, cached
+
 
 import iplotDataAccess.dataSourceConfig as dsc
 import iplotLogging.setupLogger as ls
-from iplotDataAccess.dataCommon import DataObj
+from iplotDataAccess.dataCommon import DataObj, DataEnvelope
 
 logger = ls.get_logger(__name__)
 
@@ -60,14 +60,14 @@ class DataSource:
             self.connectionString = "host=X,port=3090"
             self.dtype = "CODAC_UDA"
         elif type == "IMAS_UDA":
-            self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
+            self.conectionString = "database=ITER,path=public,backend=MDSPLUS"
             self.dtype = "IMAS_UDA"
 
     def setConnectionString(self, conninfo):
         self.connectionString = conninfo
-        if conninfo.find("host"):
+        if "host" in conninfo:
             self.dtype = "CODAC_UDA"
-        elif conninfo.find("database"):
+        elif "database" in conninfo:
             self.dtype = "IMAS_UDA"
 
     def setVarPrefix(self, pref):
@@ -181,7 +181,7 @@ class DataSource:
         else:
             return self.RTHandler.getNextData(vname)
 
-    @cached(cache=LRUCache(maxsize=100))
+    
     def __getDataI(self, **kwargs):
         return self.daHandler.getData(**kwargs)
 
@@ -199,7 +199,7 @@ class DataSource:
                 dobj = self.__getDataI(**kwargs)
 
                 if dobj.ydata is not None and len(dobj.ydata) > 0:
-                    logger.debug(f"dtype: {dobj.ydata.dtype}")
+                    logger.debug(f"dtype: {dobj.ytype}")
                     logger.debug(f"actual dtype: {type(dobj.ydata)}")
 
         except ModuleNotFoundError:
@@ -208,7 +208,7 @@ class DataSource:
         logger.debug("exiting getdata")
         return dobj
 
-    @cached(cache=LRUCache(maxsize=100))
+    
     def __getEnvelopeI(self, **kwargs):
         return self.daHandler.getEnvelope(**kwargs)
 
@@ -216,17 +216,17 @@ class DataSource:
         ret = (None, None)
         try: 
             if self.daHandler is None:
-                dobj = dc.DataObj()
+                dobj = dc.DataEnvelope()
                 dobj.setEmpty(self.dtype + "_DataHandler is null")
             else:
                 varname = kwargs.get("varname")
                 logger.debug(f"varname: {varname}")
                 ret = self.__getEnvelopeI(**kwargs)
-                dobjMin = ret[0]
+                
 
-                if dobjMin.ydata is not None and len(dobjMin.ydata) > 0:
-                    logger.debug(f"dtype: {dobjMin.ydata.dtype}")
-                    logger.debug(f"actual dtype: {type(dobjMin.ydata)}")
+                if ret.errcode==0 and ret.xdata is not None and len(ret.xdata) > 0:
+                    logger.debug(f"dtype: {ret.ytype}")
+                    logger.debug(f"actual dtype: {type(ret.ydata_min)}")
 
         except ModuleNotFoundError:
             logger.warning("ModuleNotFound_%s", self.dtype)
@@ -356,23 +356,21 @@ class DataAccess:
     def getEnvelope(self, dataSName, **kwargs):
         if dataSName is not None and dataSName in self.dslist.keys():
             if self.dslist[dataSName] is None:
-                dmin = DataObj()
-                dmin.setEmpty("Invalid data source pointer for ds name " + dataSName)
-                dmax = DataObj()
-                dmax.setEmpty("Invalid data source pointer for ds name " + dataSName)
-                return dmin.dmax
+                denv = DataEnveloppe()
+                denv.setEmpty("Invalid data source pointer for ds name " + dataSName)
+                
+                return denv
             else:
                 return self.dslist[dataSName].getEnvelope(**kwargs)
         else:
             if dataSName not in self.dslist.keys():
                 logger.warning("Invalid data source found %s ", dataSName)
-                dmin = DataObj()
-                dmin.setEmpty("Invalid data source name " + dataSName)
-                dmax = DataObj()
-                dmax.setEmpty("Invalid data source name " + dataSName)
-                return dmin, dmax
+                denv = DataEnveloppe()
+                denv.setEmpty("Invalid data source name " + dataSName)
+               
+                return denv
             if self.defaultds is not None:
                 logger.info("default source used ")
                 return self.defaultds.getEnvelope(**kwargs)
 
-        return None, None
+        return None

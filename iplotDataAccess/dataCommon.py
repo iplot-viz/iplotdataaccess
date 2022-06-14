@@ -16,7 +16,7 @@ class DataType(Enum):
 
 
 
-class DataObj():
+class DataCore():
 
     def __init__(self,parent=None):
         self.xtype=None
@@ -25,11 +25,10 @@ class DataObj():
         self.ylabel=""
         self.xunit =""
         self.yunit =""
-        self.xdata=None
-        self.ydata=None
         self.drank=""
         self.errcode=0
         self.errdesc=None
+        
 
     def setA(self,xtype,ytype,xlabel,ylabel,xunit,yunit,drank):
         if isinstance(xtype,DataType):
@@ -44,17 +43,12 @@ class DataObj():
         self.errcode=0
         self.errdesc=""
 
-    def setData(self, data, type):
-        if type == 1 :
-            self.xdata=data
-        else:
-            self.ydata=data
-
+    
+    
     def setEmpty(self, mess=None):
         self.errcode = -1
         self.errdesc = mess
-        self.xdata = []
-        self.ydata = []
+       
 
     def clearData(self):
         self.xtype =""
@@ -63,11 +57,11 @@ class DataObj():
         self.ylabel =""
         self.xunit =""
         self.yunit =""
-        self.xdata=None
-        self.ydata=None
+        
         self.drank=""
         self.errcode=0
         self.errdesc=""
+        
 
     def setErr(self,errc,errd):
         self.errcode=errc
@@ -75,4 +69,72 @@ class DataObj():
        
     def getErr(self):
         return self.errcode, self.errdesc
+
+class DataObj(DataCore):
+
+    def __init__(self,parent=None):
+        super().__init__(parent)
+        self.xdata=None
+        self.ydata=None
+        
+        
+
+    
+    
+    def setData(self, data, type):
+        if type == 1 :
+            self.xdata=data
+        else:
+            self.ydata=data
+
+    def setEmpty(self, mess=None):
+        super().setEmpty(mess)
+        self.xdata = []
+        self.ydata = []
+
+    def clearData(self):
+        super().clearData()
+        self.xdata=None
+        self.ydata=None
+
+class DataEnvelopeException(Exception):
+    pass        
+        
+class DataEnvelope(DataCore):
+
+    def __init__(self,parent=None):
+        super().__init__(parent)
+        self.xdata=None
+        self.ydata_min=None
+        self.ydata_max=None
+        self.ydata_avg=None
+        
+    def setXData(self,xdata):
+        self.xdata=xdata
+        
+    def setYData(self,datamin,datamax,datavg):
+        
+        if(len(datavg)==len(datamax) and len(datamax)==len(datamin)):
+            self.ydata_min=datamin
+            self.ydata_max=datamax
+            self.ydata_avg=datavg
+        else:
+            raise DataEnveloppeException("Invalid Enveloppe min, max and avg should have the same shape")
+
+    def setEmpty(self, mess=None):
+        super().setEmpty(mess)
+        self.xdata = []
+        self.ydata_min = []
+        self.ydata_max = []
+        self.ydata_avg = []
+
+    def clearData(self):
+        super().clearData()
+        self.xdata=None
+        self.ydata_min=None
+        self.ydata_max=None
+        self.ydata_avg=None
+        
+   
+    
     
