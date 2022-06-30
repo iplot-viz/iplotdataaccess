@@ -31,11 +31,7 @@ echo "Toolchain: $toolchain"
 try module purge
 
 # Other IDV components
-try module load iplotLogging/0.0.0-GCCcore-10.2.0
-try module load IMAS
-try module unload -f Boost
-try module load UDA-CCS
-try module load numpy
+try module load iplotLogging/0.2.1-GCCcore-10.2.0
 
 # Testing/Coverage requirements
 try module load coverage/5.5-GCCcore-10.2.0
@@ -44,11 +40,15 @@ case $toolchain in
 
   "foss")
     # Array processing
-    try module load SciPy-bundle/2020.11-foss-2020b
+    try module load IMAS/3.36.0-4.10.2-foss-2020b
+    try module switch -f Boost/1.74.0-GCC-10.2.0
+    try module load UDA-CCS/6.3-foss-2020b
     ;;
   "intel")
     # Array processing
-    try module load SciPy-bundle/2020.11-intel-2020b
+    try module load IMAS/3.36.0-4.10.2-2020b
+    try module switch -f Boost/1.74.0-iccifort-2020.4.304
+    try module load UDA-CCS/6.3-intel-2020b
     ;;
    *)
     echo "Unknown toolchain $toolchain"
