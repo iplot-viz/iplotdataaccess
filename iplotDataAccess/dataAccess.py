@@ -290,14 +290,14 @@ class DataAccess:
 
         # print("supported dslist ",self.dslist[0])
         for k, d in self.dslist.items():
-            logger.debug("data name=%s data type=%s connfino=%s", d.name, d.dtype, d.connectionString)
+            logger.info("data name=%s data type=%s connfino=%s", d.name, d.dtype, d.connectionString)
 
             if d.dtype in self.proto:
                 d.connect()
                 d.isSupported = True
                 dskeys.append(d)
             else:
-                logger.debug("data source not supported %s", d.name)
+                logger.info("data source not supported %s", d.name)
         return dskeys
 
     def addDataSource(self, proto="", dataS=None):

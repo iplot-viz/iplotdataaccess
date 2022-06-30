@@ -1,13 +1,14 @@
 import unittest
 import numpy as np
-
+import inspect
 import os
 import tempfile
-
+import iplotDataAccess
 from iplotDataAccess.dataAccess import DataAccess
+from telnetlib import Telnet
 
 dscfg = """[codacuda]
-conninfo=host=10.153.200.62,port=3090
+conninfo=host=10.153.200.61,port=3090
 varprefix=
 rturl=http://io-ls-udaweb1.iter.org/dashboard/backend/sse
 rtheaders=REMOTE_USER:$USERNAME,User-Agent:python_client
@@ -19,13 +20,29 @@ class TestUDAAccess(unittest.TestCase):
         super().setUp()
         self.da = DataAccess()
         self.ds = "codacuda"
+        print(os.environ.get('PWD'))
+
+        print(dir(iplotDataAccess))
+        print(dir(__builtins__))
         with open('/tmp/mydataconf.cfg',mode='w') as fp:
             fp.write(dscfg)
             fp.seek(0)
             os.environ.update({'DATASOURCESCONF': os.path.abspath(fp.name)})
+
+        ##print(os.environ.get('DATASOURCESCONF'))
+        ##with open('/tmp/mydataconf.cfg') as f:
+        ##    print( f.readlines())
+
+        print(os.environ.get('PYTHONPATH'))
         if len(self.da.loadConfig()) < 1:
             print("Invalid data source")
             return None
+        
+        ##check if we can connect to uda
+        with Telnet('10.153.200.61', 3090, timeout=60) as tn:
+            print("i am connected to uda server")
+            tn.close()
+
 
 
 

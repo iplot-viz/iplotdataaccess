@@ -74,9 +74,9 @@ class DataObj(DataCore):
 
     def __init__(self,parent=None):
         super().__init__(parent)
-        self.xdata=None
-        self.ydata=None
-        
+
+        self.xdata = []
+        self.ydata = []
         
 
     

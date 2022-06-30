@@ -44,11 +44,11 @@ case $toolchain in
 
   "foss")
     # Array processing
-    try module load SciPy-bundle/2020.11-foss-2020b
+    #try module load SciPy-bundle/2020.11-foss-2020b
     ;;
   "intel")
     # Array processing
-    try module load SciPy-bundle/2020.11-intel-2020b
+    #try module load SciPy-bundle/2020.11-intel-2020b
     ;;
    *)
     echo "Unknown toolchain $toolchain"
