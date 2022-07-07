@@ -37,7 +37,7 @@ class TestUDAAccess(unittest.TestCase):
         if len(self.da.loadConfig()) < 1:
             print("Invalid data source")
             return None
-        
+
         ##check if we can connect to uda
         with Telnet('10.153.200.61', 3090, timeout=60) as tn:
             print("i am connected to uda server")

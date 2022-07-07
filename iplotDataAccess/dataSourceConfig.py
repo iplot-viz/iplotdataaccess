@@ -10,11 +10,8 @@ class dataSourceConfig:
         try:
             import uda_client_reader
             logger.info("module 'uda client reader' is installed")
-            import dateutil.parser as dp
-            logger.info("module 'dateutil' is installed")
-            from datetime import timezone
-            logger.info("module 'datetime' is installed")
-            #import iplotDataAccess.udaAccess
+
+            import iplotDataAccess.udaAccess
             logger.info("module 'uda client' is installed")
             self.supportedDataSources.append("CODAC_UDA")
         except ModuleNotFoundError:
