@@ -31,7 +31,7 @@ echo "Toolchain: $toolchain"
 try module purge
 
 # Other IDV components
-try module load iplotLogging/0.0.0-GCCcore-10.2.0
+try module load iplotLogging/0.2.1-GCCcore-10.2.0
 try module load IMAS
 try module unload -f Boost
 try module load UDA-CCS
