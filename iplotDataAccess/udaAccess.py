@@ -424,7 +424,7 @@ class udaAccess:
 
             return dEnv
         
-        dEnv.setYData(data[0], data[1],data[3])
+        dEnv.setYData(data[:, 1], data[:, 2], data[:, 0])
         if dEnv.xtype == dc.DataType.DA_TYPE_FLOAT or dEnv.xtype == dc.DataType.DA_TYPE_DOUBLE:
             dEnv.setXData(self.UCR.getTimeStampsAsDouble(handle))
         else:
