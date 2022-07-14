@@ -356,7 +356,7 @@ class DataAccess:
     def getEnvelope(self, dataSName, **kwargs):
         if dataSName is not None and dataSName in self.dslist.keys():
             if self.dslist[dataSName] is None:
-                denv = DataEnveloppe()
+                denv = DataEnvelope()
                 denv.setEmpty("Invalid data source pointer for ds name " + dataSName)
                 
                 return denv
@@ -365,7 +365,7 @@ class DataAccess:
         else:
             if dataSName not in self.dslist.keys():
                 logger.warning("Invalid data source found %s ", dataSName)
-                denv = DataEnveloppe()
+                denv = DataEnvelope()
                 denv.setEmpty("Invalid data source name " + dataSName)
                
                 return denv
