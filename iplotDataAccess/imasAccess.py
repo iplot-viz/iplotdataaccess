@@ -135,7 +135,7 @@ class IMASDataAccess:
             if time_type==1:
                 dpath="time"
             else:
-                idsp[0:idsp.rfind("/")] + "/time"
+                dpath=idsp[0:idsp.rfind("/")] + "/time"
             timevec=self.__input.partial_get(ids_name=idsn, data_path=dpath)
 
 
