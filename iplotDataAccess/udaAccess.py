@@ -355,7 +355,6 @@ class udaAccess:
                   self.convertudatypes(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
                   self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
                   self.UCR.getRank(handle))
-        print(self.UCR.getFetchedType(handle))
 
         if dobj.ytype == dc.DataType.DA_TYPE_STRING:
             dobj.setData(self.UCR.getDataAsStrings(handle), 2)
