@@ -189,7 +189,7 @@ class IMASDataAccess:
                     dpath = res[-1].rpartition('/')[0] + "/time"
                 elif time_type == 1:  # global time (homogenous)
                     dpath = "time"
-                else: # static (no time)
+                else:  # static (no time)
                     dpath = ""
                 dobj.xunit = self.__getUnits(res[-2], dpath)
 
