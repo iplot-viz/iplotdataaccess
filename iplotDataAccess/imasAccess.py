@@ -184,10 +184,10 @@ class IMASDataAccess:
                 dobj.setData(self.__getTimeData(idsn=res[-2],idsp=res[-1]), 1)
                 dobj.yunit = self.__getUnits(res[-2], res[-1])
                 time_type = self.__input.partial_get(ids_name=res[-2], 
-                    data_path="ids_properties/homogeneous_time")
-                if time_type == 0: # time under each data (heterogenous)
+                                                     data_path="ids_properties/homogeneous_time")
+                if time_type == 0:  # time under each data (heterogenous)
                     dpath = res[-1].rpartition('/')[0] + "/time"
-                elif time_type == 1: # global time (homogenous)
+                elif time_type == 1:  # global time (homogenous)
                     dpath = "time"
                 else: # static (no time)
                     dpath = ""
