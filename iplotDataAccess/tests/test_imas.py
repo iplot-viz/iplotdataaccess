@@ -40,10 +40,16 @@ class TestUDAAccess(unittest.TestCase):
     def test_IMASAccessByPulse(self)-> None:
         dobj=self.da.getData(self.ds,varname="summary/fusion/power/value",pulse="130012/2",nbp=-1)
         self.assertEqual(len(dobj.xdata),108)
+        self.assertEqual(dobj.xunit, "s")
 
     def test_IMASAccessByPulseWithTime(self)-> None:
         dobj=self.da.getData(self.ds,varname="summary/fusion/power/value",pulse="130012/2",tsS="5",tsE="20",nbp=-1)
         self.assertEqual(len(dobj.xdata),4)
+        self.assertEqual(dobj.xunit, "s")
+    def test_IMASHeterogenousTimestamp(self)->None:
+        dobj = self.da.getData(self.ds, varname="pulse_schedule/ec/launcher(0)/power/reference/data", pulse="105023/1",nbp=-1)
+        self.assertEqual(len(dobj.xdata), 6)
+        self.assertEqual(dobj.xunit, "s")
 
 
 if __name__ == "__main__":
