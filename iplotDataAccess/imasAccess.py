@@ -149,6 +149,14 @@ class IMASDataAccess:
 
         return timevec
 
+    def checkIfTimeAndDataMatch (self,dobj):
+        ###in case of profile data in imas, the time and data length are different,
+        ###so to proceed we create a time vector equals to sample number
+        ###to raise a failure at next steps in case the user is doing something invalid
+        if len(dobj.xdata) != len(dobj.ydata):
+            dobj.xdata = np.arange(len(dobj.ydata))
+            logger.info("data and time are not matching, setting data vector to sample number vector")
+
     def getDataI(self,idspath_o=None,tsS=None,tsE=None):
         dobj = DataObj()
         if idspath_o is None:
@@ -208,6 +216,7 @@ class IMASDataAccess:
                     idx = np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
                     dobj.xdata=dobj.xdata[idx]
                     dobj.ydata = dobj.ydata[idx]
+                self.checkIfTimeAndDataMatch( dobj)
             else:
                 dobj.xdata=[]
                 dobj.ydata=[]

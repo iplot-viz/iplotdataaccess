@@ -51,6 +51,19 @@ class TestUDAAccess(unittest.TestCase):
         self.assertEqual(len(dobj.xdata), 6)
         self.assertEqual(dobj.xunit, "s")
 
+    def test_ProfileData1(self)->None:
+        dobj = self.da.getData(self.ds, varname="core_profiles/profiles_1d[1]/electrons/temperature", pulse="134174/117",
+                               nbp=-1)
+        self.assertEqual(len(dobj.xdata), 299)
+        self.assertEqual(len(dobj.ydata), 299)
+    def test_ProfileData2(self)->None:
+        dobj = self.da.getData(self.ds, varname="core_profiles/profiles_1d[1]/grid/rho_tor_norm",
+                               pulse="134174/117",
+                               nbp=-1)
+        self.assertEqual(len(dobj.xdata), 299)
+        self.assertEqual(len(dobj.ydata), 299)
+
+
 
 if __name__ == "__main__":
     unittest.main()
