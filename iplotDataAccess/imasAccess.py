@@ -156,6 +156,9 @@ class IMASDataAccess:
         if len(dobj.xdata) != len(dobj.ydata):
             dobj.xdata = np.arange(len(dobj.ydata))
             logger.info("data and time are not matching, setting data vector to sample number vector")
+            return False
+        else:
+            return True
 
     def getDataI(self,idspath_o=None,tsS=None,tsE=None):
         dobj = DataObj()
@@ -207,16 +210,17 @@ class IMASDataAccess:
                     logger.debug(" xdata is NONE ")
                 else:
                     logger.debug(" xdata is NOT NONE %d ", len(dobj.xdata))
-                if tsE is not None or tsS is not None:
+                out = self.checkIfTimeAndDataMatch(dobj)
+                if out is True and (tsE is not None or tsS is not None):
                     if tsE is None:
-                        tsE=dobj.xdata[-1]
+                        tsE = dobj.xdata[-1]
                     if tsS is None:
-                        tsS=dobj.xdata[0]
+                        tsS = dobj.xdata[0]
 
                     idx = np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
-                    dobj.xdata=dobj.xdata[idx]
+                    dobj.xdata = dobj.xdata[idx]
                     dobj.ydata = dobj.ydata[idx]
-                self.checkIfTimeAndDataMatch( dobj)
+
             else:
                 dobj.xdata=[]
                 dobj.ydata=[]
