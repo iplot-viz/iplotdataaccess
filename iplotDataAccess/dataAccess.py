@@ -176,7 +176,7 @@ class DataSource:
     def getNextData(self, vname=None):
         counter = 0
         ##could happend that prams is null if this call is done before startsubscri
-        while self.RTHandler.params is None and counter < self.MAX_ITER:
+        while (self.RTHandler is None or self.RTHandler.params is None) and counter < self.MAX_ITER:
             time.sleep(self.SLEEP_TO)
             counter = counter + 1
         if counter == self.MAX_ITER:
