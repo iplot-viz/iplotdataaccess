@@ -1,15 +1,31 @@
-import requests
-import sseclient
-import getpass
+
 import numpy as np
 from enum import Enum
 from collections import deque
 import iplotDataAccess.dataCommon as dc
 import time
 import iplotLogging.setupLogger as ls
-
-
 logger = ls.get_logger(__name__)
+try:
+	import requests
+
+except ModuleNotFoundError:
+	logger.warning("import'requests' is not installed")
+
+try:
+	import sseclient
+
+except ModuleNotFoundError:
+	logger.warning("import'sseclient' is not installed")
+
+try:
+	import getpass
+
+except ModuleNotFoundError:
+	logger.warning("import getpass is not installed")
+
+
+
 
 class RTStreamerException(Exception):
     pass
@@ -178,7 +194,7 @@ class RTStreamer:
 
 		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
 		try:
-			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
+			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=10)
 		except ConnectionError as ce:
 			logger.error("got connection error %s with errcode = %d ", ce, self.response.status_code)
 			self.__status = "ERROR"

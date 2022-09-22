@@ -1,6 +1,6 @@
 import copy
 import os
-
+import time
 
 
 import iplotDataAccess.dataSourceConfig as dsc
@@ -52,6 +52,8 @@ class DataSource:
         self.rth = None
         self.rta = None
         self.rtu = None
+        self.MAX_ITER = 1000
+        self.SLEEP_TO = 0.1
         if name is None:
             self.name = "DS _" + str(id(self))
         else:
@@ -172,6 +174,16 @@ class DataSource:
                 self.rterrcode = -2
 
     def getNextData(self, vname=None):
+        counter = 0
+        # Could happen that params is null if this call is done before startSubscription
+        while (self.RTHandler is None or self.RTHandler.params is None) and counter < self.MAX_ITER:
+            time.sleep(self.SLEEP_TO)
+            counter = counter + 1
+        if counter == self.MAX_ITER:
+            dobj = dc.DataObj()
+            dobj.setEmpty("Streamer not properly initialized: did the subscription start?")
+            return dobj
+
         varnames = self.RTHandler.params[self.RTHandler.params.find("=") + 1:-1]
         varnames = varnames.split(',')
         if vname in varnames:
