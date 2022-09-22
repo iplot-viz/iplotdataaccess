@@ -19,7 +19,7 @@ except ModuleNotFoundError:
 	logger.warning("import'sseclient' is not installed")
 
 try:
-	import sseclient
+	import getpass
 
 except ModuleNotFoundError:
 	logger.warning("import getpass is not installed")
