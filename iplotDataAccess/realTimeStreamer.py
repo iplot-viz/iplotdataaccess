@@ -14,6 +14,7 @@ try:
 except ModuleNotFoundError:
     logger.warning("import 'requests or sseclient' is not installed")
 
+
 class RTStreamerException(Exception):
     pass
 
