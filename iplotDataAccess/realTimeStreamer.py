@@ -19,16 +19,16 @@ class RTStreamerException(Exception):
     pass
 
 class ProtoHeader(Enum):
-	VARNAM E =0
-	TIME_D T =1
-	VAL_D T =2
-	NB_SM P =3
+	VARNAME =0
+	TIME_DT =1
+	VAL_DT =2
+	NB_SMP =3
 
 
 class VarType(Enum):
-	po n ="P"
-	da n ="D"
-	sd n ="S"
+	pon ="P"
+	dan ="D"
+	sdn ="S"
 
 
 class RTStreamer:
