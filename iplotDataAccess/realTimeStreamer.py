@@ -194,7 +194,7 @@ class RTStreamer:
 
 		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
 		try:
-			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
+			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=10)
 		except ConnectionError as ce:
 			logger.error("got connection error %s with errcode = %d ", ce, self.response.status_code)
 			self.__status = "ERROR"
