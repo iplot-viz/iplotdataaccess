@@ -5,6 +5,7 @@ from collections import deque
 import iplotDataAccess.dataCommon as dc
 import time
 import iplotLogging.setupLogger as ls
+logger = ls.get_logger(__name__)
 try:
 	import requests
 	import sseclient
@@ -14,7 +15,7 @@ except ModuleNotFoundError:
 
 
 
-logger = ls.get_logger(__name__)
+
 
 class RTStreamerException(Exception):
     pass
