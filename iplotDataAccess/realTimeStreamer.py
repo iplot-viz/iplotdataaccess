@@ -8,11 +8,21 @@ import iplotLogging.setupLogger as ls
 logger = ls.get_logger(__name__)
 try:
 	import requests
-	import sseclient
-	import getpass
-except ModuleNotFoundError:
-	logger.warning("import'requests/sseclient' is not installed")
 
+except ModuleNotFoundError:
+	logger.warning("import'requests' is not installed")
+
+try:
+	import sseclient
+
+except ModuleNotFoundError:
+	logger.warning("import'sseclient' is not installed")
+
+try:
+	import sseclient
+
+except ModuleNotFoundError:
+	logger.warning("import getpass is not installed")
 
 
 
