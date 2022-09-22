@@ -82,7 +82,7 @@ class TestUDAAccess(unittest.TestCase):
             print("vname=%s timestamp %lu and val=%f", varname[0], dobj.xdata[0], dobj.ydata[0])
 
             cnt = cnt + 1
-            if cnt > 10 or errcnt > 10:
+            if cnt > 10 or errcnt > 20:
                 break
         print("end of loop")
         self.da.stopSubscription(ds)
