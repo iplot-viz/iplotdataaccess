@@ -51,9 +51,9 @@ class TestUDAAccess(unittest.TestCase):
 
         ds = "codacuda"
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
-        x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
+        #x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
 
-        x.start()
+        #x.start()
         ts = time.time_ns()
         cnt = 0
         errcnt = 0
@@ -85,8 +85,8 @@ class TestUDAAccess(unittest.TestCase):
             if cnt > 10 or errcnt > 20:
                 break
         print("end of loop")
-        self.da.stopSubscription(ds)
-        x.join()
+        #self.da.stopSubscription(ds)
+        #x.join()
 
         self.assertEqual(cnt, 11)
 
