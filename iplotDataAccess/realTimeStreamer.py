@@ -12,15 +12,15 @@ try:
 except ModuleNotFoundError:
 	logger.warning("import'requests' is not installed")
 
+
 try:
 	import sseclient
-
+	print("sseclient is installed")
 except ModuleNotFoundError:
 	logger.warning("import'sseclient' is not installed")
 
 try:
 	import getpass
-
 except ModuleNotFoundError:
 	logger.warning("import getpass is not installed")
 

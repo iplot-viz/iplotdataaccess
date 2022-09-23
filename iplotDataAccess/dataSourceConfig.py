@@ -24,4 +24,10 @@ class dataSourceConfig:
             self.supportedDataSources.append("IMAS_UDA")
         except ModuleNotFoundError:
             logger.error("module 'imas' is not installed")
+        try:
+            import sseclient
+            logger.info("module sseclient is installed")
+        except ModuleNotFoundError:
+            logger.error("module 'sseclient' is not installed")
+
         return self.supportedDataSources
