@@ -51,9 +51,9 @@ class TestUDAAccess(unittest.TestCase):
 
         ds = "codacuda"
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
-        #x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
+        x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
 
-        #x.start()
+        x.start()
         ts = time.time_ns()
         cnt = 0
         errcnt = 0
@@ -61,6 +61,8 @@ class TestUDAAccess(unittest.TestCase):
         time.sleep(5)
         while True:
             time.sleep(2)
+            if cnt > 5 or errcnt > 10:
+                break
             dobj = self.da.getNextData(ds, varname[0])
             if len(dobj.xdata) == 0:
                 time.sleep(0.1)
@@ -69,7 +71,11 @@ class TestUDAAccess(unittest.TestCase):
                 continue
             # we discard first point if too old
             if dobj.xdata[0] < ts:
+
+                print("found timestamp less than current timestamp %lu", dobj.xdata[0])
                 if len(dobj.xdata) == 1:
+                    errcnt = errcnt + 1
+                    print("dobj is one")
                     continue
                 else:
                     if cnt == 0:
@@ -82,13 +88,12 @@ class TestUDAAccess(unittest.TestCase):
             print("vname=%s timestamp %lu and val=%f", varname[0], dobj.xdata[0], dobj.ydata[0])
 
             cnt = cnt + 1
-            if cnt > 10 or errcnt > 20:
-                break
-        print("end of loop")
-        #self.da.stopSubscription(ds)
-        #x.join()
 
-        self.assertEqual(cnt, 11)
+        print("end of loop")
+        self.da.stopSubscription(ds)
+        x.join()
+
+        self.assertEqual(cnt, 6)
 
 
 if __name__ == "__main__":
