@@ -10,6 +10,12 @@ import os
 # from iplotDataAccess import udaAccess as ua
 import iplotLogging.setupLogger as ls
 
+try:
+	import sseclient
+
+except ModuleNotFoundError:
+	print("import'sseclient' is not installed")
+
 # from iplotDataAccess import realTimeStreamer as rtA
 from iplotDataAccess.dataAccess import DataAccess
 
