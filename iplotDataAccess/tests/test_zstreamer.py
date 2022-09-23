@@ -12,7 +12,6 @@ import iplotLogging.setupLogger as ls
 
 try:
 	import sseclient
-
 except ModuleNotFoundError:
 	print("import'sseclient' is not installed")
 
@@ -54,7 +53,7 @@ class TestUDAAccess(unittest.TestCase):
 
 
     def test_Streamer(self) -> None:
-
+        loopCnt=0
         ds = "codacuda"
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
         x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
@@ -64,7 +63,8 @@ class TestUDAAccess(unittest.TestCase):
         errcnt = 0
         firstT = 0
         time.sleep(5)
-        while True:
+        while loopCnt < 50:
+            loopCnt = loopCnt+1
             time.sleep(2)
             if cnt > 5 or errcnt > 10:
                 break
