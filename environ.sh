@@ -31,7 +31,7 @@ echo "Toolchain: $toolchain"
 try module purge
 
 # Other IDV components
-try module load iplotLogging/0.2.1-GCCcore-10.2.0
+try module load iplotLogging/0.2.2-GCCcore-10.2.0
 
 # Testing/Coverage requirements
 try module load coverage/5.5-GCCcore-10.2.0
@@ -39,19 +39,15 @@ try module load coverage/5.5-GCCcore-10.2.0
 case $toolchain in
 
   "foss")
-      try module load IMAS/3.36.0-4.10.2-foss-2020b
-      try module unload -f Boost
-      try module load UDA-CCS/6.3-foss-2020b
+      try module load IMAS/3.37.0-4.11.0-foss-2020b
+      try module load m-uda-client/7.0-foss-2020b
     ;;
   "intel")
       try module load IMAS
-      try module unload -f Boost
-      try module load UDA-CCS/6.3-intel-2020b
-      try module load numpy/1.21.0-intel-2020b # Fixes problem with Intel plan
+      try module load m-uda-client/7.0-intel-2020b
     ;;
    *)
     echo "Unknown toolchain $toolchain"
     ;;
 esac
-try pip install sseclient-py
 try module list -t 2>&1

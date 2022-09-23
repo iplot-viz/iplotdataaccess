@@ -13,6 +13,11 @@ fi
 
 try mkdir ${PREFIX_DIR}
 
+# Install prerequisities
+try python3 -m pip --disable-pip-version-check install --no-deps cachetools --prefix=${PREFIX_DIR}
+try python3 -m pip --disable-pip-version-check install --no-deps requests --prefix=${PREFIX_DIR}
+try python3 -m pip --disable-pip-version-check install --no-deps sseclient-py --prefix=${PREFIX_DIR}
+
 # Test install command
 try python3 -m pip --disable-pip-version-check install --no-deps . --prefix=${PREFIX_DIR}
 
