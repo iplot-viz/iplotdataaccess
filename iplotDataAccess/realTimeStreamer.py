@@ -209,6 +209,7 @@ class RTStreamer:
 		for event in self.client.events():
 			logger.debug("found new data %s",event.data)
 			if self.__status == "STOPPING":
+				logger.info("receiving stop request")
 				break
 			self.__parseData(event.data, i,params=paramsT)
 			if i < 1000:
@@ -263,6 +264,7 @@ class RTStreamer:
 
 
 	def stopSubscription(self):
+		cnt=0
 		logger.warning("receving stop subscription")
 		if self.__status == "STARTED":
 			self.__status = "STOPPING"
@@ -271,9 +273,13 @@ class RTStreamer:
 			if self.__status != "STOPPING":
 				logger.warning("subscriber is being stopped or not started %s ", self.__status)
 				return
-		while self.__status != "STOPPED":
+		while self.__status != "STOPPED" or cnt<20:
 			time.sleep(0.1)
+			cnt=cnt+1
 
+		if self.__status != "STOPPED" :
+			self.client.close()
+			self.response.close()
 		logger.warning("subscriber is  stopped %s ", self.__status)
 
 

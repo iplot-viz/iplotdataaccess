@@ -14,10 +14,6 @@ import smtplib
 # from iplotDataAccess import udaAccess as ua
 import iplotLogging.setupLogger as ls
 
-try:
-	import sseclient
-except ModuleNotFoundError:
-	print("import'sseclient' is not installed")
 
 # from iplotDataAccess import realTimeStreamer as rtA
 from iplotDataAccess.dataAccess import DataAccess
@@ -34,6 +30,7 @@ logger = ls.get_logger(__name__)
 class TestRTAccess(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
+        print(os.environ.get('PYTHONPATH'))
         pintel = os.environ.get('PWD') + "/iplotDataAccess_intel/lib/python3.8/site-packages"
         pfoss = os.environ.get('PWD') + "/iplotDataAccess_foss/lib/python3.8/site-packages"
         if os.path.exists(pintel):
@@ -69,7 +66,7 @@ class TestRTAccess(unittest.TestCase):
         ds = "codacuda"
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
         f.write("before thread dcreation")
-        f.flush()
+
         x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
         f.write("before starting the thread")
         x.start()
@@ -78,9 +75,9 @@ class TestRTAccess(unittest.TestCase):
         errcnt = 0
         firstT = 0
         f.write("before sleep")
-        f.flush()
+
         time.sleep(5)
-        while loopCnt < 25 or cnt > 5:
+        while loopCnt < 25:
             loopCnt = loopCnt+1
             dobj = self.da.getNextData(ds, varname[0])
             if len(dobj.xdata) == 0:
@@ -100,7 +97,7 @@ class TestRTAccess(unittest.TestCase):
         logger.info("end of loop")
         f.write("end of loop")
         f.write("\n")
-        f.flush()
+
         self.da.stopSubscription(ds)
         f.write("call to stop subscription")
         f.write("\n")
