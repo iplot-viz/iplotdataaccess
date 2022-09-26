@@ -26,7 +26,7 @@ then
     toolchain=intel
 fi
 echo "Toolchain: $toolchain"
-
+try pip uninstall sseclient-py
 # Clean slate
 try module purge
 

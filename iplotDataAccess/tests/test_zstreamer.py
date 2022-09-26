@@ -31,7 +31,7 @@ rtauth=None
 """
 
 logger = ls.get_logger(__name__)
-class TestUDAAccess(unittest.TestCase):
+class TestRTAccess(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.da = DataAccess()
@@ -62,6 +62,7 @@ class TestUDAAccess(unittest.TestCase):
         ds = "codacuda"
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
         f.write("before thread dcreation")
+        f.flush()
         x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
         f.write("before starting the thread")
         x.start()
@@ -70,12 +71,13 @@ class TestUDAAccess(unittest.TestCase):
         errcnt = 0
         firstT = 0
         f.write("before sleep")
+        f.flush()
         time.sleep(5)
         while loopCnt < 25 or cnt > 5:
             loopCnt = loopCnt+1
             dobj = self.da.getNextData(ds, varname[0])
             if len(dobj.xdata) == 0:
-                time.sleep(0.1)
+                #time.sleep(0.1)
                 errcnt = errcnt + 1
                 # print("data is null")
                 f.write("data is null ")
@@ -91,6 +93,7 @@ class TestUDAAccess(unittest.TestCase):
         logger.info("end of loop")
         f.write("end of loop")
         f.write("\n")
+        f.flush()
         self.da.stopSubscription(ds)
         f.write("call to stop subscription")
         f.write("\n")
