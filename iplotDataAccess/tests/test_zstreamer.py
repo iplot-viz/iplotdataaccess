@@ -71,9 +71,9 @@ class TestUDAAccess(unittest.TestCase):
         firstT = 0
         f.write("before sleep")
         time.sleep(5)
-        #while loopCnt < 50:
-        #    loopCnt = loopCnt+1
-        #    time.sleep(2)
+        while loopCnt < 20:
+            loopCnt = loopCnt+1
+        #   time.sleep(2)
         logger.info("end of loop")
         f.write("end of loop")
         f.write("\n")
