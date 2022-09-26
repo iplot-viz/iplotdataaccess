@@ -7,8 +7,10 @@
 
 # Unzip artifact
 tar -xvzf ${PREFIX_DIR}.tar.gz ./${PREFIX_DIR}
+ABSP=$(get_abs_filename "./${PREFIX_DIR}")
+export PYTHONPATH=${PYTHONPATH}:${ABSP}/lib/python3.8/site-packages
 
-export PYTHONPATH=${PYTHONPATH}:$(get_abs_filename "./${PREFIX_DIR}")
+#export PYTHONPATH=${PYTHONPATH}:$(get_abs_filename "./${PREFIX_DIR}")
 # run tests
 coverage run --source=iplotDataAccess -m pytest iplotDataAccess
 
