@@ -194,7 +194,7 @@ class RTStreamer:
 
 		#response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
 		try:
-			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=10)
+			self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
 		except ConnectionError as ce:
 			logger.error("got connection error %s with errcode = %d ", ce, self.response.status_code)
 			self.__status = "ERROR"
@@ -206,14 +206,18 @@ class RTStreamer:
 		self.client = sseclient.SSEClient(self.response)
 		i = 0
 		self.__status = "STARTED"
-		for event in self.client.events():
-			logger.debug("found new data %s",event.data)
-			if self.__status == "STOPPING":
-				logger.info("receiving stop request")
-				break
-			self.__parseData(event.data, i,params=paramsT)
-			if i < 1000:
-				i = i + 1
+		try:
+			for event in self.client.events():
+				logger.debug("found new data %s",event.data)
+				if self.__status == "STOPPING":
+					logger.info("receiving stop request")
+					break
+				self.__parseData(event.data, i,params=paramsT)
+				if i < 1000:
+					i = i + 1
+		except ConnectionError as ce:
+			self.__status = "ERROR"
+			raise RTStreamerException(" connection lost - see log for more details")
 		self.client.close()
 		self.response.close()
 		if self.vardata is not None:
