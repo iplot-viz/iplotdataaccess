@@ -50,8 +50,4 @@ case $toolchain in
     echo "Unknown toolchain $toolchain"
     ;;
 esac
-<<<<<<< HEAD
-try pip install sseclient-py
-=======
->>>>>>> d0cbd3e8d8b8551c212740bec59389e55392078e
 try module list -t 2>&1
