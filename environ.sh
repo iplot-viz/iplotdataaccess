@@ -34,7 +34,6 @@ try module load iplotLogging/0.2.2-GCCcore-10.2.0
 
 # Testing/Coverage requirements
 try module load coverage/5.5-GCCcore-10.2.0
-try pip uninstall sseclient-py --yes
 case $toolchain in
 
   "foss")
