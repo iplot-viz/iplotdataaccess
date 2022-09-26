@@ -61,12 +61,15 @@ class TestUDAAccess(unittest.TestCase):
         loopCnt=0
         ds = "codacuda"
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
+        f.write("before thread dcreation")
         x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
+        f.write("before starting the thread")
         x.start()
         ts = time.time_ns()
         cnt = 0
         errcnt = 0
         firstT = 0
+        f.write("before sleep")
         time.sleep(5)
         #while loopCnt < 50:
         #    loopCnt = loopCnt+1
