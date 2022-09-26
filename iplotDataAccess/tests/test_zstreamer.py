@@ -71,8 +71,22 @@ class TestUDAAccess(unittest.TestCase):
         firstT = 0
         f.write("before sleep")
         time.sleep(5)
-        while loopCnt < 20:
+        while loopCnt < 20 or cnt > 5:
             loopCnt = loopCnt+1
+            dobj = self.da.getNextData(ds, varname[0])
+            if len(dobj.xdata) == 0:
+                time.sleep(0.1)
+                errcnt = errcnt + 1
+                # print("data is null")
+                f.write("data is null ")
+                f.write("\n")
+
+                # we discard first point if too old
+            else:
+                logger.info("vname=%s timestamp %lu and val=%f", varname[0], dobj.xdata[0], dobj.ydata[0])
+                f.write("end of block")
+                f.write("\n")
+                cnt = cnt + 1
         #   time.sleep(2)
         logger.info("end of loop")
         f.write("end of loop")
@@ -83,7 +97,7 @@ class TestUDAAccess(unittest.TestCase):
         f.close()
         x.join(5)
 
-        self.assertEqual(cnt, 6)
+        self.assertEqual(cnt, 5)
 
 
 if __name__ == "__main__":
