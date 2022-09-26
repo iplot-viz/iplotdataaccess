@@ -48,4 +48,4 @@ case $toolchain in
     echo "Unknown toolchain $toolchain"
     ;;
 esac
-try module list -t 2>&1
+try module list -t 2>&1 |grep sseclient
