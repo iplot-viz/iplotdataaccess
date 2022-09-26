@@ -71,23 +71,6 @@ class TestUDAAccess(unittest.TestCase):
         while loopCnt < 50:
             loopCnt = loopCnt+1
             time.sleep(2)
-            if cnt > 5 or errcnt > 10:
-                break
-            dobj = self.da.getNextData(ds, varname[0])
-            if len(dobj.xdata) == 0:
-                time.sleep(0.1)
-                errcnt = errcnt + 1
-                #print("data is null")
-                f.write("data is null ")
-                f.write("\n")
-
-                # we discard first point if too old
-            else:
-                logger.info("vname=%s timestamp %lu and val=%f", varname[0], dobj.xdata[0], dobj.ydata[0])
-                f.write("end of block")
-                f.write("\n")
-                cnt = cnt + 1
-
         logger.info("end of loop")
         f.write("end of loop")
         f.write("\n")
@@ -112,12 +95,12 @@ if __name__ == "__main__":
     msg.attach(MIMEText(body, 'plain'))
     unittest.main()
     os.remove("/tmp/mydataconf.cfg")
-    with open("/tmp/mylog", "rb") as fil:
-        part = MIMEApplication(fil.read(), Name=os.path.basename(resultFile))
+    #with open("/tmp/mylog", "rb") as fil:
+    #    part = MIMEApplication(fil.read(), Name=os.path.basename(resultFile))
 
-    part['Content-Disposition'] = 'attachment; filename="%s"' % os.path.basename(resultFile)
-    msg.attach(part)
-    server = smtplib.SMTP(mailServer, 25)
-    text = msg.as_string()
-    server.sendmail(fromaddr, toaddr, text)
-    server.quit()
+    #part['Content-Disposition'] = 'attachment; filename="%s"' % os.path.basename(resultFile)
+    #msg.attach(part)
+    #server = smtplib.SMTP(mailServer, 25)
+    #text = msg.as_string()
+    #server.sendmail(fromaddr, toaddr, text)
+    #server.quit()
