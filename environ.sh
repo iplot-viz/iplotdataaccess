@@ -26,7 +26,6 @@ then
     toolchain=intel
 fi
 echo "Toolchain: $toolchain"
-try pip uninstall sseclient-py
 # Clean slate
 try module purge
 
@@ -35,7 +34,7 @@ try module load iplotLogging/0.2.2-GCCcore-10.2.0
 
 # Testing/Coverage requirements
 try module load coverage/5.5-GCCcore-10.2.0
-
+try pip uninstall sseclient-py
 case $toolchain in
 
   "foss")
