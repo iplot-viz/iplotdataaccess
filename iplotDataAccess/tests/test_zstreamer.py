@@ -77,43 +77,24 @@ class TestUDAAccess(unittest.TestCase):
             if len(dobj.xdata) == 0:
                 time.sleep(0.1)
                 errcnt = errcnt + 1
-                print("data is null")
+                #print("data is null")
                 f.write("data is null ")
                 f.write("\n")
-                continue
-            # we discard first point if too old
-            if dobj.xdata[0] < ts:
-                f.write("found timestamp less current timestamp ")
-                f.write("\n")
-                print("found timestamp less than current timestamp %lu", dobj.xdata[0])
-                if len(dobj.xdata) == 1:
-                    errcnt = errcnt + 1
-                    print("dobj has one element")
-                    f.write("dobj has one element")
-                    f.write("\n")
-                else:
-                    if cnt == 0:
-                        firstT = dobj.xdata[1]
-                        print(" cnt=0 first timestamp %d", firstT)
-                        f.write("cnt=0 first timestamp")
-                        f.write("\n")
-            else:
-                if cnt == 0:
-                    firstT = dobj.xdata[0]
-                    logger.info(" first timestamp %d", firstT)
-                    f.write("cnt=0 first timestamp, but timestamp is ok")
-                    f.write("\n")
-            print("vname=%s timestamp %lu and val=%f", varname[0], dobj.xdata[0], dobj.ydata[0])
-            f.write("end of block")
-            f.write("\n")
-            cnt = cnt + 1
 
-        print("end of loop")
+                # we discard first point if too old
+            else:
+                logger.info("vname=%s timestamp %lu and val=%f", varname[0], dobj.xdata[0], dobj.ydata[0])
+                f.write("end of block")
+                f.write("\n")
+                cnt = cnt + 1
+
+        logger.info("end of loop")
         f.write("end of loop")
         f.write("\n")
         self.da.stopSubscription(ds)
         f.write("call to stop subscription")
         f.write("\n")
+        f.close()
         x.join(5)
 
         self.assertEqual(cnt, 6)
