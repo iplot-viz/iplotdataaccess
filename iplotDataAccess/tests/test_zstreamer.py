@@ -48,7 +48,12 @@ class TestRTAccess(unittest.TestCase):
         ##print(os.environ.get('DATASOURCESCONF'))
         ##with open('/tmp/mydataconf.cfg') as f:
         ##    print( f.readlines())
-        path1 = os.environ.get('PYTHONPATH')+":"+os.environ.get('PWD')+"/iplotDataAccess_intel/lib/python3.8/site-packages"+":"+os.environ.get('PWD')+"/iplotDataAccess_foss/lib/python3.8/site-packages"
+        pintel = os.environ.get('PWD')+"/iplotDataAccess_intel/lib/python3.8/site-packages"
+        pfoss = os.environ.get('PWD')+"/iplotDataAccess_foss/lib/python3.8/site-packages"
+        if os.path.exists(pintel):
+            path1 = os.environ.get('PYTHONPATH')+":"+pintel
+        else:
+            path1 = os.environ.get('PYTHONPATH')+":"+pfoss
         os.environ.update({'PYTHONPATH': path1})
         print(os.environ.get('PYTHONPATH'))
         if len(self.da.loadConfig()) < 1:
