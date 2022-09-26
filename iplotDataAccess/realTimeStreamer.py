@@ -221,7 +221,7 @@ class RTStreamer:
 		self.__status = "STOPPED"
 
 	def __getNextDataI(self,vname):
-		idx=-1
+		idx = -1
 		dobj = None
 		try:
 			#logger.debug(" vname=%s origparm %s  self=%s ", vname,self.origparams,self.origparams1)
@@ -238,6 +238,10 @@ class RTStreamer:
 			dobj = dc.DataObj()
 			dobj.setEmpty("Value error : varname not in the keys")
 			logger.warning("invalid get next data call variable %s not in the list",vname)
+		except IndexError:
+			dobj = dc.DataObj()
+			dobj.setEmpty("Index error : varname not in the keys")
+			logger.warning("invalid get next data call variable %s no data in the list",vname)
 		return dobj
 
 	###expect orig name with expression -> handle the case where we subscribe to the same variable but different expressions are applied to them
