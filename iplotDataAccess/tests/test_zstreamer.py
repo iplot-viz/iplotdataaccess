@@ -96,7 +96,11 @@ class TestUDAAccess(unittest.TestCase):
 
         print("end of loop")
         self.da.stopSubscription(ds)
+<<<<<<< HEAD
         x.join(5)
+=======
+        x.join()
+>>>>>>> d0cbd3e8d8b8551c212740bec59389e55392078e
         self.assertEqual(cnt, 6)
 
 
