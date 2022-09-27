@@ -12,6 +12,7 @@ class IMASDataAccess:
     database='iter'
     user_or_path='public'
     imas_backend=imas.imasdef.MDSPLUS_BACKEND
+    imas_dd_units = imas.dd_units.DataDictionaryUnits()
     __input=None
     pulse         = None
     run          = None
@@ -125,7 +126,7 @@ class IMASDataAccess:
 
         idsp1=re.sub("([\(\[]).*?([\)\]])", "", idsp)
         logger.debug("get unit for  %s", idsp1)
-        return imas.dd_units.DataDictionaryUnits().get_units(idsn, idsp1)
+        return self.imas_dd_units.get_units(idsn, idsp1)
 
     def __getTimeData(self,idsn,idsp):
         try:
