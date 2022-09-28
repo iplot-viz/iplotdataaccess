@@ -12,7 +12,7 @@ export PYTHONPATH=${PYTHONPATH}:${ABSP}/lib/python3.8/site-packages
 
 #export PYTHONPATH=${PYTHONPATH}:$(get_abs_filename "./${PREFIX_DIR}")
 # run tests
-coverage run --source=iplotDataAccess --full-trace -m pytest iplotDataAccess
+coverage run --source=iplotDataAccess -m pytest iplotDataAccess --full-trace
 
 # report
 coverage report -i
