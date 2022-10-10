@@ -1,19 +1,21 @@
 import setuptools
-from iplotDataAccess._version import __version__
+
+# from iplotDataAccess._version import __version__
+import versioneer
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="iplotDataAccess",
-    setup_requires=[
-        "setuptools-git-versioning"
-    ],
-    version_config={
-        "version_callback": __version__,
-        "template": "{tag}",
-        "dirty_template": "{tag}.dev{ccount}.{sha}",
-    },
+    version=versioneer.get_version(),
+    setup_requires=["setuptools-git-versioning"],
+    cmdclass=versioneer.get_cmdclass(),
+    # version_config={
+    #     "version_callback": __version__,
+    #     "template": "{tag}",
+    #     "dirty_template": "{tag}.dev{ccount}.{sha}",
+    # },
     author="Lana Abadie",
     author_email="lana.abadie@iter.org",
     description="Data access for applications using IDSs or CBS",
@@ -35,6 +37,6 @@ setuptools.setup(
         "cachetools >= 4.2.0",
         "iplotLogging >= 0.2.1",
         "requests >= 2.25.1",
-        "sseclient-py >= 1.7"
-    ]
+        "sseclient-py >= 1.7",
+    ],
 )
