@@ -149,8 +149,12 @@ class RTStreamer:
 		xunit = "ns"
 		yunit = ""
 		drank = 1
-
-		ytype = self.__convertType(line[ProtoHeader.VAL_DT.value])
+		ytype=""
+		try:
+			ytype = self.__convertType(line[ProtoHeader.VAL_DT.value])
+		except IndexError as ie:
+			logger.warning("index error for line %s",line)
+			return
 		if ytype == dc.DataType.DA_TYPE_STRING:
 			logger.warning("string not currently supported for streaming, skipping")
 			return
@@ -209,10 +213,11 @@ class RTStreamer:
 		try:
 			for event in self.client.events():
 				logger.debug("found new data %s",event.data)
+				self.__parseData(event.data, i, params=paramsT)
 				if self.__status == "STOPPING":
 					logger.info("receiving stop request")
 					break
-				self.__parseData(event.data, i,params=paramsT)
+
 				if i < 1000:
 					i = i + 1
 		except ConnectionError as ce:
@@ -277,7 +282,7 @@ class RTStreamer:
 			if self.__status != "STOPPING":
 				logger.warning("subscriber is being stopped or not started %s ", self.__status)
 				return
-		while self.__status != "STOPPED" or cnt<20:
+		while self.__status != "STOPPED" and cnt<20:
 			time.sleep(0.1)
 			cnt=cnt+1
 
