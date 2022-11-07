@@ -1,5 +1,6 @@
 # Fixed requirements for CODAC Core System
 cachetools>=4.2.0
-iplotLogging >= 0.2.1
+iplotLogging >= 0.2*
 requests >= 2.25.1
 sseclient-py>=1.7
+
