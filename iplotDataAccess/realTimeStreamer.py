@@ -142,6 +142,8 @@ class RTStreamer:
 		if data.startswith("heartbeat"):
 			return
 		line = data.split(" ")
+		if len(line) == 1:  # If data is only one token, it is only time
+			return
 
 		xtype = dc.DataType.DA_TYPE_ULONG
 		xlabel = "Time"
@@ -166,7 +168,7 @@ class RTStreamer:
 		if len(val)<int(line[ProtoHeader.NB_SMP.value])+1 :
             		logger.warning("sline mixing event and data skipping %s",val)
             		return
-		xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
+		xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]), dtype='uint64') 
 		ydata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
 		d = dc.DataObj()
 		yunit=self.__units.get(line[ProtoHeader.VARNAME.value])
