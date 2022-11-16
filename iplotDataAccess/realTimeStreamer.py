@@ -124,6 +124,7 @@ class RTStreamer:
 				logger.debug("adding data to queue for vname=%s", sname)
 				self.vardata[sname].append(data)
 			else:
+				logger.debug(f'create queue for vname={sname}')
 				if vtype.startswith(VarType.pon.value):
 					self.vardata[sname] = deque([data], self.maxsizeP)
 				else:
@@ -209,10 +210,10 @@ class RTStreamer:
 		try:
 			for event in self.client.events():
 				logger.debug(f'found new data {event.data}')
-				self.__parseData(event.data, params=paramsT)
 				if self.__status == "STOPPING":
 					logger.info("receiving stop request")
 					break
+				self.__parseData(event.data, params=paramsT)
 		except ConnectionError as ce:
 			self.__status = "ERROR"
 			raise RTStreamerException(" connection lost - see log for more details")
@@ -267,21 +268,9 @@ class RTStreamer:
 
 
 	def stopSubscription(self):
-		cnt=0
-		logger.warning("receving stop subscription")
+		logger.debug("receving stop subscription")
 		if self.__status == "STARTED":
 			self.__status = "STOPPING"
-			logger.warning(" stopping subscription %s",self.__status)
-		else:
-			if self.__status != "STOPPING":
-				logger.warning("subscriber is being stopped or not started %s ", self.__status)
-				return
-		while self.__status != "STOPPED" and cnt<20:
-			time.sleep(0.1)
-			cnt=cnt+1
-
-		if self.__status != "STOPPED" :
-			self.client.close()
-			self.response.close()
-		logger.warning("subscriber is  stopped %s ", self.__status)
-
+			logger.debug('stopping subscription')
+		elif self.__status != "STOPPING":
+			logger.warning(f'ignored stopping subscription because of status of {self.__status}')

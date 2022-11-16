@@ -148,10 +148,14 @@ class DataSource:
         return self.rtStatus
 
     def startSubscription(self, **kwargs):
-        if self.rtStatus == "STARTED":  # Time to update real status
-            time.sleep(2)
+        for _ in range(20):  # Time to update real status if it is STARTED
+            if self.rtStatus != "STARTED":
+                break
+            time.sleep(0.1)
         if self.rtStatus in ["STARTED", "STOPPED"]:
-            while self.rtStatus != self.RTHandler.getStatus():  # Wait for real status
+            for _ in range(60):  # Wait for real status
+                if self.rtStatus == self.RTHandler.getStatus():
+                    break
                 logger.debug('Waiting status sync for RTHandler')
                 time.sleep(1)
         if self.rtStatus in ["INITIALISED", "STOPPED"]:
