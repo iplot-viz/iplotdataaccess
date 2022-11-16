@@ -117,27 +117,20 @@ class RTStreamer:
 		return vKeysIdx
 
 	def __createQueues(self,vkeys,vtype,data,params=[]):
-		logger.debug("create XXX queue for vkeys=%s", vkeys)
-		for i in range(len(vkeys)):
-			sname=params[vkeys[i]]+'@'+str(vkeys[i])
+		logger.debug(f'create queues for vkeys={vkeys}')
+		for vk in vkeys:
+			sname = params[vk] + '@' + str(vk)
 			if self.vardata.get(sname) is not None:
 				logger.debug("adding data to queue for vname=%s", sname)
 				self.vardata[sname].append(data)
 			else:
-				logger.debug("create queue for vname=%s", sname)
 				if vtype.startswith(VarType.pon.value):
-
 					self.vardata[sname] = deque([data], self.maxsizeP)
 				else:
 					self.vardata[sname] = deque([data], self.maxsize)
 
-	def __appendData(self,vkeys,d,params=[]):
-		for i in range(len(vkeys)):
-			sname=params[i]+'@'+str(i)
-			self.vardata[sname].append(d)
 
-
-	def __parseData(self, data,counter,params=[]):
+	def __parseData(self, data, params=[]):
 		q = None
 		if data.startswith("heartbeat"):
 			return
@@ -183,8 +176,10 @@ class RTStreamer:
 		vkeys = self.__checkIfduplicate(line[ProtoHeader.VARNAME.value], params=params)
 		self.__createQueues(vkeys,line[ProtoHeader.VAL_DT.value],d,params=params)
 
+
 	def getStatus(self):
 		return self.__status
+
 
 	def startSubscription(self, params=[],origparams=[]):
 		if self.__status == "STARTED":
@@ -206,17 +201,14 @@ class RTStreamer:
 		paramsT = params
 		logger.debug(" origparm %s  param=%s ", self.origparams,self.params)
 		self.client = sseclient.SSEClient(self.response)
-		i = 0
 		self.__status = "STARTED"
 		try:
 			for event in self.client.events():
-				logger.debug("found new data %s",event.data)
+				logger.debug(f'found new data {event.data}')
 				if self.__status == "STOPPING":
 					logger.info("receiving stop request")
 					break
-				self.__parseData(event.data, i,params=paramsT)
-				if i < 1000:
-					i = i + 1
+				self.__parseData(event.data, params=paramsT)
 		except ConnectionError as ce:
 			self.__status = "ERROR"
 			raise RTStreamerException(" connection lost - see log for more details")
@@ -230,6 +222,7 @@ class RTStreamer:
 	def __getNextDataI(self,vname):
 		idx = -1
 		dobj = None
+
 		try:
 			#logger.debug(" vname=%s origparm %s  self=%s ", vname,self.origparams,self.origparams1)
 
@@ -244,11 +237,12 @@ class RTStreamer:
 		except ValueError:
 			dobj = dc.DataObj()
 			dobj.setEmpty("Value error : varname not in the keys")
-			logger.warning("invalid get next data call variable %s not in the list",vname)
+			# logger.debug("invalid get next data call variable %s not in the list",vname)
 		except IndexError:
 			dobj = dc.DataObj()
 			dobj.setEmpty("Index error : varname not in the keys")
-			logger.warning("invalid get next data call variable %s no data in the list",vname)
+			# logger.debug("invalid get next data call variable %s no data in the list",vname)
+
 		return dobj
 
 	###expect orig name with expression -> handle the case where we subscribe to the same variable but different expressions are applied to them
@@ -259,13 +253,12 @@ class RTStreamer:
 			dobj.setEmpty("Varname is empty")
 			return dobj
 
-		try:
-			dobj = self.__getNextDataI(vname)
-			logger.debug("vname=%s timestamp %d and val=%f", vname,dobj.xdata[0], dobj.ydata[0])
-		except IndexError:
+		dobj = self.__getNextDataI(vname)
+		if len(dobj.xdata) == 0:
 			dobj = dc.DataObj()
 			dobj.setEmpty("No data found")
-		#logger.debug("object err = %s ",dobj.errdesc)
+		else:
+			logger.debug(f'vname={vname} timestamp {dobj.xdata} and val={dobj.ydata}')
 		return dobj
 
 
@@ -287,6 +280,4 @@ class RTStreamer:
 			self.client.close()
 			self.response.close()
 		logger.warning("subscriber is  stopped %s ", self.__status)
-
-
 

@@ -148,7 +148,13 @@ class DataSource:
         return self.rtStatus
 
     def startSubscription(self, **kwargs):
-        if self.rtStatus == "INITIALISED" or self.rtStatus == "STOPPED":
+        if self.rtStatus == "STARTED":  # Time to update real status
+            time.sleep(2)
+        if self.rtStatus in ["STARTED", "STOPPED"]:
+            while self.rtStatus != self.RTHandler.getStatus():  # Wait for real status
+                logger.debug('Waiting status sync for RTHandler')
+                time.sleep(1)
+        if self.rtStatus in ["INITIALISED", "STOPPED"]:
             try:
                 self.rtStatus = "STARTED"
                 logger.debug("startSubscription ")
@@ -168,7 +174,7 @@ class DataSource:
             try:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stopSubscription()
-                self.rtStatus == "STOPPED"
+                self.rtStatus = "STOPPED"
             except iplotDataAccess.realTimeStreamer.RTStreamerException as rtse:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
