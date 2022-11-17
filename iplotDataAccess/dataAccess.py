@@ -163,7 +163,7 @@ class DataSource:
                 time.sleep(1)
             else:
                 logger.warning('Subscription and RT handler have different status')
-                
+
         if self.rtStatus in ["INITIALISED", "STOPPED"]:
             try:
                 self.rtStatus = "STARTED"
@@ -200,16 +200,8 @@ class DataSource:
             dobj.setEmpty("Streamer not properly initialized: did the subscription start?")
             return dobj
 
-        varnames = self.RTHandler.params[self.RTHandler.params.find("=") + 1:-1]
-        varnames = varnames.split(',')
-        if vname in varnames:
-            dobj = self.RTHandler.getNextData(vname)
-            logger.debug("type of data %s and len %d and unit %s ", type(dobj.ydata), len(dobj.ydata), dobj.yunit)
-            return dobj
-        else:
-            return self.RTHandler.getNextData(vname)
+        return self.RTHandler.getNextData(vname)
 
-    
     def __getDataI(self, **kwargs):
         return self.daHandler.getData(**kwargs)
 
