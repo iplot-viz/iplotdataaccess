@@ -148,16 +148,22 @@ class DataSource:
         return self.rtStatus
 
     def startSubscription(self, **kwargs):
-        for _ in range(20):  # Time to update real status if it is STARTED
+        for _ in range(20):  # Time to update real status if it is STARTED (2 s)
             if self.rtStatus != "STARTED":
                 break
             time.sleep(0.1)
+        else:
+            logger.warning('Started subscription with status STARTED')
+
         if self.rtStatus in ["STARTED", "STOPPED"]:
-            for _ in range(60):  # Wait for real status
+            for _ in range(60):  # Wait for real status (60 s)
                 if self.rtStatus == self.RTHandler.getStatus():
                     break
                 logger.debug('Waiting status sync for RTHandler')
                 time.sleep(1)
+            else:
+                logger.warning('Subscription and RT handler have different status')
+                
         if self.rtStatus in ["INITIALISED", "STOPPED"]:
             try:
                 self.rtStatus = "STARTED"
@@ -168,7 +174,7 @@ class DataSource:
                 kwargs["params"] = newparams
                 logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
                 self.RTHandler.startSubscription(**kwargs)
-            except iplotDataAccess.realTimeStreamer.RTStreamerException as rtse:
+            except iplotDataAccess.realTimeStreamer.RTStreamerException:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
