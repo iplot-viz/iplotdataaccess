@@ -45,6 +45,10 @@ class IMASDataAccess:
                 temp = s.split("=")
                 if temp[1]=="MDSPLUS":
                     self.imas_backend = imas.imasdef.MDSPLUS_BACKEND
+                if temp[1]=="MEMORY":
+                    self.imas_backend = imas.imasdef.MEMORY_BACKEND
+                if temp[1]=="HDF5":
+                    self.imas_backend = imas.imasdef.HDF5_BACKEND
             if s.startswith("pulseIdent"):
                 temp = s.split("=")[1]
                 ret = temp.split("/")
@@ -212,10 +216,13 @@ class IMASDataAccess:
             else:
                 dobj.xdata=[]
                 dobj.ydata=[]
-
-
+            
             dobj.errcode=0
-            self.close()
+            # The database is being closed after each signal
+            # Should not close memory backend otherwise database is destroyed
+            if self.imas_backend != imas.imasdef.MEMORY_BACKEND:
+                self.close()
+
         except AttributeError as err:
             logger.debug("Invalid attribute: %s", err)
             dobj.errcode=-1
