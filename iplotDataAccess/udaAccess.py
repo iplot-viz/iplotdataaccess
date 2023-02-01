@@ -269,11 +269,26 @@ class udaAccess:
             return None
         return PulseInfo
     
-    def getPulses(selfself,pattern="ITER:PCS/*"):
+    def getPulses(self, pattern="ITER:PCS/*"):
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            return None
         return pulses_list
+
+    def get_cbs_list(self, sep=':', pattern='*', times='0'):
+        cbs_list = self.UCR.get_cbs_list(sep, pattern, times)
+        if self.UCR.getErrorCode() != 0:
+            logger.error(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            return None
+        return cbs_list
+
+    def get_var_list(self, pattern='.*'):
+        var_list = self.UCR.getVariableList(pattern)
+        if self.UCR.getErrorCode() != 0:
+            print(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            return None
+        return var_list
     
 
             

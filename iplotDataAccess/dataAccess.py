@@ -139,10 +139,7 @@ class DataSource:
                 logger.error(" RTHException %s ", rte)
 
     def isConnected(self):
-        if self.connected:
-            return True
-        else:
-            return False
+        return self.connected
 
     def getRTStatus(self):
         return self.rtStatus
@@ -252,6 +249,12 @@ class DataSource:
             logger.warning("ModuleNotFound_%s", self.dtype)
         return ret
 
+    def get_cbs_list(self, **kwargs):
+        return self.daHandler.get_cbs_list(**kwargs)
+
+    def get_var_list(self, **kwargs):
+        return self.daHandler.get_var_list(**kwargs)
+
 
 ###class to interface with data source - here UDA
 class DataAccess:
@@ -322,6 +325,24 @@ class DataAccess:
 
     def addDataSource(self, proto="", dataS=None):
         self.dslist[dataS.name] = dataS
+
+    def getDataSource(self, dataSName):
+        logger.debug("entering getDataSource  %s", dataSName)
+        if dataSName is None:
+            if self.defaultds is not None:
+                logger.info(" default source used ")
+                return self.defaultds
+            else:
+                logger.error("DataSourceName is None and not default data source name has been defined")
+                return None
+        if dataSName not in self.dslist.keys():
+            logger.warning(" Data source %s not found", dataSName)
+            return None
+        else:
+            ds=self.dslist[dataSName]
+            if ds is None:
+                logger.debug("Invalid data source pointer for ds name  %s", dataSName)
+            return ds
 
     def connect(self, dataSName):
         for ds in self.dslist:
@@ -394,3 +415,20 @@ class DataAccess:
                 return self.defaultds.getEnvelope(**kwargs)
 
         return None
+
+    def get_cbs_list(self, data_source_name, **kwargs):
+        ds = self.getDataSource(data_source_name)
+        if ds is None:
+            return None
+        cbs_list = ds.get_cbs_list(**kwargs)
+        return cbs_list
+
+    def get_var_list(self, data_source_name, **kwargs):
+        ds = self.getDataSource(data_source_name)
+        if ds is None:
+            return None
+        var_list = ds.get_var_list(**kwargs)
+        return var_list
+
+    def get_connected_data_sources(self):
+        return [ds.name for ds in self.dslist.values() if ds.connected]
