@@ -54,7 +54,7 @@ class udaAccess:
     def connectSource(self,connectionString):
         myconn=connectionString.split(",")
         logger.debug("connect source myconn=%s", myconn)
-        self.connect(myconn)
+        return self.connect(myconn)
 
     def connect(self,arglist=[]):
         for s in arglist:
