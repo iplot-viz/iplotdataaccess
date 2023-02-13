@@ -255,6 +255,8 @@ class DataSource:
     def get_var_list(self, **kwargs):
         return self.daHandler.get_var_list(**kwargs)
 
+    def get_var_fields(self, **kwargs):
+        return self.daHandler.get_var_fields(**kwargs)
 
 ###class to interface with data source - here UDA
 class DataAccess:
@@ -429,6 +431,12 @@ class DataAccess:
             return None
         var_list = ds.get_var_list(**kwargs)
         return var_list
+
+    def get_var_fields(self, data_source_name, **kwargs):
+        ds = self.getDataSource(data_source_name)
+        if ds is None:
+            return None
+        return ds.get_var_fields(**kwargs)
 
     def get_connected_data_sources(self):
         return [ds.name for ds in self.dslist.values() if ds.connected]

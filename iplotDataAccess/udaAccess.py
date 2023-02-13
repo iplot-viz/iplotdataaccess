@@ -1,5 +1,6 @@
 
 import iplotDataAccess.dataCommon as dc
+import iplotDataAccess.nestedDatatype as nDT
 
 #import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
@@ -12,6 +13,8 @@ import numpy as np
 import time
 import os
 import math
+import json
+import collections
 
 logger = ls.get_logger(__name__)
 
@@ -279,18 +282,31 @@ class udaAccess:
     def get_cbs_list(self, sep=':', pattern='*', times='0'):
         cbs_list = self.UCR.get_cbs_list(sep, pattern, times)
         if self.UCR.getErrorCode() != 0:
-            logger.error(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return None
         return cbs_list
 
     def get_var_list(self, pattern='.*'):
         var_list = self.UCR.getVariableList(pattern)
         if self.UCR.getErrorCode() != 0:
-            print(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return None
         return var_list
-    
 
+    def get_var_fields(self, variable, timestamp='-1'):
+        uda_type = self.UCR.getMetaTypeJSONCollapsed(variable, str(timestamp))
+        if self.UCR.getErrorCode() != 0:
+            print(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            return None
+
+        if uda_type:
+            js_nested = json.loads(uda_type, object_pairs_hook=collections.OrderedDict)
+            dt = nDT.NestedDatatype()
+            dt.loadUDAJson(js_nested)
+            fdt = dt.flatDatatype()
+            return fdt.fields_to_json()
+
+        return None
             
     def getDataI(self, udaP):
         dobj = dc.DataObj()
