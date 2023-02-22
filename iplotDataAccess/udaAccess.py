@@ -301,9 +301,9 @@ class udaAccess:
 
         if uda_type:
             js_nested = json.loads(uda_type, object_pairs_hook=collections.OrderedDict)
-            dt = nDT.NestedDatatype()
+            dt = nDT.NestedDatatype("")
             dt.loadUDAJson(js_nested)
-            fdt = dt.flatDatatype()
+            fdt = dt.flatDatatype("")
             return fdt.fields_to_json()
 
         return None
