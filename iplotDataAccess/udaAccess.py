@@ -280,7 +280,7 @@ class udaAccess:
         return pulses_list
 
     def get_cbs_list(self, sep=':', pattern='*', times='0'):
-        cbs_list = self.UCR.get_cbs_list(sep, pattern, times)
+        cbs_list = self.UCR.getCbsList(sep, pattern, times)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return None
