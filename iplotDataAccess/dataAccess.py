@@ -261,11 +261,14 @@ class DataSource:
 ###class to interface with data source - here UDA
 class DataAccess:
 
+    DEFAULT_DATA_SOURCES_CFG_FILE: str = 'mydatasources.cfg'
+
     def __init__(self, parent=None):
         d = dsc.dataSourceConfig()
         self.proto = d.getSupportedDataSource()
         self.dslist = {}
         self.defaultds = None
+        self.confFile = None
 
     def getDefaultDSName(self):
         if self.defaultds is None:
@@ -273,9 +276,29 @@ class DataAccess:
         else:
             return self.defaultds.name
 
-    def loadConfig(self):
+    def loadConfig(self,confFile=None):
+        if confFile is None:
+            confFile = os.environ.get('DATASOURCESCONF')
+            if confFile is None:
+                confFile=self.DEFAULT_DATA_SOURCES_CFG_FILE
+        self.confFile=confFile
+        try:
+            if len(self.loadConfigFile(confFile)) < 1 :
+                return False
+            else:
+                return True
+        except (OSError, IOError, FileNotFoundError) as e:
+            if self.confFile == DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE:
+                return False
+            confFile=os.environ.get('DATASOURCESCONF')
+            if (confFile is None) or (confFile == self.confFile) :
+                confFile=DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
+            if self.confFile == confFile:
+                    return False
+            logger.warning(f"no {self.confFile} data source file, fallback to {confFile}")
+            return self.loadConfig(confFile)
 
-        dspath = os.environ.get('DATASOURCESCONF') or "mydatasources.cfg"
+    def loadConfigFile(self,dspath):
         dskeys = []
         dname = ""
         with open(dspath) as f:
