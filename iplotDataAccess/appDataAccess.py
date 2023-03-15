@@ -11,6 +11,10 @@ class AppDataAccess:
     # ---------------
 
     @staticmethod
+    def initialize(configFile=None):
+        return AppDataAccess.loadConfiguration(configFile)
+
+    @staticmethod
     def loadConfiguration(configFile=None):
         if AppDataAccess.da is None:
             AppDataAccess.da = DataAccess()
