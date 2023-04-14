@@ -41,7 +41,7 @@ case $toolchain in
       try module load m-uda-client/7.0.1-foss-2020b
     ;;
   "intel")
-      try module load IMAS/3.38.0-4.11.1-intel-2020b
+      try module load IMAS/3.38.0-4.11.1-intel-2022b
       try module load m-uda-client/7.0.1-intel-2020b
     ;;
    *)
