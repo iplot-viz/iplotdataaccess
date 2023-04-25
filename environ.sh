@@ -49,3 +49,6 @@ case $toolchain in
     ;;
 esac
 try module list -t 2>&1 |grep sseclient
+
+export HOME=$PWD
+echo "HOME was set to $HOME"
