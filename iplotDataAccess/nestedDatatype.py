@@ -1,3 +1,4 @@
+import copy
 import json
 import collections
 import itertools
@@ -48,24 +49,19 @@ class NestedField:
 
 class NestedDatatype:
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, data_types=None):
+        if data_types is None:
+            data_types = dict()
         self.flat_data_types = dict()
-        self.data_types = dict()
+        self.data_types = data_types
         self.fields = []
         self.name = name
 
     def existsField(self, field_name):
-        for f in self.fields:
-            if f.name == field_name:
-                return True
-        return False
+        return any(f.name == field_name for f in self.fields)
 
     def existsDatatype(self, typename):
-        if is_primitive_datatype(typename):
-            return True
-        if typename in self.data_types:
-            return True
-        return False
+        return is_primitive_datatype(typename) or typename in self.data_types
 
     def addNestedField(self, jfield: NestedField):
         if self.existsField(jfield.name):
@@ -93,14 +89,14 @@ class NestedDatatype:
                     mul = [field['multiplicity']]
                     self.addField(field['name'], field['type'], mul, field['unit'], field['description'])
             else:
-                data_type = NestedDatatype(datatype['name'])
+                data_type = NestedDatatype(datatype['name'], self.data_types)
                 for field in datatype['fields']:
                     mul = [field['multiplicity']]
                     data_type.addField(field['name'], field['type'], mul, field['unit'], field['description'])
                 self.addDataType(datatype['name'], data_type)
 
     def flatDatatype(self, name: str):
-        data_type = NestedDatatype(name)
+        data_type = NestedDatatype(name, self.data_types)
         for field in self.fields:
             if is_primitive_datatype(field.typename):
                 data_type.addNestedField(field)
@@ -111,14 +107,16 @@ class NestedDatatype:
                 combs = list(itertools.product(*[range(v) for v in field.dimensionality]))
                 if field.dimensionality == [1]:
                     for ff in ftype.fields:
-                        ff.name = f'{field.name}/{ff.name}'
-                        data_type.addNestedField(ff)
+                        field_copy = copy.copy(ff)
+                        field_copy.name = f'{field.name}/{ff.name}'
+                        data_type.addNestedField(field_copy)
                 else:
                     for comb in combs:
                         s = ",".join(map(str, comb))
                         for ff in ftype.fields:
-                            ff.name = f'{field.name}[{s}]{ff.name}/{ff.name}'
-                            data_type.addNestedField(ff)
+                            field_copy = copy.copy(ff)
+                            field_copy.name = f'{field.name}[{s}]/{ff.name}'
+                            data_type.addNestedField(field_copy)
         return data_type
 
     def fields_to_json(self):
@@ -149,23 +147,8 @@ if __name__ == "__main__":
 
     # --- DAN ---
     # metaJSON = UCR.getMetaTypeJSONCollapsed("CTRL-1", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("GW-OUT", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("PSC", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("SFI-1", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("SFO-1", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("Thread1", "-1")
 
-    # --- SDN ---
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-PFCS-CCR1:CNV_RT_STAT", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-FCS-CCR2:CNV_RT_STAT", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-PFCS-CCR3:CNV_RT_STAT", "-1")
     metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-PFCS-CCR4:CN_RT_STAT", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-PFCS-CCR5:CNV_RT_STAT", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-PFCS-MRC:LOAD_LOSS", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("MAG-TFPS-CCR:CNV_RT_STAT", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("UTIL-RPC-RPC1:QVAL_FBK", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("UTIL-RPC-RPC2:QVAL_FBK", "-1")
-    # metaJSON = UCR.getMetaTypeJSONCollapsed("UTIL-RPC-RPC3:QVAL_FBK", "-1")
 
     if UCR.getErrorCode() != 0:
         print("Response error: {}, {}", UCR.getErrorCode(), UCR.getErrorMsg())
