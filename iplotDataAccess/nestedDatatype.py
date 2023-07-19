@@ -86,9 +86,8 @@ class NestedDatatype:
         for datatype in json_type['datatypes']:
             if datatype['name'] == "main":
                 for field in datatype['fields']:
-                    if field['name'] != 'SDNHeader':
-                        mul = [field['multiplicity']]
-                        self.addField(field['name'], field['type'], mul, field['unit'], field['description'])
+                    mul = [field['multiplicity']]
+                    self.addField(field['name'], field['type'], mul, field['unit'], field['description'])
             else:
                 data_type = NestedDatatype(datatype['name'], self.data_types)
                 for field in datatype['fields']:
@@ -123,6 +122,7 @@ class NestedDatatype:
     def fields_to_json(self):
         out = {}
         for f in self.fields:
+            f.name = f.name.replace('SDNHeader/', '')
             out[f.name] = f.to_json()
         return out
 
