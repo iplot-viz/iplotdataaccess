@@ -1,4 +1,3 @@
-
 import numpy as np
 from enum import Enum
 from collections import deque
@@ -130,57 +129,62 @@ class RTStreamer:
 				else:
 					self.vardata[sname] = deque([data], self.maxsize)
 
-
-	def __parseData(self, data, params=[]):
+	def __parse_data(self, data, params=[]):
 		q = None
 		if data.startswith("heartbeat"):
 			return
 		line = data.split(" ")
 		if len(line) == 1:  # If data is only one token, it is only time
 			return
-
+		num_samples = int(line[ProtoHeader.NB_SMP.value])
 		xtype = dc.DataType.DA_TYPE_ULONG
 		xlabel = "Time"
 		ylabel = ""
 		xunit = "ns"
 		yunit = ""
 		drank = 1
-		ytype=""
+		ytype = ""
 		try:
 			ytype = self.__convertType(line[ProtoHeader.VAL_DT.value])
 		except IndexError as ie:
-			logger.warning("index error for line %s",line)
+			logger.warning("index error for line %s", line)
 			return
 		if ytype == dc.DataType.DA_TYPE_STRING:
 			logger.warning("string not currently supported for streaming, skipping")
 			return
 
-		val = data.split(" V ")
-        	##TODO 
-        	###protect the code in case of event mixing up 
-        	# ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513472231 ', '0.421761 NO_ALARM NO_ALARM']
-        	#['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513480496 ', '0.333320 NO_ALARM NO_ALARM']
-        	#['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513492192 ', '0.000000 NO_ALARM NO_ALARM']
-        	#['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ', '0.000000 NO_ALARM NO_ALARM']
-        	#['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ', '0.000000 NO_ALARM NO_ALARM']
-		if len(val)<int(line[ProtoHeader.NB_SMP.value])+1 :
-            		logger.warning("sline mixing event and data skipping %s",val)
-            		return
-		xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]), dtype='uint64') 
-		ydata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
+		if line[ProtoHeader.VAL_DT.value].startswith("E"):
+			logger.warning(f"Event message for line {line}")
+			return
+		if line[ProtoHeader.VAL_DT.value] in ['PD', 'PS']:
+			val = data.split(" V ")
+		else:
+			val = data.split()
+			val = [" ".join(val[:4])] + [" ".join(val[i:i + 2]) for i in range(4, len(val), 2)]
+		##TODO
+		###protect the code in case of event mixing up
+		# ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513472231 ', '0.421761 NO_ALARM NO_ALARM']
+		# ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513480496 ', '0.333320 NO_ALARM NO_ALARM']
+		# ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513492192 ', '0.000000 NO_ALARM NO_ALARM']
+		# ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ', '0.000000 NO_ALARM NO_ALARM']
+		# ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ', '0.000000 NO_ALARM NO_ALARM']
+		if len(val) < num_samples + 1:
+			logger.warning("sline mixing event and data skipping %s", val)
+			return
+		xdata = np.zeros(num_samples, dtype='uint64')
+		ydata = np.zeros(num_samples)
 		d = dc.DataObj()
-		yunit=self.__units.get(line[ProtoHeader.VARNAME.value])
+		yunit = self.__units.get(line[ProtoHeader.VARNAME.value])
 		d.setA(xtype, ytype, xlabel, ylabel, xunit, yunit, drank)
-		for i in range(int(line[ProtoHeader.NB_SMP.value])):
-			xdata[i] = int(line[ProtoHeader.NB_SMP.value+i+1])*1000000
-			ydata[i] = float(val[i+1].split(" ")[0])
+		for i in range(num_samples):
+			xdata[i] = int(line[ProtoHeader.NB_SMP.value + i + 1]) * 1000000
+			ydata[i] = float(val[i + 1].split(" ")[0])
 
 		d.setData(xdata, 1)
 		d.setData(ydata, 2)
 		##logger.debug("before calling check duplocate")
 		vkeys = self.__checkIfduplicate(line[ProtoHeader.VARNAME.value], params=params)
-		self.__createQueues(vkeys,line[ProtoHeader.VAL_DT.value],d,params=params)
-
+		self.__createQueues(vkeys, line[ProtoHeader.VAL_DT.value], d, params=params)
 
 	def getStatus(self):
 		return self.__status
