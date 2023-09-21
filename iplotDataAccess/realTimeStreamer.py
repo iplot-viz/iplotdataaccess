@@ -129,7 +129,7 @@ class RTStreamer:
 				else:
 					self.vardata[sname] = deque([data], self.maxsize)
 
-	def __parse_data(self, data, params=[]):
+	def __parseData(self, data, params=[]):
 		q = None
 		if data.startswith("heartbeat"):
 			return
