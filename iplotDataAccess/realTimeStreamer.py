@@ -158,6 +158,9 @@ class RTStreamer:
 			return
 		if line[ProtoHeader.VAL_DT.value] in ['PD', 'PS']:
 			val = data.split(" V ")
+		elif line[ProtoHeader.VAL_DT.value] == "ED":
+			val = data.split()
+			val = [" ".join(val[:4])] + [" ".join(val[i:i + 4]) for i in range(4, len(val), 4)]
 		else:
 			val = data.split()
 			val = [" ".join(val[:4])] + [" ".join(val[i:i + 2]) for i in range(4, len(val), 2)]
