@@ -1,4 +1,0 @@
-graft iplotDataAccess
-recursive-exclude * *.py[co]
-include versioneer.py
-include iplotDataAccess/_version.py
