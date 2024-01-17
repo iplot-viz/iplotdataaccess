@@ -144,6 +144,8 @@ class DataSource:
     def getRTStatus(self):
         return self.rtStatus
 
+
+
     def startSubscription(self, **kwargs):
         for _ in range(20):  # Time to update real status if it is STARTED (2 s)
             if self.rtStatus != "STARTED":
@@ -201,7 +203,8 @@ class DataSource:
 
     def __getDataI(self, **kwargs):
         return self.daHandler.getData(**kwargs)
-
+    def clearCache(self):
+        return self.daHandler.clearCache()
     def getData(self, **kwargs):
         dobj = None
         logger.debug("getdata of data source and type %s", self.dtype)

@@ -34,7 +34,7 @@ class TestUDAAccess(unittest.TestCase):
         ##    print( f.readlines())
 
         print(os.environ.get('PYTHONPATH'))
-        if len(self.da.loadConfig()) < 1:
+        if self.da.loadConfig() == False:
             print("Invalid data source")
             return None
 
@@ -71,13 +71,13 @@ class TestUDAAccess(unittest.TestCase):
     def test_UDAAccessByPulse(self)-> None:
         dobj=self.da.getData(self.ds,varname="UTIL-HV-M1:TS2000-QT01",pulse="ITER:CWS-SCSU-BASIN-FILL-TESTS/130124",nbp=-1,tsFormat="relative")
         self.assertEqual(len(dobj.xdata),8)
-        self.assertEqual(dobj.xunit, "seconds")
+        self.assertEqual(dobj.xunit, "s")
 
     def test_UDAAccessByPulseWithTime(self)-> None:
         dobj=self.da.getData(self.ds,varname="UTIL-HV-M1:TS2000-QT01",pulse="ITER:CWS-SCSU-BASIN-FILL-TESTS/130124",tsS="172800",tsE="432000",nbp=-1,tsFormat="relative")
         self.assertEqual(len(dobj.xdata),1)
 
-        self.assertEqual(dobj.xunit, "seconds")
+        self.assertEqual(dobj.xunit, "s")
 
 
 if __name__ == "__main__":

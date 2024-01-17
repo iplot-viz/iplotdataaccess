@@ -1,6 +1,8 @@
+import operator
 
 import iplotDataAccess.dataCommon as dc
 import iplotDataAccess.nestedDatatype as nDT
+from cachetools import cachedmethod
 
 #import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
@@ -9,14 +11,15 @@ import dateutil.parser as dp
 from datetime import timezone
 
 import numpy as np
-
 import time
 import os
 import math
 import json
 import collections
+import cachetools as ct
 
 logger = ls.get_logger(__name__)
+
 
 class udaParams:
     def __init__(self,parent=None):
@@ -29,7 +32,7 @@ class udaParams:
         self.tsFormat=None
         self.pStart=None
         self.pEnd=None
-        
+
        
         
 
@@ -52,7 +55,7 @@ class udaAccess:
         self.UCR=None
         self.connected=False
         self.__NODATAFOUND = ["Requested data cannot be located","data cannot be retrieved","could not retrieve data","Incorrect time"]
-
+        self.access_cache=ct.LRUCache(maxsize=100)
 
     def connectSource(self,connectionString):
         myconn=connectionString.split(",")
@@ -171,69 +174,88 @@ class udaAccess:
         logger.debug("init timestamp tSS=%s and tsE=%s and tsformat=%s ",tsS,tsE,tsFormat)
         udaP.setParams(varname,nbp,decType,tsSN,tsEN,pulse,tsFormat)
         return udaP
-        
+
+    def checkToAddInCache(self,query,udaP):
+        if udaP.tsFormat=="relative" and udaP.pulse is not None:
+            pnb=udaP.pulse.split("/")[-1]
+            ##case we access using a relative pulse number cannot be cached as it moves ...
+            if int(pnb) <1:
+                return False
+            pinfo=self.getPulseInfo( udaP.pulse)
+            ##case where a pulse is on going ....
+            if  self.UCR.isEmptyTimeStamp(pinfo.timeTo):
+                return False
+        else:
+            ###we allow alatency of 20
+            if udaP.pEnd is not None and (time.time_ns - udaP.pEnd < 20*1000000000):
+                return False
+        return True
     def getData(self,**kwargs):
         queryF1=None
         queryL1=None
         fneeded=True
         lneeded=True
+        toBeCached=True
         udaP=self.getUdaParams(**kwargs)
         query=self.getDataI(udaP)
         if query is None:
             dobj=dc.DataObj()
             dobj.setErr(-1, "Invalid Pulse ID")
             return dobj
-        dobj=self.__fetchData(query)
-        if dobj.errcode==-1 or os.getenv("MINT_GET_EXTRE") is None or udaP.tsFormat=="relative" or os.getenv("MINT_GET_EXTRE")=="False":
-            return dobj
-        
-        ##we retrieve the extremities
-        if "decType=" in query:
-            
-            queryL1=query.replace("decType"+udaP.decType,"decType=last")
+        print("value of query =%s",query)
+        tobeCached=self.checkToAddInCache(query,udaP)
+
+        if tobeCached:
+            dobj=self.__fetchDataWithCache(query)
         else:
-            queryL1=query+",decType=last"
-           
-        
-        if dobj.errcode==0:
-            ##check if we need to retrieve the point before thet beginning decType=last
-            if dobj.xdata[0]==udaP.startT:
-                lneeded=False
-            if dobj.xdata[-1]==udaP.endT:
-                fneeded=False
-        logger.debug("dobj first len=%d", len(dobj.xdata))
-               
-        if lneeded==True:        
-            queryL2=queryL1.replace("startTime="+str(udaP.startT),"startTime=0")
-            queryL=queryL2.replace("endTime="+str(udaP.endT),"endTime="+str(udaP.startT))
-            dobjF=self.__fetchData(queryL)
-            ##last query performed to retrieve the last point and to be put at the beginning
-            
-                
-            if dobjF.errcode==0:
-                if dobj.errcode==-3:
-                    dobj=dc.DataObj()
-                    dobj.xdata=numpy.empty(0)
-                    dobj.ydata=numpy.empty(0)
-                
-                xdata=np.insert(dobj.xdata,0,udaP.startT)
-                ydata=np.insert(dobj.ydata,0,dobjF.ydata[0])
-                dobj.xdata=xdata
-                dobj.ydata=ydata
-                logger.debug("dobj F %d", dobjF.xdata[0])
-                dobj.errcode=0
-        ###if no data at the end make it constant to have a line especially when there is one point   if errcode==0 means no archive data   
-        if fneeded==True and dobj.errcode==0:
-            xdata1=np.append(dobj.xdata,udaP.endT)
-            lastp=dobj.ydata[-1]
-            ydata1=np.append(dobj.ydata,lastp)
-            dobj.xdata=xdata1
-            dobj.ydata=ydata1
-            logger.debug("dobj final len=%d", len(dobj.xdata))
-            
-        
-            
-        return dobj    
+            dobj=self.__fetchDataX(query)
+
+        if dobj.errcode == -1 or os.getenv("MINT_GET_EXTRE") is None or uda_p.tsFormat == "relative" or os.getenv("MINT_GET_EXTRE") == "False":
+            return dobj
+
+        # we retrieve the extremities
+        if "decType=" in query:
+            query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
+        else:
+            query_l1 = query + ",decType=last"
+
+        if dobj.errcode == 0:
+            # check if we need to retrieve the point before thet beginning decType=last
+            if dobj.xdata[0] == uda_p.startT:
+                lneeded = False
+            if dobj.xdata[-1] == uda_p.endT:
+                fneeded = False
+            logger.debug("dobj first len=%d", len(dobj.xdata))
+
+            if lneeded:
+                query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
+                query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
+                dobj_f = self.__fetchData(query_l)
+                # last query performed to retrieve the last point and to be put at the beginning
+
+                if dobj_f.errcode == 0:
+                    if dobj.errcode == -3:
+                        dobj = dataCommon.DataObj()
+                        dobj.xdata = np.empty(0)
+                        dobj.ydata = np.empty(0)
+
+                    xdata = np.insert(dobj.xdata, 0, uda_p.startT)
+                    ydata = np.insert(dobj.ydata, 0, dobj_f.ydata[0])
+                    dobj.xdata = xdata
+                    dobj.ydata = ydata
+                    logger.debug("dobj F %d", dobj_f.xdata[0])
+                    dobj.errcode = 0
+            # if no data at the end make it constant to have a line especially when there is one point
+            # if errcode==0 means no archive data
+            if fneeded and dobj.errcode == 0:
+                xdata1 = np.append(dobj.xdata, uda_p.endT)
+                lastp = dobj.ydata[-1]
+                ydata1 = np.append(dobj.ydata, lastp)
+                dobj.xdata = xdata1
+                dobj.ydata = ydata1
+                logger.debug("dobj final len=%d", len(dobj.xdata))
+
+        return dobj
 
     def __parsePulse(self,pulse):
 
@@ -355,10 +377,13 @@ class udaAccess:
         return query
     
    
-        
+    def clearCache(self):
+        self.access_cache.clear()
     
-    ##@cached(cache=LRUCache(maxsize=100))
-    def __fetchData(self,query):
+    @cachedmethod(operator.attrgetter('access_cache'))
+    def __fetchDataWithCache(self,query):
+       return  self.__fetchDataX(query)
+    def __fetchDataX(self,query):
         logger.debug("Query ZZ: %s", query)
         handle = self.UCR.fetchData(query)
         self.errcode = 0
@@ -413,7 +438,11 @@ class udaAccess:
     ##@cached(cache=LRUCache(maxsize=100))
     def __fetchEnvelope(self,query):
         logger.debug("Query ZZ: %s", query)
-        handle = self.UCR.fetchData(query)
+        tobeCached = self.checkToAddInCache(query)
+        if tobeCached==True:
+            handle = self.UCR.fetchDataWithCache(query)
+        else:
+            handle = self.UCR.fetchData(query)
         self.errcode = 0
         self.errdesc = ""
         found=0
