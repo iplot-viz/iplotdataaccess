@@ -33,11 +33,11 @@ class udaParams:
         self.pStart=None
         self.pEnd=None
 
-       
-        
+
+
 
     def setParams(self,varname,nbps,decType,startT,endT,pulse,tsFormat):
-        
+
         self.varname=varname
         self.nbps=nbps
         self.decType=decType
@@ -81,7 +81,7 @@ class udaAccess:
 
         return self.connected
         #self.dataR=DataObj()
-        
+
     def isConnected(self):
         if self.connected:
             return True
@@ -89,7 +89,7 @@ class udaAccess:
             return False
 
     def convertudatypes(self,utype=None):
-        
+
         if utype==uc.RAW_TYPE_FLOAT :
             return dc.DataType.DA_TYPE_FLOAT
         elif utype==uc.RAW_TYPE_DOUBLE:
@@ -196,14 +196,14 @@ class udaAccess:
         fneeded=True
         lneeded=True
         toBeCached=True
-        udaP=self.getUdaParams(**kwargs)
-        query=self.getDataI(udaP)
+        uda_p=self.getUdaParams(**kwargs)
+        query=self.getDataI(uda_p)
         if query is None:
             dobj=dc.DataObj()
             dobj.setErr(-1, "Invalid Pulse ID")
             return dobj
         print("value of query =%s",query)
-        tobeCached=self.checkToAddInCache(query,udaP)
+        tobeCached=self.checkToAddInCache(query,uda_p)
 
         if tobeCached:
             dobj=self.__fetchDataWithCache(query)
@@ -230,12 +230,12 @@ class udaAccess:
             if lneeded:
                 query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
                 query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
-                dobj_f = self.__fetchData(query_l)
+                dobj_f = self.__fetchDataX(query_l)
                 # last query performed to retrieve the last point and to be put at the beginning
 
                 if dobj_f.errcode == 0:
                     if dobj.errcode == -3:
-                        dobj = dataCommon.DataObj()
+                        dobj = dc.DataObj()
                         dobj.xdata = np.empty(0)
                         dobj.ydata = np.empty(0)
 
@@ -293,7 +293,7 @@ class udaAccess:
             logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
             return None
         return PulseInfo
-    
+
     def getPulses(self, pattern="ITER:PCS/*"):
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
@@ -329,7 +329,7 @@ class udaAccess:
             return fdt.fields_to_json()
 
         return None
-            
+
     def getDataI(self, udaP):
         dobj = dc.DataObj()
         query= None
@@ -352,34 +352,34 @@ class udaAccess:
                 return query
             ##on going pulse
             if pulseI.timeTo>=time.time_ns() and (pulseI.timeFrom+int(udaP.endT*1000000000)>=time.time_ns() or udaP.endT==0):
-                
-                
+
+
                 udaP.endT=math.ceil((time.time_ns()-pulseI.timeFrom)/1000000000)
-                
-                
+
+
                 ##get
                 logger.debug("current pulse et=%d st=%d", udaP.endT,udaP.startT)
-                
+
                 ## to bypass the cache we explicitely move the end time...udaP.tsFormat,
                 query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(udaP.varname,udaP.tsFormat, udaP.nbps,udaP.pulse, udaP.startT,udaP.endT)
-            else:                                                      
+            else:
                 logger.debug("completed pulse tsE=%d,tsS=%d", udaP.endT, udaP.startT)
                 if udaP.endT==0:
                     query1="variable={},tsFormat={},decSamples={},pulse={},startTime={}S".format(udaP.varname, udaP.tsFormat, udaP.nbps, udaP.pulse,udaP.startT,udaP.endT)
                 else:
                     query1="variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(udaP.varname, udaP.tsFormat, udaP.nbps, udaP.pulse,udaP.startT,udaP.endT)
-                
-        
+
+
         if udaP.decType is not None:
             query= query1+",decType={}".format(udaP.decType)
         else:
             query=query1
         return query
-    
-   
+
+
     def clearCache(self):
         self.access_cache.clear()
-    
+
     @cachedmethod(operator.attrgetter('access_cache'))
     def __fetchDataWithCache(self,query):
        return  self.__fetchDataX(query)
@@ -402,10 +402,10 @@ class udaAccess:
                     break
             if found==0 :
                 self.UCR.resetAll()
-            
+
             dobj.setErr(self.errcode, self.errdesc)
             return dobj
-        
+
         # self.dataR.clearData()
         dobj.setA(self.convertudatypes(self.UCR.getFetchedTimeType(handle)),
                   self.convertudatypes(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
@@ -434,7 +434,7 @@ class udaAccess:
         dobj.setErr(0, "OK")
         logger.debug("Query ZZ: %s and errcode=%d", query,self.errcode)
         return dobj
-    
+
     ##@cached(cache=LRUCache(maxsize=100))
     def __fetchEnvelope(self,query):
         logger.debug("Query ZZ: %s", query)
@@ -459,7 +459,7 @@ class udaAccess:
                     break
             if found==0 :
                 self.UCR.resetAll()
-            
+
             dEnv.setErr(self.errcode, self.errdesc)
             return dEnv
         if dEnv.ytype == dc.DataType.DA_TYPE_STRING:
@@ -473,7 +473,7 @@ class udaAccess:
                   self.UCR.getRank(handle))
 
         data=self.UCR.getDataNativeRank(handle)
-        
+
         if (data is None):
             self.UCR.releaseData(handle)
             self.errdesc = "no data found {}for query ".format(query)
@@ -482,7 +482,7 @@ class udaAccess:
             dEnv.setErr(self.errcode, self.errdesc)
 
             return dEnv
-        
+
         dEnv.setYData(data[:, 1], data[:, 2], data[:, 0])
         if dEnv.xtype == dc.DataType.DA_TYPE_FLOAT or dEnv.xtype == dc.DataType.DA_TYPE_DOUBLE:
             dEnv.setXData(self.UCR.getTimeStampsAsDouble(handle))
@@ -495,7 +495,7 @@ class udaAccess:
 
     def getEnvelope(self,**kwargs):
         kwargs['decType']="env"
-            
+
         udaP=self.getUdaParams(**kwargs)
         query=self.getDataI(udaP)
         if query is None:
