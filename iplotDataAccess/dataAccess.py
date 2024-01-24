@@ -2,7 +2,6 @@ import copy
 import os
 import time
 
-
 import iplotDataAccess.dataSourceConfig as dsc
 import iplotLogging.setupLogger as ls
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
@@ -101,7 +100,8 @@ class DataSource:
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
-            self.RTHandler = iplotDataAccess.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta, udaA=self.daHandler)
+            self.RTHandler = iplotDataAccess.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
+                                                                         udaA=self.daHandler)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -143,8 +143,6 @@ class DataSource:
 
     def getRTStatus(self):
         return self.rtStatus
-
-
 
     def startSubscription(self, **kwargs):
         for _ in range(20):  # Time to update real status if it is STARTED (2 s)
@@ -203,8 +201,10 @@ class DataSource:
 
     def __getDataI(self, **kwargs):
         return self.daHandler.getData(**kwargs)
+
     def clearCache(self):
         return self.daHandler.clearCache()
+
     def getData(self, **kwargs):
         dobj = None
         logger.debug("getdata of data source and type %s", self.dtype)
@@ -228,13 +228,12 @@ class DataSource:
         logger.debug("exiting getdata")
         return dobj
 
-    
     def __getEnvelopeI(self, **kwargs):
         return self.daHandler.getEnvelope(**kwargs)
 
     def getEnvelope(self, **kwargs):
         ret = (None, None)
-        try: 
+        try:
             if self.daHandler is None:
                 dobj = dc.DataEnvelope()
                 dobj.setEmpty(self.dtype + "_DataHandler is null")
@@ -242,9 +241,8 @@ class DataSource:
                 varname = kwargs.get("varname")
                 logger.debug(f"varname: {varname}")
                 ret = self.__getEnvelopeI(**kwargs)
-                
 
-                if ret.errcode==0 and ret.xdata is not None and len(ret.xdata) > 0:
+                if ret.errcode == 0 and ret.xdata is not None and len(ret.xdata) > 0:
                     logger.debug(f"dtype: {ret.ytype}")
                     logger.debug(f"actual dtype: {type(ret.ydata_min)}")
 
@@ -261,9 +259,9 @@ class DataSource:
     def get_var_fields(self, **kwargs):
         return self.daHandler.get_var_fields(**kwargs)
 
+
 ###class to interface with data source - here UDA
 class DataAccess:
-
     DEFAULT_DATA_SOURCES_CFG_FILE: str = 'mydatasources.cfg'
 
     def __init__(self, parent=None):
@@ -279,29 +277,29 @@ class DataAccess:
         else:
             return self.defaultds.name
 
-    def loadConfig(self,confFile=None):
+    def loadConfig(self, confFile=None):
         if confFile is None:
             confFile = os.environ.get('DATASOURCESCONF')
             if confFile is None:
-                confFile=self.DEFAULT_DATA_SOURCES_CFG_FILE
-        self.confFile=confFile
+                confFile = self.DEFAULT_DATA_SOURCES_CFG_FILE
+        self.confFile = confFile
         try:
-            if len(self.loadConfigFile(confFile)) < 1 :
+            if len(self.loadConfigFile(confFile)) < 1:
                 return False
             else:
                 return True
         except (OSError, IOError, FileNotFoundError) as e:
             if self.confFile == DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE:
                 return False
-            confFile=os.environ.get('DATASOURCESCONF')
-            if (confFile is None) or (confFile == self.confFile) :
-                confFile=DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
+            confFile = os.environ.get('DATASOURCESCONF')
+            if (confFile is None) or (confFile == self.confFile):
+                confFile = DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
             if self.confFile == confFile:
-                    return False
+                return False
             logger.warning(f"no {self.confFile} data source file, fallback to {confFile}")
             return self.loadConfig(confFile)
 
-    def loadConfigFile(self,dspath):
+    def loadConfigFile(self, dspath):
         dskeys = []
         dname = ""
         with open(dspath) as f:
@@ -367,7 +365,7 @@ class DataAccess:
             logger.warning(" Data source %s not found", dataSName)
             return None
         else:
-            ds=self.dslist[dataSName]
+            ds = self.dslist[dataSName]
             if ds is None:
                 logger.debug("Invalid data source pointer for ds name  %s", dataSName)
             return ds
@@ -427,7 +425,7 @@ class DataAccess:
             if self.dslist[dataSName] is None:
                 denv = DataEnvelope()
                 denv.setEmpty("Invalid data source pointer for ds name " + dataSName)
-                
+
                 return denv
             else:
                 return self.dslist[dataSName].getEnvelope(**kwargs)
@@ -436,7 +434,7 @@ class DataAccess:
                 logger.warning("Invalid data source found %s ", dataSName)
                 denv = DataEnvelope()
                 denv.setEmpty("Invalid data source name " + dataSName)
-               
+
                 return denv
             if self.defaultds is not None:
                 logger.info("default source used ")
