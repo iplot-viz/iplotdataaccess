@@ -207,7 +207,10 @@ class IMASDataAccess:
             if dp == "struct_array" and ts == "time":
                 iSimple=False
 
-                idsp=level1[0]+"(:)/"+level1[1]
+                if re.search(r'\(:\)|\(0\)|\(\d+\)', level1[0]):
+                    idsp = '/'.join(level1)
+                else:
+                    idsp = level1[0] + "(:)/" + level1[1]
             else:
                 idsp = res[-1]
         except KeyError as ke:
