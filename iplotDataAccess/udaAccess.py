@@ -1,16 +1,18 @@
 import operator
 
 import iplotDataAccess.dataCommon as dc
+import iplotDataAccess.dataCommon as dataCommon
 import iplotDataAccess.nestedDatatype as nDT
 from cachetools import cachedmethod
 
 # import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
-import iplotLogging.setupLogger as ls
+import iplotLogging.setupLogger as setupLog
 import dateutil.parser as dp
 from datetime import timezone
 
 import numpy as np
+
 import time
 import os
 import math
@@ -18,11 +20,12 @@ import json
 import collections
 import cachetools as ct
 
-logger = ls.get_logger(__name__)
+logger = setupLog.get_logger(__name__)
+
 
 
 class udaParams:
-    def __init__(self, parent=None):
+    def __init__(self):
         self.varname = None
         self.nbps = 0
         self.decType = None
@@ -33,19 +36,19 @@ class udaParams:
         self.pStart = None
         self.pEnd = None
 
-    def setParams(self, varname, nbps, decType, startT, endT, pulse, tsFormat):
+    def setParams(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format):
         self.varname = varname
         self.nbps = nbps
-        self.decType = decType
-        self.startT = startT
-        self.endT = endT
+        self.decType = dec_type
+        self.startT = start_t
+        self.endT = end_t
         self.pulse = pulse
-        self.tsFormat = tsFormat
+        self.tsFormat = ts_format
 
 
-###class to interface with data source - here UDA
+# class to interface with data source - here UDA
 class udaAccess:
-    def __init__(self, parent=None):
+    def __init__(self):
         self.udahost = "localhost"
         self.uport = 3090
         self.errcode = 0
@@ -61,7 +64,9 @@ class udaAccess:
         logger.debug("connect source myconn=%s", myconn)
         return self.connect(myconn)
 
-    def connect(self, arglist=[]):
+    def connect(self, arglist=None):
+        if arglist is None:
+            arglist = []
         for s in arglist:
             if s.startswith("host"):
                 self.udahost = s.split("=")[1]
@@ -83,68 +88,65 @@ class udaAccess:
         # self.dataR=DataObj()
 
     def isConnected(self):
-        if self.connected:
-            return True
-        else:
-            return False
+        return self.connected
 
-    def convertudatypes(self, utype=None):
+    @staticmethod
+    def convertudatypes(utype=None):
 
         if utype == uc.RAW_TYPE_FLOAT:
-            return dc.DataType.DA_TYPE_FLOAT
+            return dataCommon.DataType.DA_TYPE_FLOAT
         elif utype == uc.RAW_TYPE_DOUBLE:
-            return dc.DataType.DA_TYPE_DOUBLE
+            return dataCommon.DataType.DA_TYPE_DOUBLE
         elif utype == uc.RAW_TYPE_STRING:
-            return dc.DataType.DA_TYPE_STRING
+            return dataCommon.DataType.DA_TYPE_STRING
         elif utype == uc.RAW_TYPE_LONG:
-            return dc.DataType.DA_TYPE_LONG
+            return dataCommon.DataType.DA_TYPE_LONG
         elif utype == uc.RAW_TYPE_UNSIGNED_LONG:
-            return dc.DataType.DA_TYPE_ULONG
+            return dataCommon.DataType.DA_TYPE_ULONG
         elif utype == uc.RAW_TYPE_CHAR:
-            return dc.DataType.DA_TYPE_CHAR
+            return dataCommon.DataType.DA_TYPE_CHAR
         elif utype == uc.RAW_TYPE_UNSIGNED_CHAR:
-            return dc.DataType.DA_TYPE_UCHAR
+            return dataCommon.DataType.DA_TYPE_UCHAR
         elif utype == uc.RAW_TYPE_SHORT:
-            return dc.DataType.DA_TYPE_SHORT
+            return dataCommon.DataType.DA_TYPE_SHORT
         elif utype == uc.RAW_TYPE_UNSIGNED_SHORT:
-            return dc.DataType.DA_TYPE_USHORT
+            return dataCommon.DataType.DA_TYPE_USHORT
         elif utype == uc.RAW_TYPE_INT:
-            return dc.DataType.DA_TYPE_INT
+            return dataCommon.DataType.DA_TYPE_INT
         elif utype == uc.RAW_TYPE_UNSIGNED_INT:
-            return dc.DataType.DA_TYPE_UINT
+            return dataCommon.DataType.DA_TYPE_UINT
 
-    def convertToNanos(self, tsE):
-        parsed_t = None
-        if isinstance(tsE, float) or isinstance(tsE, int):
-            return tsE
-        if "T" in tsE and "." in tsE:
+    @staticmethod
+    def convertToNanos(ts_e):
+        if isinstance(ts_e, float) or isinstance(ts_e, int):
+            return ts_e
+        if "T" in ts_e and "." in ts_e:
             try:
 
-                parsed_t = dp.parse(tsE)
+                parsed_t = dp.parse(ts_e)
 
                 t_in_nsec = parsed_t.replace(tzinfo=timezone.utc).timestamp() * 1000000000
 
                 return format(t_in_nsec, '.0f')
-            except OverflowError as ofe:
-                logger.error("overflow error got invalid date %s ", tsE)
+            except OverflowError as _:
+                logger.error("overflow error got invalid date %s ", ts_e)
                 return -1
-            except ValueError as ofe:
-                logger.error("value error got invalid date %s ", tsE)
+            except ValueError as _:
+                logger.error("value error got invalid date %s ", ts_e)
                 return -1
         else:
-            return tsE
+            return ts_e
 
     def getUdaParams(self, **kwargs):
-        udaP = udaParams()
+        uda_p = udaParams()
         varname = ""
-        pulsenb = None
         nbp = 1000
-        decType = None
-        tsSN = 0
-        tsEN = 0
-        tsS = 0
-        tsE = 0
-        tsFormat = "absolute"
+        dec_type = None
+        ts_sn = 0
+        ts_en = 0
+        ts_s = 0
+        ts_e = 0
+        ts_format = "absolute"
         varprefix = None
         pulse = None
         if kwargs.get("varname"):
@@ -159,19 +161,19 @@ class udaAccess:
         if kwargs.get("nbp"):
             nbp = kwargs.get("nbp")
         if kwargs.get("decType"):
-            decType = kwargs.get("decType")
+            dec_type = kwargs.get("decType")
         if kwargs.get("tsS"):
-            tsS = kwargs.get("tsS")
-            tsSN = self.convertToNanos(tsS)
+            ts_s = kwargs.get("tsS")
+            ts_sn = self.convertToNanos(ts_s)
         if kwargs.get("tsE"):
-            tsE = kwargs.get("tsE")
-            tsEN = self.convertToNanos(tsE)
+            ts_e = kwargs.get("tsE")
+            ts_en = self.convertToNanos(ts_e)
 
         if kwargs.get("tsFormat"):
-            tsFormat = kwargs.get("tsFormat")
-        logger.debug("init timestamp tSS=%s and tsE=%s and tsformat=%s ", tsS, tsE, tsFormat)
-        udaP.setParams(varname, nbp, decType, tsSN, tsEN, pulse, tsFormat)
-        return udaP
+            ts_format = kwargs.get("tsFormat")
+        logger.debug("init timestamp tSS=%s and tsE=%s and tsformat=%s ", ts_s, ts_e, ts_format)
+        uda_p.setParams(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format)
+        return uda_p
 
     def checkToAddInCache(self, query, udaP):
         if udaP.tsFormat == "relative" and udaP.pulse is not None:
@@ -198,9 +200,10 @@ class udaAccess:
         uda_p = self.getUdaParams(**kwargs)
         query = self.getDataI(uda_p)
         if query is None:
-            dobj = dc.DataObj()
+            dobj = dataCommon.DataObj()
             dobj.setErr(-1, "Invalid Pulse ID")
             return dobj
+
         print("value of query =%s", query)
         tobeCached = self.checkToAddInCache(query, uda_p)
 
@@ -225,39 +228,40 @@ class udaAccess:
                 lneeded = False
             if dobj.xdata[-1] == uda_p.endT:
                 fneeded = False
-            logger.debug("dobj first len=%d", len(dobj.xdata))
+        logger.debug("dobj first len=%d", len(dobj.xdata))
 
-            if lneeded:
-                query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
-                query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
-                dobj_f = self.__fetchDataX(query_l)
-                # last query performed to retrieve the last point and to be put at the beginning
+        if lneeded:
+            query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
+            query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
+            dobj_f = self.__fetchDataX(query_l)
+            # last query performed to retrieve the last point and to be put at the beginning
 
-                if dobj_f.errcode == 0:
-                    if dobj.errcode == -3:
-                        dobj = dc.DataObj()
-                        dobj.xdata = np.empty(0)
-                        dobj.ydata = np.empty(0)
+            if dobj_f.errcode == 0:
+                if dobj.errcode == -3:
+                    dobj = dataCommon.DataObj()
+                    dobj.xdata = np.empty(0)
+                    dobj.ydata = np.empty(0)
 
-                    xdata = np.insert(dobj.xdata, 0, uda_p.startT)
-                    ydata = np.insert(dobj.ydata, 0, dobj_f.ydata[0])
-                    dobj.xdata = xdata
-                    dobj.ydata = ydata
-                    logger.debug("dobj F %d", dobj_f.xdata[0])
-                    dobj.errcode = 0
-            # if no data at the end make it constant to have a line especially when there is one point
-            # if errcode==0 means no archive data
-            if fneeded and dobj.errcode == 0:
-                xdata1 = np.append(dobj.xdata, uda_p.endT)
-                lastp = dobj.ydata[-1]
-                ydata1 = np.append(dobj.ydata, lastp)
-                dobj.xdata = xdata1
-                dobj.ydata = ydata1
-                logger.debug("dobj final len=%d", len(dobj.xdata))
+                xdata = np.insert(dobj.xdata, 0, uda_p.startT)
+                ydata = np.insert(dobj.ydata, 0, dobj_f.ydata[0])
+                dobj.xdata = xdata
+                dobj.ydata = ydata
+                logger.debug("dobj F %d", dobj_f.xdata[0])
+                dobj.errcode = 0
+        # if no data at the end make it constant to have a line especially when there is one point
+        # if errcode==0 means no archive data
+        if fneeded and dobj.errcode == 0:
+            xdata1 = np.append(dobj.xdata, uda_p.endT)
+            lastp = dobj.ydata[-1]
+            ydata1 = np.append(dobj.ydata, lastp)
+            dobj.xdata = xdata1
+            dobj.ydata = ydata1
+            logger.debug("dobj final len=%d", len(dobj.xdata))
 
         return dobj
 
-    def __parsePulse(self, pulse):
+    @staticmethod
+    def __parsePulse(pulse):
 
         if pulse is None:
             return pulse
@@ -265,7 +269,7 @@ class udaAccess:
         res = p.split("/")
         reslen = len(res)
         if reslen > 1:
-            ## if last 2 are numeric means pulse nb/run nb
+            # if last 2 are numeric means pulse nb/run nb
             if res[-1].lstrip("-").isnumeric() and res[-2].lstrip("-").isnumeric():
                 p = pulse[:(len(res[-2]))]
         logger.debug("parse pulse %s", str(p))
@@ -277,22 +281,22 @@ class udaAccess:
             return unitval
         if not self.connected:
             self.connect(self.udahost)
-        MetaData = self.UCR.getMeta(varname, tsmp)
-        for i in MetaData:
+        meta_data = self.UCR.getMeta(varname, tsmp)
+        for i in meta_data:
             if i.name.lower() == "units":
                 unitval = i.value
                 break
         return unitval
 
-    def getPulseInfo(self, pulseID="0"):
-        PulseInfo = self.UCR.getPulseInfo2(pulseID)
+    def getPulseInfo(self, pulse_id="0"):
+        pulse_info = self.UCR.getPulseInfo2(pulse_id)
         if self.UCR.getErrorCode() != 0:
             logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
             return None
-        if (self.UCR.isEmptyPulse2(PulseInfo.pulseID)):
+        if self.UCR.isEmptyPulse2(pulse_info.pulseID):
             logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
             return None
-        return PulseInfo
+        return pulse_info
 
     def getPulses(self, pattern="ITER:PCS/*"):
         pulses_list = self.UCR.getPulses2(pattern)
@@ -330,59 +334,60 @@ class udaAccess:
 
         return None
 
-    def getDataI(self, udaP):
-        dobj = dc.DataObj()
+    def getDataI(self, uda_p):
+        dobj = dataCommon.DataObj()
         query = None
-        query1 = None
         if not self.connected:
             self.connect(self.udahost)
             if self.errcode == -1:
                 dobj.setErr(self.errcode, self.errdesc)
                 return dobj
-        # we query always absolute to ease adding first and last data point and we transform the data aftewrads
-        if udaP.pulse is None or udaP.pulse == "None":
-            query1 = "variable={},tsFormat={},decSamples={},startTime={},endTime={}".format(udaP.varname, udaP.tsFormat,
-                                                                                            udaP.nbps, udaP.startT,
-                                                                                            udaP.endT)
+        # we query always absolute to ease adding first and last data point, and we transform the data aftewrads
+        if uda_p.pulse is None or uda_p.pulse == "None":
+            query1 = "variable={},tsFormat={},decSamples={},startTime={},endTime={}".format(uda_p.varname,
+                                                                                            uda_p.tsFormat,
+                                                                                            uda_p.nbps, uda_p.startT,
+                                                                                            uda_p.endT)
         else:
-            if udaP.pulse == "0":
-                udaP.pulse = self.UCR.getLastPulse()
-                logger.debug("LAST PULSE: %s", udaP.pulse)
-            ##we need to check if it is an-going pulse to not use the cache...
-            pulseI = self.getPulseInfo(udaP.pulse)
-            if pulseI is None:
+            if uda_p.pulse == "0":
+                uda_p.pulse = self.UCR.getLastPulse()
+                logger.debug("LAST PULSE: %s", uda_p.pulse)
+            # we need to check if it is an-going pulse to not use the cache...
+            pulse_i = self.getPulseInfo(uda_p.pulse)
+            if pulse_i is None:
                 return query
-            ##on going pulse
-            if pulseI.timeTo >= time.time_ns() and (
-                    pulseI.timeFrom + int(udaP.endT * 1000000000) >= time.time_ns() or udaP.endT == 0):
+            # ongoing pulse
+            if pulse_i.timeTo >= time.time_ns() and (
+                    pulse_i.timeFrom + int(uda_p.endT * 1000000000) >= time.time_ns() or uda_p.endT == 0):
 
-                udaP.endT = math.ceil((time.time_ns() - pulseI.timeFrom) / 1000000000)
+                uda_p.endT = math.ceil((time.time_ns() - pulse_i.timeFrom) / 1000000000)
 
-                ##get
-                logger.debug("current pulse et=%d st=%d", udaP.endT, udaP.startT)
+                # get
+                logger.debug("current pulse et=%d st=%d", uda_p.endT, uda_p.startT)
 
-                ## to bypass the cache we explicitely move the end time...udaP.tsFormat,
-                query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(udaP.varname,
-                                                                                                           udaP.tsFormat,
-                                                                                                           udaP.nbps,
-                                                                                                           udaP.pulse,
-                                                                                                           udaP.startT,
-                                                                                                           udaP.endT)
+                # to bypass the cache we explicitely move the end time...udaP.tsFormat,
+                query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(
+                    uda_p.varname,
+                    uda_p.tsFormat,
+                    uda_p.nbps,
+                    uda_p.pulse,
+                    uda_p.startT,
+                    uda_p.endT)
             else:
-                logger.debug("completed pulse tsE=%d,tsS=%d", udaP.endT, udaP.startT)
-                if udaP.endT == 0:
-                    query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S".format(udaP.varname,
-                                                                                                   udaP.tsFormat,
-                                                                                                   udaP.nbps,
-                                                                                                   udaP.pulse,
-                                                                                                   udaP.startT,
-                                                                                                   udaP.endT)
+                logger.debug("completed pulse tsE=%d,tsS=%d", uda_p.endT, uda_p.startT)
+                if uda_p.endT == 0:
+                    query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S".format(uda_p.varname,
+                                                                                                   uda_p.tsFormat,
+                                                                                                   uda_p.nbps,
+                                                                                                   uda_p.pulse,
+                                                                                                   uda_p.startT,
+                                                                                                   uda_p.endT)
                 else:
                     query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(
-                        udaP.varname, udaP.tsFormat, udaP.nbps, udaP.pulse, udaP.startT, udaP.endT)
+                        uda_p.varname, uda_p.tsFormat, uda_p.nbps, uda_p.pulse, uda_p.startT, uda_p.endT)
 
-        if udaP.decType is not None:
-            query = query1 + ",decType={}".format(udaP.decType)
+        if uda_p.decType is not None:
+            query = query1 + ",decType={}".format(uda_p.decType)
         else:
             query = query1
         return query
@@ -400,7 +405,7 @@ class udaAccess:
         self.errcode = 0
         self.errdesc = ""
         found = 0
-        dobj = dc.DataObj()
+        dobj = dataCommon.DataObj()
         if handle < 0:
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
@@ -423,20 +428,20 @@ class udaAccess:
                   self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
                   self.UCR.getRank(handle))
 
-        if dobj.ytype == dc.DataType.DA_TYPE_STRING:
+        if dobj.ytype == dataCommon.DataType.DA_TYPE_STRING:
             dobj.setData(self.UCR.getDataAsStrings(handle), 2)
         else:
             dobj.setData(self.UCR.getDataNativeRank(handle), 2)
-        if (dobj.ydata is None):
+        if dobj.ydata is None:
             self.UCR.releaseData(handle)
             self.errdesc = "no data found {}for query ".format(query)
             self.errcode = -3
-            ##self.UCR.resetAll()
+            # self.UCR.resetAll()
             dobj.setErr(self.errcode, self.errdesc)
 
             return dobj
 
-        if dobj.xtype == dc.DataType.DA_TYPE_FLOAT or dobj.xtype == dc.DataType.DA_TYPE_DOUBLE:
+        if dobj.xtype == dataCommon.DataType.DA_TYPE_FLOAT or dobj.xtype == dataCommon.DataType.DA_TYPE_DOUBLE:
             dobj.setData(self.UCR.getTimeStampsAsDouble(handle), 1)
         else:
             dobj.setData(self.UCR.getTimeStampsAsLong(handle), 1)
@@ -446,7 +451,7 @@ class udaAccess:
         logger.debug("Query ZZ: %s and errcode=%d", query, self.errcode)
         return dobj
 
-    ##@cached(cache=LRUCache(maxsize=100))
+    # @cached(cache=LRUCache(maxsize=100))
     def __fetchEnvelope(self, query):
         logger.debug("Query ZZ: %s", query)
         tobeCached = self.checkToAddInCache(query)
@@ -457,7 +462,7 @@ class udaAccess:
         self.errcode = 0
         self.errdesc = ""
         found = 0
-        dEnv = dc.DataEnvelope()
+        d_env = dataCommon.DataEnvelope()
         if handle < 0:
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
@@ -471,49 +476,49 @@ class udaAccess:
             if found == 0:
                 self.UCR.resetAll()
 
-            dEnv.setErr(self.errcode, self.errdesc)
-            return dEnv
-        if dEnv.ytype == dc.DataType.DA_TYPE_STRING:
-            ##we should not be there but...
-            dEnv.setErr(-1, "Envelope has no meaning for string datatypes")
-            return dEnv
+            d_env.setErr(self.errcode, self.errdesc)
+            return d_env
+        if d_env.ytype == dataCommon.DataType.DA_TYPE_STRING:
+            # we should not be there but...
+            d_env.setErr(-1, "Envelope has no meaning for string datatypes")
+            return d_env
         # self.dataR.clearData()
-        dEnv.setA(self.convertudatypes(self.UCR.getFetchedTimeType(handle)),
-                  self.convertudatypes(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
-                  self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
-                  self.UCR.getRank(handle))
+        d_env.setA(self.convertudatypes(self.UCR.getFetchedTimeType(handle)),
+                   self.convertudatypes(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
+                   self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
+                   self.UCR.getRank(handle))
 
         data = self.UCR.getDataNativeRank(handle)
 
-        if (data is None):
+        if data is None:
             self.UCR.releaseData(handle)
             self.errdesc = "no data found {}for query ".format(query)
             self.errdesc = -3
-            ##self.UCR.resetAll()
-            dEnv.setErr(self.errcode, self.errdesc)
+            # self.UCR.resetAll()
+            d_env.setErr(self.errcode, self.errdesc)
 
-            return dEnv
+            return d_env
 
-        dEnv.setYData(data[:, 1], data[:, 2], data[:, 0])
-        if dEnv.xtype == dc.DataType.DA_TYPE_FLOAT or dEnv.xtype == dc.DataType.DA_TYPE_DOUBLE:
-            dEnv.setXData(self.UCR.getTimeStampsAsDouble(handle))
+        d_env.setYData(data[:, 1], data[:, 2], data[:, 0])
+        if d_env.xtype == dataCommon.DataType.DA_TYPE_FLOAT or d_env.xtype == dataCommon.DataType.DA_TYPE_DOUBLE:
+            d_env.setXData(self.UCR.getTimeStampsAsDouble(handle))
         else:
-            dEnv.setXData(self.UCR.getTimeStampsAsLong(handle))
+            d_env.setXData(self.UCR.getTimeStampsAsLong(handle))
 
         self.UCR.releaseData(handle)
-        dEnv.setErr(0, "OK")
-        return dEnv
+        d_env.setErr(0, "OK")
+        return d_env
 
     def getEnvelope(self, **kwargs):
         kwargs['decType'] = "env"
 
-        udaP = self.getUdaParams(**kwargs)
-        query = self.getDataI(udaP)
+        uda_p = self.getUdaParams(**kwargs)
+        query = self.getDataI(uda_p)
         if query is None:
-            dobj = dc.DataEnvelope()
+            dobj = dataCommon.DataEnvelope()
             dobj.setErr(-1, "Invalid Pulse ID")
             logger.debug("getEnveloppe exiting pulse does not exist")
             return dobj
-        dEnv = self.__fetchEnvelope(query)
+        d_env = self.__fetchEnvelope(query)
         logger.debug("getEnveloppe exiting pulse does exist ")
-        return dEnv
+        return d_env
