@@ -399,6 +399,10 @@ class udaAccess:
     def __fetchDataWithCache(self, query):
         return self.__fetchDataX(query)
 
+    @cachedmethod(operator.attrgetter('access_cache'))
+    def __fetchEnvelopeWithCache(self, query):
+        return self.__fetchEnvelope(query)
+
     def __fetchDataX(self, query):
         logger.debug("Query ZZ: %s", query)
         handle = self.UCR.fetchData(query)
@@ -454,11 +458,7 @@ class udaAccess:
     # @cached(cache=LRUCache(maxsize=100))
     def __fetchEnvelope(self, query):
         logger.debug("Query ZZ: %s", query)
-        tobeCached = self.checkToAddInCache(query)
-        if tobeCached == True:
-            handle = self.UCR.fetchDataWithCache(query)
-        else:
-            handle = self.UCR.fetchData(query)
+        handle = self.UCR.fetchData(query)
         self.errcode = 0
         self.errdesc = ""
         found = 0
@@ -519,6 +519,12 @@ class udaAccess:
             dobj.setErr(-1, "Invalid Pulse ID")
             logger.debug("getEnveloppe exiting pulse does not exist")
             return dobj
-        d_env = self.__fetchEnvelope(query)
+
+        tobeCached = self.checkToAddInCache(query, uda_p)
+
+        if tobeCached:
+            d_env = self.__fetchEnvelopeWithCache(query)
+        else:
+            d_env = self.__fetchEnvelope(query)
         logger.debug("getEnveloppe exiting pulse does exist ")
         return d_env
