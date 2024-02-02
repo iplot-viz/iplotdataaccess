@@ -279,7 +279,7 @@ class DataAccess:
 
     def loadConfig(self, confFile=None):
         if confFile is None:
-            confFile = os.environ.get('DATASOURCESCONF')
+            confFile = os.environ.get('IPLOT_SOURCES_CONFIG')
             if confFile is None:
                 confFile = self.DEFAULT_DATA_SOURCES_CFG_FILE
         self.confFile = confFile
@@ -291,7 +291,7 @@ class DataAccess:
         except (OSError, IOError, FileNotFoundError) as e:
             if self.confFile == DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE:
                 return False
-            confFile = os.environ.get('DATASOURCESCONF')
+            confFile = os.environ.get('IPLOT_SOURCES_CONFIG')
             if (confFile is None) or (confFile == self.confFile):
                 confFile = DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
             if self.confFile == confFile:
