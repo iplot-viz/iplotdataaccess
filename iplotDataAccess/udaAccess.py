@@ -75,13 +75,9 @@ class udaAccess:
 
         logger.debug("Connecting to UDA host  %s", self.udahost)
         self.UCR = uc.UdaClientReaderPython(self.udahost, self.uport)
-        if self.UCR.getErrorCode() != 0:
-            self.errdesc = "Cannot create UdaClientReader. Error: {} {}".format(self.UCR.getErrorCode(),
-                                                                                self.UCR.getErrorMsg())
-            self.errcode = -1
-            self.connected = False
-        else:
-            self.connected = True
+        self.connected = self.UCR.isConnected()
+        self.errdesc = self.UCR.getErrorMsg()
+        self.errcode = self.UCR.getErrorCode()
         # self.UCR.resetAll()
 
         return self.connected
