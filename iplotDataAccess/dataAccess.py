@@ -44,7 +44,6 @@ class DataSource:
         self.UCR = None
         self.varprefix = None
         self.dtype = ""
-        self.defaultds = False
         self.isSupported = False
         self.connectionString = None
         self.daHandler = None
@@ -54,6 +53,7 @@ class DataSource:
         self.rtu = None
         self.MAX_ITER = 1000
         self.SLEEP_TO = 0.1
+        self.default = False
         if name is None:
             self.name = "DS _" + str(id(self))
         else:
@@ -71,6 +71,9 @@ class DataSource:
             self.dtype = "CODAC_UDA"
         elif "database" in conninfo:
             self.dtype = "IMAS_UDA"
+
+    def setDefaultDS(self, default):
+        self.default = default
 
     def setVarPrefix(self, pref):
         self.varprefix = pref
@@ -279,10 +282,7 @@ class DataAccess:
                 confFile = self.DEFAULT_DATA_SOURCES_CFG_FILE
         self.confFile = confFile
         try:
-            if len(self.loadConfigFile(confFile)) < 1:
-                return False
-            else:
-                return True
+            return self.loadConfigFile(confFile)
         except (OSError, IOError, FileNotFoundError) as e:
             if self.confFile == DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE:
                 return False
@@ -300,48 +300,56 @@ class DataAccess:
         with open(dspath) as f:
             for line in f:
 
-                if line.rstrip().startswith("["):
+                if line.rstrip().startswith("[") and line.rstrip().endswith("]"):
                     s = line.rstrip()
                     dname = s[s.find("[") + 1:s.find("]")]
                     ds = DataSource(name=dname)
                     self.dslist[dname] = ds
 
-                if line.rstrip().startswith("conninfo"):
+                if line.rstrip().startswith("conninfo") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setConnectionString(s)
-                if line.rstrip().startswith("rturl"):
+                if line.rstrip().startswith("rturl") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTUrl(s)
-                if line.rstrip().startswith("rtauth"):
+                if line.rstrip().startswith("rtauth") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTAuth(s)
-                if line.rstrip().startswith("rtheaders"):
+                if line.rstrip().startswith("rtheaders") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTHeaders(s)
-                if line.rstrip().startswith("default"):
-                    s = line.rstrip().split("=", 1)[1]
-                    if s.lower() == 'true':
-                        self.dslist[dname].defaultds = True
-                        logger.debug("found a default data source")
+                if line.rstrip().startswith("default") and dname != "":
+                    s = line.rstrip().split("=", 1)[1].lower()
+                    self.dslist[dname].setDefaultDS(s == "true")
 
-                if line.rstrip().startswith("varprefix"):
+                if line.rstrip().startswith("varprefix") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
                     self.dslist[dname].setVarPrefix(s)
 
         # print("supported dslist ",self.dslist[0])
         for k, d in self.dslist.items():
+            logger.info("data name=%s data type=%s connfino=%s", d.name, d.dtype, d.connectionString)
 
             if d.dtype in self.proto:
                 d.connect()
-                d.isSupported = True
-                dskeys.append(d)
-                logger.info(f"Connected={d.connected} data name={d.name} data type={d.dtype} connfino={d.connectionString}")
-                if d.connected and d.defaultds or d.connected and not d.defaultds:
-                    self.defaultds = d
+                if d.connected:
+                    d.isSupported = True
+                    dskeys.append(d)
             else:
                 logger.info("data source not supported %s", d.name)
-        return dskeys
+
+        # Check which data source to set by default
+        for key in dskeys:
+            if key.default:
+                self.defaultds = key
+                break
+
+        # Set a default ds even if none is marked as default
+        if not self.defaultds and dskeys:
+            self.defaultds = dskeys[0]
+
+        return len(dskeys) > 0
 
     def addDataSource(self, proto="", dataS=None):
         self.dslist[dataS.name] = dataS
