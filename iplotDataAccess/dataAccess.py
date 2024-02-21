@@ -464,3 +464,8 @@ class DataAccess:
 
     def get_connected_data_sources(self):
         return [ds.name for ds in self.dslist.values() if ds.connected]
+
+    # Clear cache of all the dataSources
+    def clear_cache(self):
+        for ds in self.dslist.values():
+            ds.daHandler.clearCache()
