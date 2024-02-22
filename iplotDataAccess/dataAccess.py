@@ -44,7 +44,6 @@ class DataSource:
         self.UCR = None
         self.varprefix = None
         self.dtype = ""
-        self.isSupported = False
         self.connectionString = None
         self.daHandler = None
         self.RTHandler = None
@@ -334,7 +333,6 @@ class DataAccess:
             if d.dtype in self.proto:
                 d.connect()
                 if d.connected:
-                    d.isSupported = True
                     dskeys.append(d)
             else:
                 logger.info("data source not supported %s", d.name)
