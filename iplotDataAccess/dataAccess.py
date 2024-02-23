@@ -44,7 +44,6 @@ class DataSource:
         self.UCR = None
         self.varprefix = None
         self.dtype = ""
-        self.isSupported = False
         self.connectionString = None
         self.daHandler = None
         self.RTHandler = None
@@ -53,6 +52,7 @@ class DataSource:
         self.rtu = None
         self.MAX_ITER = 1000
         self.SLEEP_TO = 0.1
+        self.default = False
         if name is None:
             self.name = "DS _" + str(id(self))
         else:
@@ -70,6 +70,9 @@ class DataSource:
             self.dtype = "CODAC_UDA"
         elif "database" in conninfo:
             self.dtype = "IMAS_UDA"
+
+    def setDefaultDS(self, default):
+        self.default = default
 
     def setVarPrefix(self, pref):
         self.varprefix = pref
@@ -124,7 +127,7 @@ class DataSource:
         if self.dtype == "CODAC_UDA":
             try:
                 self.daHandler = iplotDataAccess.udaAccess.udaAccess()
-                logger.info("connect %s ", self.connectionString)
+                logger.debug("connect %s ", self.connectionString)
                 self.connected = self.daHandler.connectSource(connectionString=self.connectionString)
 
             except ModuleNotFoundError:
@@ -137,12 +140,6 @@ class DataSource:
                 self.setRTHandler()
             except RTHException as rte:
                 logger.error(" RTHException %s ", rte)
-
-    def isConnected(self):
-        return self.connected
-
-    def getRTStatus(self):
-        return self.rtStatus
 
     def startSubscription(self, **kwargs):
         for _ in range(20):  # Time to update real status if it is STARTED (2 s)
@@ -273,25 +270,22 @@ class DataAccess:
 
     def getDefaultDSName(self):
         if self.defaultds is None:
-            return "N.P"
+            return None
         else:
             return self.defaultds.name
 
     def loadConfig(self, confFile=None):
         if confFile is None:
-            confFile = os.environ.get('DATASOURCESCONF')
+            confFile = os.environ.get('IPLOT_SOURCES_CONFIG')
             if confFile is None:
                 confFile = self.DEFAULT_DATA_SOURCES_CFG_FILE
         self.confFile = confFile
         try:
-            if len(self.loadConfigFile(confFile)) < 1:
-                return False
-            else:
-                return True
+            return self.loadConfigFile(confFile)
         except (OSError, IOError, FileNotFoundError) as e:
             if self.confFile == DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE:
                 return False
-            confFile = os.environ.get('DATASOURCESCONF')
+            confFile = os.environ.get('IPLOT_SOURCES_CONFIG')
             if (confFile is None) or (confFile == self.confFile):
                 confFile = DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
             if self.confFile == confFile:
@@ -305,34 +299,29 @@ class DataAccess:
         with open(dspath) as f:
             for line in f:
 
-                if line.rstrip().startswith("["):
+                if line.rstrip().startswith("[") and line.rstrip().endswith("]"):
                     s = line.rstrip()
                     dname = s[s.find("[") + 1:s.find("]")]
                     ds = DataSource(name=dname)
                     self.dslist[dname] = ds
-                    if self.defaultds is None:
-                        self.defaultds = self.dslist[dname]
 
-                if line.rstrip().startswith("conninfo"):
+                if line.rstrip().startswith("conninfo") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setConnectionString(s)
-                if line.rstrip().startswith("rturl"):
+                if line.rstrip().startswith("rturl") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTUrl(s)
-                if line.rstrip().startswith("rtauth"):
+                if line.rstrip().startswith("rtauth") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTAuth(s)
-                if line.rstrip().startswith("rtheaders"):
+                if line.rstrip().startswith("rtheaders") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].setRTHeaders(s)
-                if line.rstrip().startswith("default"):
-                    s = line.rstrip().split("=", 1)[1]
-                    if s.lower() == 'true':
-                        if self.defaultds is None:
-                            self.defaultds = self.dslist[dname]
-                            logger.debug("found a default data source")
+                if line.rstrip().startswith("default") and dname != "":
+                    s = line.rstrip().split("=", 1)[1].lower()
+                    self.dslist[dname].setDefaultDS(s == "true")
 
-                if line.rstrip().startswith("varprefix"):
+                if line.rstrip().startswith("varprefix") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
                     self.dslist[dname].setVarPrefix(s)
@@ -343,11 +332,22 @@ class DataAccess:
 
             if d.dtype in self.proto:
                 d.connect()
-                d.isSupported = True
-                dskeys.append(d)
+                if d.connected:
+                    dskeys.append(d)
             else:
                 logger.info("data source not supported %s", d.name)
-        return dskeys
+
+        # Check which data source to set by default
+        for key in dskeys:
+            if key.default:
+                self.defaultds = key
+                break
+
+        # Set a default ds even if none is marked as default
+        if not self.defaultds and dskeys:
+            self.defaultds = dskeys[0]
+
+        return len(dskeys) > 0
 
     def addDataSource(self, proto="", dataS=None):
         self.dslist[dataS.name] = dataS
@@ -464,3 +464,9 @@ class DataAccess:
 
     def get_connected_data_sources(self):
         return [ds.name for ds in self.dslist.values() if ds.connected]
+
+    # Clear cache of all the dataSources
+    def clear_cache(self):
+        for ds in self.dslist.values():
+            if ds.connected:
+                ds.daHandler.clearCache()

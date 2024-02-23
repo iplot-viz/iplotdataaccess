@@ -58,6 +58,7 @@ class udaAccess:
         self.__NODATAFOUND = ["Requested data cannot be located", "data cannot be retrieved", "could not retrieve data",
                               "Incorrect time"]
         self.access_cache = ct.LRUCache(maxsize=100)
+        self.pulses_cache={}
 
     def connectSource(self, connectionString):
         myconn = connectionString.split(",")
@@ -177,7 +178,10 @@ class udaAccess:
             ##case we access using a relative pulse number cannot be cached as it moves ...
             if int(pnb) < 1:
                 return False
-            pinfo = self.getPulseInfo(udaP.pulse)
+            if udaP.pulse in self.pulses_cache:
+                pinfo=self.pulses_cache.get(udaP.pulse)
+            else:
+                pinfo = self.getPulseInfo(udaP.pulse)
             ##case where a pulse is on going ....
             if self.UCR.isEmptyTimeStamp(pinfo.timeTo):
                 return False
@@ -200,7 +204,7 @@ class udaAccess:
             dobj.setErr(-1, "Invalid Pulse ID")
             return dobj
 
-        print("value of query =%s", query)
+        ##print("value of query =%s", query)
         tobeCached = self.checkToAddInCache(query, uda_p)
 
         if tobeCached:
@@ -285,13 +289,21 @@ class udaAccess:
         return unitval
 
     def getPulseInfo(self, pulse_id="0"):
-        pulse_info = self.UCR.getPulseInfo2(pulse_id)
-        if self.UCR.getErrorCode() != 0:
-            logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
-            return None
-        if self.UCR.isEmptyPulse2(pulse_info.pulseID):
-            logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
-            return None
+        logger.debug(("requires a pulse {} and the cache {} ".format(pulse_id,self.pulses_cache)))
+        if pulse_id in self.pulses_cache.keys():
+            pulse_info=self.pulses_cache.get(pulse_id)
+            logger.debug("found pulse in the cache",pulse_id)
+        else:
+            pulse_info = self.UCR.getPulseInfo2(pulse_id)
+            if self.UCR.getErrorCode() != 0:
+                logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+                return None
+            if self.UCR.isEmptyPulse2(pulse_info.pulseID):
+                logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+                return None
+            if pulse_info.timeTo<time.time_ns():
+                self.pulses_cache.update({pulse_id:pulse_info})
+            
         return pulse_info
 
     def getPulses(self, pattern="ITER:PCS/*"):
@@ -333,6 +345,8 @@ class udaAccess:
     def getDataI(self, uda_p):
         dobj = dataCommon.DataObj()
         query = None
+        isnew=0
+        logger.debug(" entering getDataI for pulse=%s",uda_p.pulse)
         if not self.connected:
             self.connect(self.udahost)
             if self.errcode == -1:
@@ -349,7 +363,13 @@ class udaAccess:
                 uda_p.pulse = self.UCR.getLastPulse()
                 logger.debug("LAST PULSE: %s", uda_p.pulse)
             # we need to check if it is an-going pulse to not use the cache...
-            pulse_i = self.getPulseInfo(uda_p.pulse)
+            if uda_p.pulse not in self.pulses_cache.keys():
+                pulse_i = self.getPulseInfo(uda_p.pulse)
+                isnew=1
+                logger.debug(" do not use cache for pulse=%s",uda_p.pulse)
+            else:
+                pulse_i = self.pulses_cache.get(uda_p.pulse)
+                logger.debug(" use cache for pulse=%s",uda_p.pulse)
             if pulse_i is None:
                 return query
             # ongoing pulse
@@ -370,7 +390,9 @@ class udaAccess:
                     uda_p.startT,
                     uda_p.endT)
             else:
-                logger.debug("completed pulse tsE=%d,tsS=%d", uda_p.endT, uda_p.startT)
+                if isnew==1:
+                    self.pulses_cache.update({uda_p.pulse:pulse_i})
+                    logger.debug("completed pulse tsE=%d,tsS=%d and added to the cache", uda_p.endT, uda_p.startT)
                 if uda_p.endT == 0:
                     query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S".format(uda_p.varname,
                                                                                                    uda_p.tsFormat,
@@ -390,6 +412,7 @@ class udaAccess:
 
     def clearCache(self):
         self.access_cache.clear()
+        self.pulses_cache.clear()
 
     @cachedmethod(operator.attrgetter('access_cache'))
     def __fetchDataWithCache(self, query):
