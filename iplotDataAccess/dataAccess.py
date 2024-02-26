@@ -463,7 +463,11 @@ class DataAccess:
         return ds.get_var_fields(**kwargs)
 
     def get_connected_data_sources(self):
-        return [ds.name for ds in self.dslist.values() if ds.connected]
+        data_sources = [self.getDefaultDSName()]
+        for ds_name, ds in self.dslist.items():
+            if ds_name not in data_sources and ds.connected:
+                data_sources.append(ds_name)
+        return data_sources
 
     # Clear cache of all the dataSources
     def clear_cache(self):
