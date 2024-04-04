@@ -1,12 +1,15 @@
-import iplotLogging.setupLogger as ls
-logger = ls.get_logger(__name__)
-class dataSourceConfig:
+from iplotLogging import setupLogger
 
-    def __init__(self,parent=None):
-        self.supportedDataSources=[]
+logger = setupLogger.get_logger(__name__)
 
-    def getSupportedDataSource(self):
-        ##check CODAC UDA module is installed
+
+class DataSourceConfig:
+
+    def __init__(self, parent=None):
+        self.supportedDataSources = []
+
+    def get_supported_data_source(self):
+        # Check CODAC UDA module is installed
         try:
             import uda_client_reader
             logger.info("module 'uda client reader' is installed")

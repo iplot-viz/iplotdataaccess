@@ -2,13 +2,14 @@ import copy
 import os
 import time
 
-import iplotDataAccess.dataSourceConfig as dsc
-import iplotLogging.setupLogger as ls
+import iplotDataAccess.dataSourceConfig as dSC
+from iplotLogging import setupLogger
+
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
 
-logger = ls.get_logger(__name__)
+logger = setupLogger.get_logger(__name__)
 
-##should import possible data sources like IMAS UDA and CODAC UDA
+# Should import possible data sources like IMAS UDA and CODAC UDA
 try:
     import imas
     import iplotDataAccess.imasAccess
@@ -26,8 +27,6 @@ try:
 except ModuleNotFoundError:
     logger.warning("import'uda RT streamer' is not installed")
 
-import iplotDataAccess.dataCommon as dc
-
 
 class RTHException(Exception):
     pass
@@ -35,7 +34,7 @@ class RTHException(Exception):
 
 class DataSource:
 
-    def __init__(self, type=None, name=None):
+    def __init__(self, dtype=None, name=None):
         self.connected = False
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
@@ -57,36 +56,36 @@ class DataSource:
             self.name = "DS _" + str(id(self))
         else:
             self.name = name
-        if type == "CODAC_UDA":
+        if dtype == "CODAC_UDA":
             self.connectionString = "host=X,port=3090"
             self.dtype = "CODAC_UDA"
-        elif type == "IMAS_UDA":
+        elif dtype == "IMAS_UDA":
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
             self.dtype = "IMAS_UDA"
 
-    def setConnectionString(self, conninfo):
+    def set_connection_string(self, conninfo):
         self.connectionString = conninfo
         if "host" in conninfo:
             self.dtype = "CODAC_UDA"
         elif "database" in conninfo:
             self.dtype = "IMAS_UDA"
 
-    def setDefaultDS(self, default):
+    def set_default_ds(self, default):
         self.default = default
 
-    def setVarPrefix(self, pref):
+    def set_var_prefix(self, pref):
         self.varprefix = pref
 
-    def setRTHeaders(self, headers):
+    def set_rt_headers(self, headers):
         self.rth = headers
 
-    def setRTAuth(self, auth):
+    def set_rt_auth(self, auth):
         self.rta = auth
 
-    def setRTUrl(self, url):
+    def set_rt_url(self, url):
         self.rtu = url
 
-    def setRTHandler(self):
+    def set_rt_handler(self):
         myhd = {}
         if self.dtype == "IMAS_UDA":
             self.rterrcode = -1
@@ -104,7 +103,7 @@ class DataSource:
                 myhd[entry[0]] = entry[1]
         try:
             self.RTHandler = iplotDataAccess.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
-                                                                         udaA=self.daHandler)
+                                                                         uda_a=self.daHandler)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -119,16 +118,16 @@ class DataSource:
         if self.dtype == "IMAS_UDA":
             try:
                 self.daHandler = iplotDataAccess.imasAccess.IMASDataAccess()
-                self.connected = self.daHandler.connectSource(connectionString=self.connectionString)
+                self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
             except ModuleNotFoundError:
                 self.errcode = -1
                 self.connected = False
 
         if self.dtype == "CODAC_UDA":
             try:
-                self.daHandler = iplotDataAccess.udaAccess.udaAccess()
+                self.daHandler = iplotDataAccess.udaAccess.UdaAccess()
                 logger.debug("connect %s ", self.connectionString)
-                self.connected = self.daHandler.connectSource(connectionString=self.connectionString)
+                self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
 
             except ModuleNotFoundError:
                 self.errcode = -1
@@ -137,11 +136,11 @@ class DataSource:
         if self.rtu is not None:
             try:
                 logger.debug("setRHandler")
-                self.setRTHandler()
+                self.set_rt_handler()
             except RTHException as rte:
                 logger.error(" RTHException %s ", rte)
 
-    def startSubscription(self, **kwargs):
+    def start_subscription(self, **kwargs):
         for _ in range(20):  # Time to update real status if it is STARTED (2 s)
             if self.rtStatus != "STARTED":
                 break
@@ -151,7 +150,7 @@ class DataSource:
 
         if self.rtStatus in ["STARTED", "STOPPED"]:
             for _ in range(60):  # Wait for real status (60 s)
-                if self.rtStatus == self.RTHandler.getStatus():
+                if self.rtStatus == self.RTHandler.get_status():
                     break
                 logger.debug('Waiting status sync for RTHandler')
                 time.sleep(1)
@@ -167,77 +166,76 @@ class DataSource:
                 kwargs["origparams"] = copy.deepcopy(kwargs.get("params"))
                 kwargs["params"] = newparams
                 logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
-                self.RTHandler.startSubscription(**kwargs)
+                self.RTHandler.start_subscription(**kwargs)
             except iplotDataAccess.realTimeStreamer.RTStreamerException:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
-    def stopSubscription(self):
+    def stop_subscription(self):
         logger.debug("stopSubscription Y %s ", self.rtStatus)
         if self.rtStatus == "STARTED":
             try:
                 logger.debug("stopSubscription Z ")
-                self.RTHandler.stopSubscription()
+                self.RTHandler.stop_subscription()
                 self.rtStatus = "STOPPED"
-            except iplotDataAccess.realTimeStreamer.RTStreamerException as rtse:
+            except iplotDataAccess.realTimeStreamer.RTStreamerException as _:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
-    def getNextData(self, vname=None):
+    def get_next_data(self, vname=None):
         counter = 0
         # Could happen that params is null if this call is done before startSubscription
         while (self.RTHandler is None or self.RTHandler.params is None) and counter < self.MAX_ITER:
             time.sleep(self.SLEEP_TO)
             counter = counter + 1
         if counter == self.MAX_ITER:
-            dobj = dc.DataObj()
-            dobj.setEmpty("Streamer not properly initialized: did the subscription start?")
+            dobj = DataObj()
+            dobj.set_empty("Streamer not properly initialized: did the subscription start?")
             return dobj
 
         return self.RTHandler.getNextData(vname)
 
-    def __getDataI(self, **kwargs):
-        return self.daHandler.getData(**kwargs)
+    def __get_data_i(self, **kwargs):
+        return self.daHandler.get_data(**kwargs)
 
-    def clearCache(self):
-        return self.daHandler.clearCache()
+    def clear_cache(self):
+        return self.daHandler.clear_cache()
 
-    def getData(self, **kwargs):
-        dobj = None
+    def get_data(self, **kwargs):
         logger.debug("getdata of data source and type %s", self.dtype)
 
         try:
             if self.daHandler is None:
-                dobj = dc.DataObj()
-                dobj.setEmpty(self.dtype + "_DataHandler is null")
+                dobj = DataObj()
+                dobj.set_empty(self.dtype + "_DataHandler is null")
             else:
                 varname = kwargs.get("varname")
                 logger.debug(f"varname: {varname}")
-                dobj = self.__getDataI(**kwargs)
+                dobj = self.__get_data_i(**kwargs)
 
                 if dobj.ydata is not None and len(dobj.ydata) > 0:
                     logger.debug(f"dtype: {dobj.ytype}")
                     logger.debug(f"actual dtype: {type(dobj.ydata)}")
 
         except ModuleNotFoundError:
-            dobj = dc.DataObj()
-            dobj.setEmpty("ModuleNotFound_" + self.dtype)
+            dobj = DataObj()
+            dobj.set_empty("ModuleNotFound_" + self.dtype)
         logger.debug("exiting getdata")
         return dobj
 
-    def __getEnvelopeI(self, **kwargs):
-        return self.daHandler.getEnvelope(**kwargs)
+    def __get_envelope_i(self, **kwargs):
+        return self.daHandler.get_envelope(**kwargs)
 
-    def getEnvelope(self, **kwargs):
+    def get_envelope(self, **kwargs):
         ret = (None, None)
         try:
             if self.daHandler is None:
-                dobj = dc.DataEnvelope()
-                dobj.setEmpty(self.dtype + "_DataHandler is null")
+                dobj = DataEnvelope()
+                dobj.set_empty(self.dtype + "_DataHandler is null")
             else:
                 varname = kwargs.get("varname")
                 logger.debug(f"varname: {varname}")
-                ret = self.__getEnvelopeI(**kwargs)
+                ret = self.__get_envelope_i(**kwargs)
 
                 if ret.errcode == 0 and ret.xdata is not None and len(ret.xdata) > 0:
                     logger.debug(f"dtype: {ret.ytype}")
@@ -257,43 +255,43 @@ class DataSource:
         return self.daHandler.get_var_fields(**kwargs)
 
 
-###class to interface with data source - here UDA
+# class to interface with data source - here UDA
 class DataAccess:
     DEFAULT_DATA_SOURCES_CFG_FILE: str = 'mydatasources.cfg'
 
-    def __init__(self, parent=None):
-        d = dsc.dataSourceConfig()
-        self.proto = d.getSupportedDataSource()
+    def __init__(self):
+        d = dSC.DataSourceConfig()
+        self.proto = d.get_supported_data_source()
         self.dslist = {}
         self.defaultds = None
         self.confFile = None
 
-    def getDefaultDSName(self):
+    def get_default_ds_name(self):
         if self.defaultds is None:
             return None
         else:
             return self.defaultds.name
 
-    def loadConfig(self, confFile=None):
-        if confFile is None:
-            confFile = os.environ.get('IPLOT_SOURCES_CONFIG')
-            if confFile is None:
-                confFile = self.DEFAULT_DATA_SOURCES_CFG_FILE
-        self.confFile = confFile
+    def load_config(self, conf_file=None):
+        if conf_file is None:
+            conf_file = os.environ.get('IPLOT_SOURCES_CONFIG')
+            if conf_file is None:
+                conf_file = self.DEFAULT_DATA_SOURCES_CFG_FILE
+        self.confFile = conf_file
         try:
-            return self.loadConfigFile(confFile)
-        except (OSError, IOError, FileNotFoundError) as e:
+            return self.load_config_file(conf_file)
+        except (OSError, IOError, FileNotFoundError) as _:
             if self.confFile == DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE:
                 return False
-            confFile = os.environ.get('IPLOT_SOURCES_CONFIG')
-            if (confFile is None) or (confFile == self.confFile):
-                confFile = DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
-            if self.confFile == confFile:
+            conf_file = os.environ.get('IPLOT_SOURCES_CONFIG')
+            if (conf_file is None) or (conf_file == self.confFile):
+                conf_file = DataAccess.DEFAULT_DATA_SOURCES_CFG_FILE
+            if self.confFile == conf_file:
                 return False
-            logger.warning(f"no {self.confFile} data source file, fallback to {confFile}")
-            return self.loadConfig(confFile)
+            logger.warning(f"no {self.confFile} data source file, fallback to {conf_file}")
+            return self.load_config(conf_file)
 
-    def loadConfigFile(self, dspath):
+    def load_config_file(self, dspath):
         dskeys = []
         dname = ""
         with open(dspath) as f:
@@ -307,24 +305,24 @@ class DataAccess:
 
                 if line.rstrip().startswith("conninfo") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
-                    self.dslist[dname].setConnectionString(s)
+                    self.dslist[dname].set_connection_string(s)
                 if line.rstrip().startswith("rturl") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
-                    self.dslist[dname].setRTUrl(s)
+                    self.dslist[dname].set_rt_url(s)
                 if line.rstrip().startswith("rtauth") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
-                    self.dslist[dname].setRTAuth(s)
+                    self.dslist[dname].set_rt_auth(s)
                 if line.rstrip().startswith("rtheaders") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
-                    self.dslist[dname].setRTHeaders(s)
+                    self.dslist[dname].set_rt_headers(s)
                 if line.rstrip().startswith("default") and dname != "":
                     s = line.rstrip().split("=", 1)[1].lower()
-                    self.dslist[dname].setDefaultDS(s == "true")
+                    self.dslist[dname].set_default_ds(s == "true")
 
                 if line.rstrip().startswith("varprefix") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
-                    self.dslist[dname].setVarPrefix(s)
+                    self.dslist[dname].set_var_prefix(s)
 
         # print("supported dslist ",self.dslist[0])
         for k, d in self.dslist.items():
@@ -349,121 +347,121 @@ class DataAccess:
 
         return len(dskeys) > 0
 
-    def addDataSource(self, proto="", dataS=None):
-        self.dslist[dataS.name] = dataS
+    def add_data_source(self, data_s=None):
+        self.dslist[data_s.name] = data_s
 
-    def getDataSource(self, dataSName):
-        logger.debug("entering getDataSource  %s", dataSName)
-        if dataSName is None:
+    def get_data_source(self, data_s_name):
+        logger.debug("entering getDataSource  %s", data_s_name)
+        if data_s_name is None:
             if self.defaultds is not None:
                 logger.info(" default source used ")
                 return self.defaultds
             else:
                 logger.error("DataSourceName is None and not default data source name has been defined")
                 return None
-        if dataSName not in self.dslist.keys():
-            logger.warning(" Data source %s not found", dataSName)
+        if data_s_name not in self.dslist.keys():
+            logger.warning(" Data source %s not found", data_s_name)
             return None
         else:
-            ds = self.dslist[dataSName]
+            ds = self.dslist[data_s_name]
             if ds is None:
-                logger.debug("Invalid data source pointer for ds name  %s", dataSName)
+                logger.debug("Invalid data source pointer for ds name  %s", data_s_name)
             return ds
 
-    def connect(self, dataSName):
+    def connect(self, data_s_name):
         for ds in self.dslist:
-            if ds.name == dataSName:
+            if ds.name == data_s_name:
                 return ds.connect()
         return None
 
-    def getData(self, dataSName, **kwargs):
-        ##we can use the varprefix to get the data source while we introduce
-        logger.debug("entering getdata  %s", dataSName)
-        if dataSName is not None and dataSName in self.dslist.keys():
-            if self.dslist[dataSName] is None:
+    def get_data(self, data_s_name, **kwargs):
+        # we can use the var prefix to get the data source while we introduce
+        logger.debug("entering getdata  %s", data_s_name)
+        if data_s_name is not None and data_s_name in self.dslist.keys():
+            if self.dslist[data_s_name] is None:
                 dobj = DataObj()
 
-                dobj.setEmpty("Invalid data source pointer for ds name " + dataSName)
-                logger.debug("Invalid data source pointer for ds name  %s", dataSName)
+                dobj.set_empty("Invalid data source pointer for ds name " + data_s_name)
+                logger.debug("Invalid data source pointer for ds name  %s", data_s_name)
                 return dobj
             else:
 
-                dobj = self.dslist[dataSName].getData(**kwargs)
+                dobj = self.dslist[data_s_name].get_data(**kwargs)
                 return dobj
         else:
-            if dataSName not in self.dslist.keys():
-                logger.warning(" Invalid data source found %s ", dataSName)
+            if data_s_name not in self.dslist.keys():
+                logger.warning(" Invalid data source found %s ", data_s_name)
                 dobj = DataObj()
-                dobj.setEmpty("Invalid data source name " + dataSName)
+                dobj.set_empty(f"Invalid data source name {data_s_name}")
 
                 return dobj
             if self.defaultds is not None:
                 logger.info(" default source used ")
-                return self.defaultds.getData(**kwargs)
+                return self.defaultds.get_data(**kwargs)
 
         return None
 
-    def startSubscription(self, dataSName, **kwargs):
-        if dataSName is not None and dataSName in self.dslist.keys():
-            self.dslist[dataSName].startSubscription(**kwargs)
+    def start_subscription(self, data_s_name, **kwargs):
+        if data_s_name is not None and data_s_name in self.dslist.keys():
+            self.dslist[data_s_name].start_subscription(**kwargs)
 
-    def stopSubscription(self, dataSName):
-        if dataSName is not None and dataSName in self.dslist.keys():
+    def stop_subscription(self, data_s_name):
+        if data_s_name is not None and data_s_name in self.dslist.keys():
             logger.debug("stopSubscription A ")
-            self.dslist[dataSName].stopSubscription()
+            self.dslist[data_s_name].stop_subscription()
 
-    def getNextData(self, dataSName, vname):
-        if dataSName is not None and dataSName in self.dslist.keys():
-            return self.dslist[dataSName].getNextData(vname)
+    def get_next_data(self, data_s_name, vname):
+        if data_s_name is not None and data_s_name in self.dslist.keys():
+            return self.dslist[data_s_name].get_next_data(vname)
         else:
             dobj = DataObj()
-            dobj.setEmpty("Invalid data source name " + dataSName)
+            dobj.set_empty(f"Invalid data source name {data_s_name}")
             return dobj
 
-    def getEnvelope(self, dataSName, **kwargs):
-        if dataSName is not None and dataSName in self.dslist.keys():
-            if self.dslist[dataSName] is None:
+    def get_envelope(self, data_s_name, **kwargs):
+        if data_s_name is not None and data_s_name in self.dslist.keys():
+            if self.dslist[data_s_name] is None:
                 denv = DataEnvelope()
-                denv.setEmpty("Invalid data source pointer for ds name " + dataSName)
+                denv.set_empty(f"Invalid data source pointer for ds name {data_s_name}")
 
                 return denv
             else:
-                return self.dslist[dataSName].getEnvelope(**kwargs)
+                return self.dslist[data_s_name].get_envelope(**kwargs)
         else:
-            if dataSName not in self.dslist.keys():
-                logger.warning("Invalid data source found %s ", dataSName)
+            if data_s_name not in self.dslist.keys():
+                logger.warning(f"Invalid data source found {data_s_name}")
                 denv = DataEnvelope()
-                denv.setEmpty("Invalid data source name " + dataSName)
+                denv.set_empty(f"Invalid data source name {data_s_name}")
 
                 return denv
             if self.defaultds is not None:
                 logger.info("default source used ")
-                return self.defaultds.getEnvelope(**kwargs)
+                return self.defaultds.get_envelope(**kwargs)
 
         return None
 
     def get_cbs_list(self, data_source_name, **kwargs):
-        ds = self.getDataSource(data_source_name)
+        ds = self.get_data_source(data_source_name)
         if ds is None:
             return None
         cbs_list = ds.get_cbs_list(**kwargs)
         return cbs_list
 
     def get_var_list(self, data_source_name, **kwargs):
-        ds = self.getDataSource(data_source_name)
+        ds = self.get_data_source(data_source_name)
         if ds is None:
             return None
         var_list = ds.get_var_list(**kwargs)
         return var_list
 
     def get_var_fields(self, data_source_name, **kwargs):
-        ds = self.getDataSource(data_source_name)
+        ds = self.get_data_source(data_source_name)
         if ds is None:
             return None
         return ds.get_var_fields(**kwargs)
 
     def get_connected_data_sources(self):
-        data_sources = [self.getDefaultDSName()]
+        data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.dslist.items():
             if ds_name not in data_sources and ds.connected:
                 data_sources.append(ds_name)
@@ -473,4 +471,4 @@ class DataAccess:
     def clear_cache(self):
         for ds in self.dslist.values():
             if ds.connected:
-                ds.daHandler.clearCache()
+                ds.daHandler.clear_cache()

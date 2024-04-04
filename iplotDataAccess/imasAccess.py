@@ -2,20 +2,20 @@ import operator
 import re
 import numpy as np
 import imas
+import cachetools as ct
+from iplotLogging import setupLogger
+from data_dictionary import idsdef
 from cachetools import cachedmethod
 from iplotDataAccess.dataCommon import DataObj, DataType
-import iplotLogging.setupLogger as ls
 
-logger = ls.get_logger(__name__)
-import cachetools as ct
-from data_dictionary import idsdef
+logger = setupLogger.get_logger(__name__)
 
 
 class IMASDataAccess:
     database = 'iter'
     user_or_path = 'public'
     imas_backend = imas.imasdef.MDSPLUS_BACKEND
-    ##imas_dd_units = imas.dd_units.DataDictionaryUnits()
+    # imas_dd_units = imas.dd_units.DataDictionaryUnits()
     __input = None
     pulse = None
     run = None
@@ -25,23 +25,17 @@ class IMASDataAccess:
     dd = idsdef.IDSDef()
     access_cache = ct.LRUCache(maxsize=100)
 
-    def __init__(self):
-        database = 'iter'
-        user_or_path = 'public'
-        imas_backend = imas.imasdef.MDSPLUS_BACKEND
-        input = None
-        pulse = 0
-        run = 0
-
-    def connectSource(self, connectionString=""):
-        ###self.conectionString="database=ITER,user_or_path=public,backend=MDSPLUS"##
-        myconn = connectionString.split(",")
-        self.configure(listI=myconn)
-        ##self.connect()
+    def connect_source(self, connection_string=""):
+        # self.connection_string="database=ITER,user_or_path=public,backend=MDSPLUS"##
+        myconn = connection_string.split(",")
+        self.configure(list_i=myconn)
+        # self.connect()
         return self.__input, self.__isConnected
 
-    def configure(self, listI=[]):
-        for s in listI:
+    def configure(self, list_i=None):
+        if list_i is None:
+            list_i = []
+        for s in list_i:
             if s.startswith("database"):
                 temp = s.split("=")
                 self.database = temp[1]
@@ -78,7 +72,7 @@ class IMASDataAccess:
                 self.__input = None
                 return
             self.__input = imas.DBEntry(self.imas_backend, self.database, self.pulse, self.run, self.user_or_path)
-            [err, n] = self.__input.open()
+            [err, _] = self.__input.open()
             if err != 0:
                 logger.warning("not connected to imas db")
                 self.__isConnected = False
@@ -92,26 +86,24 @@ class IMASDataAccess:
             self.__isConnected = False
             self.__input = None
 
-    def isconnected(self):
+    def is_connected(self):
         return self.__isConnected
 
-    def clearCache(self):
+    def clear_cache(self):
         self.access_cache.clear()
 
     @cachedmethod(operator.attrgetter('access_cache'))
-    def getData(self, **kwargs):
-        varprefix = None
-        idspath = ""
+    def get_data(self, **kwargs):
         mycfg = []
         varname = ""
         tsS = None
         tsE = None
         if kwargs.get("varname"):
-            varname1 = kwargs.get("varname")
-            if varprefix is not None and len(varprefix) > 0:
-                varname = varname1.replace(varprefix, "", 1)
-            else:
-                varname = varname1
+            varname = kwargs.get("varname")
+            # if varprefix is not None and len(varprefix) > 0:
+            #     varname = varname1.replace(varprefix, "", 1)
+            # else:
+            #     varname = varname1
         if kwargs.get("pulse"):
             mycfg.append("pulseIdent=" + kwargs.get("pulse"))
             self.configure(mycfg)
@@ -133,36 +125,35 @@ class IMASDataAccess:
                 dobj = DataObj()
                 return dobj
         self.connect()
-        return self.getDataI(varname, tsS, tsE)
+        return self.get_data_i(varname, tsS, tsE)
 
-    def __getUnits(self, meta):
-        ### this function does not work if we provide indexes on array so indices should be removed ...
+    @staticmethod
+    def __get_units(meta):
+        # this function does not work if we provide indexes on array so indices should be removed ...
         try:
             units = meta["units"]
-        except KeyError as ke:
+        except KeyError as _:
             units = ""
         return units
 
-    def __getMetadata(self, idsn, idsp):
-        ### this function does not work if we provide indexes on array so indices should be removed ...
-        idsp1 = re.sub("([\(\[]).*?([\)\]])", "", idsp)
+    def __get_metadata(self, idsn, idsp):
+        # this function does not work if we provide indexes on array so indices should be removed ...
+        idsp1 = re.sub("([(\[]).*?([)\]])", "", idsp)
         logger.debug("get unit for  %s", idsp1)
         metadata = self.dd.query(idsn, idsp1)
 
         return metadata
 
-    def __getTimeData(self, idsn, idsp):
+    def __get_time_data(self, idsn, idsp):
+        timevec = []
         try:
             time_type = self.__input.partial_get(ids_name=idsn, data_path="ids_properties/homogeneous_time")
-            timevec = []
-            dpath = None
             if time_type == 1:
                 dpath = "time"
             else:
                 # dpath=idsp[0:idsp.rfind("/")] + "/time"
                 dpath = idsp.rpartition("/")[0] + "/time"
             timevec = self.__input.partial_get(ids_name=idsn, data_path=dpath)
-
 
         except AttributeError as err:
             logger.error("Invalid attribute: %s", err)
@@ -173,13 +164,10 @@ class IMASDataAccess:
 
         return timevec
 
-    def getDataI(self, idspath_o=None, tsS=None, tsE=None):
-        isSimple = True
-        idsp = ""
+    def get_data_i(self, idspath_o=None, ts_s=None, ts_e=None):
         dobj = DataObj()
         if idspath_o is None:
             return dobj
-        res = []
 
         idspath_1 = idspath_o.replace('[', '(')
         idspath = idspath_1.replace(']', ')')
@@ -191,63 +179,56 @@ class IMASDataAccess:
 
         logger.debug("res=%s", res)
 
-        if not self.isconnected():
+        if not self.is_connected():
             self.connect()
-        if not self.isconnected():
+        if not self.is_connected():
             dobj.xdata = []
             dobj.ydata = []
             return dobj
-        ##first we need to know if we are accessing an array of structure time dependent or not...
+        # first we need to know if we are accessing an array of structure time dependent or not...
 
         try:
             level1 = res[-1].split("/", 1)
-            metadata = self.__getMetadata(res[-2], level1[0])
+            metadata = self.__get_metadata(res[-2], level1[0])
             print("found meta %s", metadata)
             dp = metadata["data_type"]
             ts = metadata["timebasepath"]
             print("found dp =%s and ts=%s ", dp, ts)
             if dp == "struct_array" and ts == "time":
-                iSimple = False
-
                 if re.search(r'\(:\)|\(0\)|\(\d+\)', level1[0]):
                     idsp = '/'.join(level1)
                 else:
                     idsp = level1[0] + "(:)/" + level1[1]
             else:
                 idsp = res[-1]
-        except KeyError as ke:
-            dp = None
-            ts = None
+        except KeyError as _:
             idsp = res[-1]
-        except IndexError as ie:
-            logger.error("unexpected combination for ids data retrieval =%s", res)
+        except IndexError as _:
+            logger.error(f"unexpected combination for ids data retrieval ={res}")
             dobj.xdata = []
             dobj.ydata = []
             return dobj
-        dobj.setA(DataType.DA_TYPE_FLOAT, DataType.DA_TYPE_FLOAT, 'Time', '', '', '', 1)
+        dobj.set_a(DataType.DA_TYPE_FLOAT, DataType.DA_TYPE_FLOAT, 'Time', '', '', '', 1)
         try:
-            time_type = -1
-            idx = None
             print("ids res %s", res[-1], idsp)
 
             if len(res) == 1:
-                dobj.setData(self.__input.partial_get(ids_name=res[-1], data_path=""), 2)
+                dobj.set_data(self.__input.partial_get(ids_name=res[-1], data_path=""), 2)
             else:
-                dobj.setData(self.__input.partial_get(ids_name=res[-2], data_path=idsp), 2)
+                dobj.set_data(self.__input.partial_get(ids_name=res[-2], data_path=idsp), 2)
             if dobj.ydata is not None:
-                dobj.setData(self.__getTimeData(idsn=res[-2], idsp=idsp), 1)
-                metadata = self.__getMetadata(res[-2], res[-1])
-                dobj.yunit = self.__getUnits(metadata)
-                time_type = self.__input.partial_get(ids_name=res[-2],
-                                                     data_path="ids_properties/homogeneous_time")
+                dobj.set_data(self.__get_time_data(idsn=res[-2], idsp=idsp), 1)
+                metadata = self.__get_metadata(res[-2], res[-1])
+                dobj.yunit = self.__get_units(metadata)
+                time_type = self.__input.partial_get(ids_name=res[-2], data_path="ids_properties/homogeneous_time")
                 if time_type == 0:  # time under each data (heterogenous)
                     dpath = res[-1].rpartition('/')[0] + "/time"
                 elif time_type == 1:  # global time (homogenous)
                     dpath = "time"
                 else:  # static (no time)
                     dpath = ""
-                metaTime = self.__getMetadata(res[-2], dpath)
-                dobj.xunit = self.__getUnits(metaTime)
+                metaTime = self.__get_metadata(res[-2], dpath)
+                dobj.xunit = self.__get_units(metaTime)
 
                 if dobj.yunit is not None:
                     logger.debug(" found unit %s", dobj.yunit)
@@ -255,14 +236,14 @@ class IMASDataAccess:
                     logger.debug(" xdata is NONE ")
                 else:
                     logger.debug(" xdata is NOT NONE %d ", len(dobj.xdata))
-                if tsE is not None or tsS is not None:
-                    if tsE is None:
-                        tsE = dobj.xdata[-1]
-                    if tsS is None:
-                        tsS = dobj.xdata[0]
+                if ts_e is not None or ts_s is not None:
+                    if ts_e is None:
+                        ts_e = dobj.xdata[-1]
+                    if ts_s is None:
+                        ts_s = dobj.xdata[0]
 
-                    idx = np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
-                    ##newidx=np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
+                    idx = np.where((dobj.xdata >= ts_s) & (dobj.xdata <= ts_e))
+                    # newidx=np.where((dobj.xdata >= tsS) & (dobj.xdata <= tsE))
                     dobj.xdata = dobj.xdata[idx]
                     # newidx=[slice(None)] * (dobj.ydata.ndim - 1) + [idx]
                     # this extracts the last dimension
@@ -273,7 +254,6 @@ class IMASDataAccess:
                         dobj.ydata = dobj.ydata[:][idx]
                     elif dobj.ydata.ndim == 3:
                         dobj.ydata = dobj.ydata[:][:][idx]
-
 
             else:
                 dobj.xdata = []
@@ -312,12 +292,12 @@ class IMASDataAccess:
         return dobj
 
     def close(self):
-        if self.isconnected():
+        if self.is_connected():
             self.__input.close()
             self.__isConnected = False
 
-    def getEnvelope(self, **kwargs):
-        dmin = self.getData(**kwargs)
+    def get_envelope(self, **kwargs):
+        dmin = self.get_data(**kwargs)
         dmax = dmin
         logger.debug("envelope function returning %d", len(dmin))
         return dmin, dmax
