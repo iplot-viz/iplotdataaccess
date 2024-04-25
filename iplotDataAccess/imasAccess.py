@@ -2,6 +2,11 @@ import operator
 import re
 import numpy as np
 import imas
+import os
+import sys
+from typing import List, Union
+import xml.etree.ElementTree as ET
+
 import cachetools as ct
 from iplotLogging import setupLogger
 from data_dictionary import idsdef
@@ -9,6 +14,8 @@ from cachetools import cachedmethod
 from iplotDataAccess.dataCommon import DataObj, DataType
 
 logger = setupLogger.get_logger(__name__)
+
+CBS_ATTR = ['documentation', 'data_type', 'units']
 
 
 class IMASDataAccess:
@@ -19,11 +26,15 @@ class IMASDataAccess:
     __input = None
     pulse = None
     run = None
+
     # user_or_path = 'public'
     # database     = 'iter'
     __isConnected = False
     dd = idsdef.IDSDef()
     access_cache = ct.LRUCache(maxsize=100)
+
+    def __init__(self):
+        self.idsdef_path = self.getIdsDefXml()
 
     def connect_source(self, connection_string=""):
         # self.connection_string="database=ITER,user_or_path=public,backend=MDSPLUS"##
@@ -88,6 +99,82 @@ class IMASDataAccess:
 
     def is_connected(self):
         return self.__isConnected
+
+    def get_var_list(self, pattern='.*'):
+        return ["a", "b", "v"]
+
+    def getIDSNames(self) -> Union[List, None]:
+        if self.idsdef_path is not None:
+            tree = ET.parse(self.idsdef_path)
+            root = tree.getroot()
+            idsnames = [ids.attrib["name"] for ids in root.findall("IDS")]
+            return idsnames
+        return None
+
+    def get_varasdasda(self, sep=':', pattern='*', times='0'):
+        return self.getIDSNames()
+
+    def getIdsDefXml(self) -> Union[str, None]:
+        idsdef_path = ""
+        if "IMAS_PREFIX" in os.environ:
+            imaspref = os.environ["IMAS_PREFIX"]
+            idsdef_path = f"{imaspref}/include/IDSDef.xml"
+
+        if not idsdef_path:
+            logger.error("Error while trying to access IDSDef.xml, make sure you've loaded IMAS module")
+            return None
+        return idsdef_path
+
+    def get_cbs_list(self):
+
+        def get_child(element):
+            children = {}
+            for attr in CBS_ATTR:
+                if attr in element.attrib:
+                    children[attr] = element.attrib[attr]
+
+            for child in element.findall("./field"):
+                children[child.attrib['name']] = get_child(child)
+            return children
+
+        tree = ET.parse(self.idsdef_path)
+        root = tree.getroot()
+
+        all_children = {}
+        for ids in root.findall("IDS"):
+            all_children[ids.attrib['name']] = get_child(ids)
+
+        return all_children
+
+    def get_ids_names(self, root):
+        return [ids.attrib["name"] for ids in root.findall("IDS")]
+
+    def list_ids_fields(self, root):
+        search_result = {}
+        for ids in root.findall("IDS"):
+            is_top_node = False
+            top_node_name = ""
+            search_result_for_ids = {}
+            for field in ids.iter("./field"):
+                attributes = {}
+
+                if "units" in field.attrib.keys():
+                    attributes["units"] = field.attrib["units"]
+                if "documentation" in field.attrib.keys():
+                    attributes["documentation"] = field.attrib["documentation"]
+                if "data_type" in field.attrib.keys():
+                    attributes["data_type"] = field.attrib["data_type"]
+
+                field_path = re.sub("\(([^:][^itime]*?)\)", "(:)", field.attrib["path_doc"])
+                if "timebasepath" in field.attrib.keys():
+                    field_path = re.sub("\(([:]*?)\)$", "(itime)", field_path)
+                search_result_for_ids[field_path] = attributes
+                if not is_top_node:
+                    is_top_node = True
+                    top_node_name = ids.attrib["name"]
+            if top_node_name:  # add to dict only if something is found
+                search_result[top_node_name] = search_result_for_ids
+        return search_result
 
     def clear_cache(self):
         self.access_cache.clear()
