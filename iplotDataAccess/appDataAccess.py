@@ -5,8 +5,8 @@ logger = setupLogger.get_logger(__name__)
 
 
 class AppDataAccess:
-    da = None
-    configured = False
+    da: DataAccess = None
+    configured: bool = False
 
     # ---------------
 
