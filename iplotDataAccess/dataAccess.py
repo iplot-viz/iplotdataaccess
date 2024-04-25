@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+from typing import Dict, List, Union
 
 import iplotDataAccess.dataSourceConfig as dSC
 from iplotLogging import setupLogger
@@ -261,10 +262,10 @@ class DataAccess:
 
     def __init__(self):
         d = dSC.DataSourceConfig()
-        self.proto = d.get_supported_data_source()
-        self.dslist = {}
-        self.defaultds = None
-        self.confFile = None
+        self.proto: List[str] = d.get_supported_data_source()
+        self.dslist: Dict[str, DataSource] = {}
+        self.defaultds: Union[DataSource, None] = None
+        self.confFile: str = ""
 
     def get_default_ds_name(self):
         if self.defaultds is None:
@@ -460,11 +461,20 @@ class DataAccess:
             return None
         return ds.get_var_fields(**kwargs)
 
+    # TODO change to a better name
     def get_connected_data_sources(self):
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.dslist.items():
             if ds_name not in data_sources and ds.connected:
                 data_sources.append(ds_name)
+        return data_sources
+
+    # TODO change to a better name
+    def get_connected_data_sources2(self):
+        data_sources = []
+        for ds_name, ds in self.dslist.items():
+            if ds.connected:
+                data_sources.append(ds)
         return data_sources
 
     # Clear cache of all the dataSources
