@@ -57,19 +57,18 @@ class DataSource:
             self.name = "DS _" + str(id(self))
         else:
             self.name = name
-        if dtype == "CODAC_UDA":
+        if dtype == dSC.DS_CODAC_TYPE:
             self.connectionString = "host=X,port=3090"
-            self.dtype = "CODAC_UDA"
-        elif dtype == "IMAS_UDA":
+        elif dtype == dSC.DS_IMAS_TYPE:
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
-            self.dtype = "IMAS_UDA"
+        self.dtype = dtype
 
     def set_connection_string(self, conninfo):
         self.connectionString = conninfo
         if "host" in conninfo:
-            self.dtype = "CODAC_UDA"
+            self.dtype = dSC.DS_CODAC_TYPE
         elif "database" in conninfo:
-            self.dtype = "IMAS_UDA"
+            self.dtype = dSC.DS_IMAS_TYPE
 
     def set_default_ds(self, default):
         self.default = default
@@ -88,7 +87,7 @@ class DataSource:
 
     def set_rt_handler(self):
         myhd = {}
-        if self.dtype == "IMAS_UDA":
+        if self.dtype == dSC.DS_IMAS_TYPE:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
             raise RTHException("Real Time Handler is not supported")
@@ -116,7 +115,7 @@ class DataSource:
             self.rtStatus = "UNEXISTING"
 
     def connect(self):
-        if self.dtype == "IMAS_UDA":
+        if self.dtype == dSC.DS_IMAS_TYPE:
             try:
                 self.daHandler = iplotDataAccess.imasAccess.IMASDataAccess()
                 self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
@@ -124,7 +123,7 @@ class DataSource:
                 self.errcode = -1
                 self.connected = False
 
-        if self.dtype == "CODAC_UDA":
+        elif self.dtype == dSC.DS_CODAC_TYPE:
             try:
                 self.daHandler = iplotDataAccess.udaAccess.UdaAccess()
                 logger.debug("connect %s ", self.connectionString)
