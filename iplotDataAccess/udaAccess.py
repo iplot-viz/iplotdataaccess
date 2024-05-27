@@ -296,7 +296,7 @@ class UdaAccess:
 
         return pulse_info
 
-    def get_pulses(self, pattern="ITER:PCS/*"):
+    def get_pulses(self, pattern='ITER:*/*'):
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
