@@ -15,7 +15,7 @@ from iplotDataAccess.dataCommon import DataObj, DataType
 
 logger = setupLogger.get_logger(__name__)
 
-CBS_ATTR = ['documentation', 'data_type', 'units']
+CBS_ATTR = ['documentation', 'data_type', 'units', 'dimension']
 
 
 class IMASDataAccess:
@@ -101,7 +101,7 @@ class IMASDataAccess:
         return self.__isConnected
 
     def get_var_list(self, pattern='.*'):
-        return ["a", "b", "v"]
+        return self.get_cbs_list(pattern)
 
     def getIDSNames(self) -> Union[List, None]:
         if self.idsdef_path is not None:
@@ -125,26 +125,38 @@ class IMASDataAccess:
             return None
         return idsdef_path
 
-    def get_cbs_list(self):
-
-        def get_child(element):
+    def get_cbs_list(self, pattern='.*'):
+        def get_child(element, path, pattern):
             children = {}
+            child_returned = False
             for attr in CBS_ATTR:
                 if attr in element.attrib:
                     children[attr] = element.attrib[attr]
+                    if attr == "data_type" and children["data_type"][-1] == "D":
+                        children["dimension"] = children["data_type"][-2]
 
             for child in element.findall("./field"):
-                children[child.attrib['name']] = get_child(child)
-            return children
+                child_name = child.attrib['name']
+                new_child = get_child(child, path + '-' + child_name, pattern)
+                if new_child:
+                    children[child_name] = new_child
+                    child_returned = True
+
+            if re.match(pattern, path) or child_returned:
+                return children
 
         tree = ET.parse(self.idsdef_path)
         root = tree.getroot()
 
         all_children = {}
         for ids in root.findall("IDS"):
-            all_children[ids.attrib['name']] = get_child(ids)
+            id_name = ids.attrib['name']
+            child = get_child(ids, id_name, pattern)
+            if re.match(pattern, id_name) or child:
+                all_children[id_name] = get_child(ids, id_name, pattern)
 
         return all_children
+
 
     def get_ids_names(self, root):
         return [ids.attrib["name"] for ids in root.findall("IDS")]
