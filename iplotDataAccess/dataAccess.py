@@ -245,7 +245,7 @@ class DataSource:
             logger.warning("ModuleNotFound_%s", self.dtype)
         return ret
 
-    def get_pulse_list(self, **kwargs):
+    def get_pulse_list(self, **kwargs) -> List[str]:
         return self.daHandler.get_pulses(**kwargs)
 
     def get_cbs_list(self, **kwargs):
@@ -443,10 +443,10 @@ class DataAccess:
 
         return None
 
-    def get_pulse_list(self, data_source_name, **kwargs):
+    def get_pulse_list(self, data_source_name, **kwargs) -> List[str]:
         ds = self.get_data_source(data_source_name)
         if ds is None:
-            return None
+            return []
         pulse_list = ds.get_pulse_list(**kwargs)
         return pulse_list
 

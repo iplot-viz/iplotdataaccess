@@ -1,4 +1,5 @@
 import operator
+from typing import List
 
 import iplotDataAccess.dataCommon as dataCommon
 import iplotDataAccess.nestedDatatype as nDT
@@ -296,11 +297,11 @@ class UdaAccess:
 
         return pulse_info
 
-    def get_pulses(self, pattern='ITER:*/*'):
+    def get_pulses(self, pattern='ITER:*/*') -> List[str]:
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
-            return None
+            return []
         return pulses_list
 
     def get_cbs_list(self, sep=':', pattern='*', times='0'):
