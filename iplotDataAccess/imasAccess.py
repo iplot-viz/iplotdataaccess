@@ -9,7 +9,11 @@ import xml.etree.ElementTree as ET
 
 import cachetools as ct
 from iplotLogging import setupLogger
-from data_dictionary import idsdef
+try:
+    from data_dictionary import idsdef as idsdd
+except ImportError:
+    from data_dictionary import idsinfo as idsdd
+    
 from cachetools import cachedmethod
 from iplotDataAccess.dataCommon import DataObj, DataType
 
@@ -30,7 +34,10 @@ class IMASDataAccess:
     # user_or_path = 'public'
     # database     = 'iter'
     __isConnected = False
-    dd = idsdef.IDSDef()
+    try:
+        dd = idsdd.IDSDef()
+    except AttributeError:
+        dd = idsdd.IDSInfo()
     access_cache = ct.LRUCache(maxsize=100)
 
     def __init__(self):
