@@ -102,22 +102,18 @@ class RTStreamer:
     def __check_if_duplicate(varname, params=None):
         if params is None:
             params = []
-        vKeysIdx = []
-        idx1 = 0
+        duplicated_index = []
+        search_start_idx = 0
 
-        if varname in params:
-            # logger.debug("entering check duplicate vname=%s params=%s", varname, params)
+        while True:
             try:
-                idx = params.index(varname, idx1)
-                vKeysIdx.append(idx)
-                idx1 = idx + 1
-            except ValueError as _:
-                idx = len(params) + 10
-            while idx < len(params):
-                pass
-
-        logger.debug("check duplicate %s %s %s", varname, params, vKeysIdx)
-        return vKeysIdx
+                idx = params.index(varname, search_start_idx)
+                duplicated_index.append(idx)
+                search_start_idx = idx + 1
+            except ValueError:
+                break
+        logger.debug("check duplicate %s %s %s", varname, params, duplicated_index)
+        return duplicated_index
 
     def __create_queues(self, vkeys, vtype, data, params=None):
         if params is None:

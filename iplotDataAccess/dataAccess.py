@@ -23,7 +23,7 @@ except ModuleNotFoundError:
     logger.warning("import'uda client' is not installed")
 
 try:
-    import iplotDataAccess.realTimeStreamer
+    from iplotDataAccess.realTimeStreamer import RTStreamer, RTStreamerException
 except ModuleNotFoundError:
     logger.warning("import'uda RT streamer' is not installed")
 
@@ -102,8 +102,8 @@ class DataSource:
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
-            self.RTHandler = iplotDataAccess.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
-                                                                         uda_a=self.daHandler)
+            self.RTHandler = RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
+                                        uda_a=self.daHandler)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -167,7 +167,7 @@ class DataSource:
                 kwargs["params"] = newparams
                 logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
                 self.RTHandler.start_subscription(**kwargs)
-            except iplotDataAccess.realTimeStreamer.RTStreamerException:
+            except RTStreamerException:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
@@ -178,7 +178,7 @@ class DataSource:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stop_subscription()
                 self.rtStatus = "STOPPED"
-            except iplotDataAccess.realTimeStreamer.RTStreamerException as _:
+            except RTStreamerException as _:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
@@ -193,7 +193,7 @@ class DataSource:
             dobj.set_empty("Streamer not properly initialized: did the subscription start?")
             return dobj
 
-        return self.RTHandler.getNextData(vname)
+        return self.RTHandler.get_next_data(vname)
 
     def __get_data_i(self, **kwargs):
         return self.daHandler.get_data(**kwargs)
