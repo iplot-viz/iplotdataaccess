@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+from typing import Dict, List, Union
 
 import iplotDataAccess.dataSourceConfig as dSC
 from iplotLogging import setupLogger
@@ -56,19 +57,18 @@ class DataSource:
             self.name = "DS _" + str(id(self))
         else:
             self.name = name
-        if dtype == "CODAC_UDA":
+        if dtype == dSC.DS_CODAC_TYPE:
             self.connectionString = "host=X,port=3090"
-            self.dtype = "CODAC_UDA"
-        elif dtype == "IMAS_UDA":
+        elif dtype == dSC.DS_IMAS_TYPE:
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
-            self.dtype = "IMAS_UDA"
+        self.dtype = dtype
 
     def set_connection_string(self, conninfo):
         self.connectionString = conninfo
         if "host" in conninfo:
-            self.dtype = "CODAC_UDA"
+            self.dtype = dSC.DS_CODAC_TYPE
         elif "database" in conninfo:
-            self.dtype = "IMAS_UDA"
+            self.dtype = dSC.DS_IMAS_TYPE
 
     def set_default_ds(self, default):
         self.default = default
@@ -87,7 +87,7 @@ class DataSource:
 
     def set_rt_handler(self):
         myhd = {}
-        if self.dtype == "IMAS_UDA":
+        if self.dtype == dSC.DS_IMAS_TYPE:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
             raise RTHException("Real Time Handler is not supported")
@@ -115,7 +115,7 @@ class DataSource:
             self.rtStatus = "UNEXISTING"
 
     def connect(self):
-        if self.dtype == "IMAS_UDA":
+        if self.dtype == dSC.DS_IMAS_TYPE:
             try:
                 self.daHandler = iplotDataAccess.imasAccess.IMASDataAccess()
                 self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
@@ -123,7 +123,7 @@ class DataSource:
                 self.errcode = -1
                 self.connected = False
 
-        if self.dtype == "CODAC_UDA":
+        elif self.dtype == dSC.DS_CODAC_TYPE:
             try:
                 self.daHandler = iplotDataAccess.udaAccess.UdaAccess()
                 logger.debug("connect %s ", self.connectionString)
@@ -261,10 +261,10 @@ class DataAccess:
 
     def __init__(self):
         d = dSC.DataSourceConfig()
-        self.proto = d.get_supported_data_source()
-        self.dslist = {}
-        self.defaultds = None
-        self.confFile = None
+        self.proto: List[str] = d.get_supported_data_source()
+        self.dslist: Dict[str, DataSource] = {}
+        self.defaultds: Union[DataSource, None] = None
+        self.confFile: str = ""
 
     def get_default_ds_name(self):
         if self.defaultds is None:
@@ -460,11 +460,20 @@ class DataAccess:
             return None
         return ds.get_var_fields(**kwargs)
 
+    # TODO change to a better name
     def get_connected_data_sources(self):
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.dslist.items():
             if ds_name not in data_sources and ds.connected:
                 data_sources.append(ds_name)
+        return data_sources
+
+    # TODO change to a better name
+    def get_connected_data_sources2(self):
+        data_sources = []
+        for ds_name, ds in self.dslist.items():
+            if ds.connected:
+                data_sources.append(ds)
         return data_sources
 
     # Clear cache of all the dataSources

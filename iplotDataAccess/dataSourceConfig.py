@@ -2,6 +2,8 @@ from iplotLogging import setupLogger
 
 logger = setupLogger.get_logger(__name__)
 
+DS_CODAC_TYPE = "CODAC_UDA"
+DS_IMAS_TYPE = "IMAS_UDA"
 
 class DataSourceConfig:
 
@@ -16,7 +18,7 @@ class DataSourceConfig:
 
             import iplotDataAccess.udaAccess
             logger.info("module 'uda client' is installed")
-            self.supportedDataSources.append("CODAC_UDA")
+            self.supportedDataSources.append(DS_CODAC_TYPE)
         except ModuleNotFoundError:
             logger.error("module 'uda client' is not installed")
 
@@ -24,7 +26,7 @@ class DataSourceConfig:
             import imas
             import iplotDataAccess.imasAccess
             logger.info("module imas is installed")
-            self.supportedDataSources.append("IMAS_UDA")
+            self.supportedDataSources.append(DS_IMAS_TYPE)
         except ModuleNotFoundError:
             logger.error("module 'imas' is not installed")
         try:
