@@ -248,6 +248,9 @@ class DataSource:
     def get_pulse_list(self, **kwargs) -> List[str]:
         return self.daHandler.get_pulses(**kwargs)
 
+    def get_pulse_info(self, **kwargs) -> List[str]:
+        return self.daHandler.get_pulse_info(**kwargs)
+
     def get_cbs_list(self, **kwargs):
         return self.daHandler.get_cbs_list(**kwargs)
 
@@ -449,6 +452,13 @@ class DataAccess:
             return []
         pulse_list = ds.get_pulse_list(**kwargs)
         return pulse_list
+
+    def get_pulse_info(self, data_source_name, **kwargs):
+        ds = self.get_data_source(data_source_name)
+        if ds is None:
+            return []
+        pulse_info = ds.get_pulse_info(**kwargs)
+        return pulse_info
 
     def get_cbs_list(self, data_source_name, **kwargs):
         ds = self.get_data_source(data_source_name)
