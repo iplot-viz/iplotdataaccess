@@ -1,25 +1,23 @@
 import operator
 import re
-import numpy as np
-import imas
 import os
-import sys
-from typing import List, Union
+import numpy as np
 import xml.etree.ElementTree as ET
-
 import cachetools as ct
+import imas
+
+from typing import List, Union
+from cachetools import cachedmethod
+
+from iplotDataAccess.dataCommon import DataObj, DataType
 from iplotLogging import setupLogger
+
+logger = setupLogger.get_logger(__name__)
+
 try:
     from data_dictionary import idsdef as idsdd
 except ImportError:
     from data_dictionary import idsinfo as idsdd
-    
-from cachetools import cachedmethod
-from iplotDataAccess.dataCommon import DataObj, DataType
-
-logger = setupLogger.get_logger(__name__)
-
-CBS_ATTR = ['documentation', 'data_type', 'units', 'dimension']
 
 
 class IMASDataAccess:
@@ -136,7 +134,7 @@ class IMASDataAccess:
         def get_child(element, path, pattern):
             children = {}
             child_returned = False
-            for attr in CBS_ATTR:
+            for attr in ['documentation', 'data_type', 'units', 'dimension']:
                 if attr in element.attrib:
                     children[attr] = element.attrib[attr]
                     if attr == "data_type" and children["data_type"][-1] == "D":
@@ -163,7 +161,6 @@ class IMASDataAccess:
                 all_children[id_name] = get_child(ids, id_name, pattern)
 
         return all_children
-
 
     def get_ids_names(self, root):
         return [ids.attrib["name"] for ids in root.findall("IDS")]
