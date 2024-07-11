@@ -8,8 +8,13 @@ from typing import List, Union
 import xml.etree.ElementTree as ET
 
 import cachetools as ct
+from PySide6.QtCore import QDir
 from iplotLogging import setupLogger
-from data_dictionary import idsdef
+try:
+    from data_dictionary import idsdef as idsdd
+except ImportError:
+    from data_dictionary import idsinfo as idsdd
+
 from cachetools import cachedmethod
 from iplotDataAccess.dataCommon import DataObj, DataType
 
@@ -30,7 +35,10 @@ class IMASDataAccess:
     # user_or_path = 'public'
     # database     = 'iter'
     __isConnected = False
-    dd = idsdef.IDSDef()
+    try:
+        dd = idsdd.IDSDef()
+    except AttributeError:
+        dd = idsdd.IDSInfo()
     access_cache = ct.LRUCache(maxsize=100)
 
     def __init__(self):
@@ -99,6 +107,49 @@ class IMASDataAccess:
 
     def is_connected(self):
         return self.__isConnected
+
+    def get_pulses(self):
+        pulse = '*'
+        run = '????'
+        run_path = '0'
+        user = 'public'
+        db = 'ITER'
+        version = '3'
+
+        path: str
+        if user == 'public':
+            path = QDir().rootPath() + QDir('/work/imas/shared/imasdb').path()
+
+        path = QDir().separator().join([path, db, str(version), str(run_path)])
+        path = QDir.cleanPath(path)
+
+        glob = f'ids_{pulse}{(run):0>4}.tree'
+        idss = QDir(path)
+        idss.setNameFilters([glob])
+
+        return idss.entryList()
+
+    def get_pulse_info(self, pulse, run):
+        db = 'ITER'
+        user = 'public'
+        input_imas = imas.DBEntry(imas.imasdef.MDSPLUS_BACKEND, db, pulse, run, user)
+        error = input_imas.open()
+        if error[0] < 0:
+            print("Data entry not valid: ", error)
+            return
+
+        ids_list = []
+        ids_list_complete = self.getIDSNames()
+
+        for ids_name in ids_list_complete:
+            t = input_imas.get_node(ids_name, 'ids_properties/homogeneous_time')
+            if t != -999999999:
+                t = len(input_imas.get_node(ids_name, 'time'))
+                ids_list.append([ids_name, str(t)])
+
+        input_imas.close()
+
+        return ids_list
 
     def get_var_list(self, pattern='.*'):
         return self.get_cbs_list(pattern)
