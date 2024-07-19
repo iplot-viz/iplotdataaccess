@@ -206,7 +206,6 @@ class IMASDataAccess:
 
         return all_children
 
-
     def get_ids_names(self, root):
         return [ids.attrib["name"] for ids in root.findall("IDS")]
 
