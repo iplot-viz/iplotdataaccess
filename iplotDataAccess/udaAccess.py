@@ -112,16 +112,13 @@ class UdaAccess:
             return dataCommon.DataType.DA_TYPE_UINT
 
     @staticmethod
-    def convert_to_nanos(ts_e):
-        if isinstance(ts_e, float) or isinstance(ts_e, int):
+    def convert_to_nanos(ts_e: str):
+        if not isinstance(ts_e, str):
             return ts_e
         if "T" in ts_e and "." in ts_e:
             try:
-
                 parsed_t = dp.parse(ts_e)
-
                 t_in_nsec = parsed_t.replace(tzinfo=timezone.utc).timestamp() * 1000000000
-
                 return format(t_in_nsec, '.0f')
             except OverflowError as _:
                 logger.error("overflow error got invalid date %s ", ts_e)
@@ -134,34 +131,20 @@ class UdaAccess:
 
     def get_uda_params(self, **kwargs):
         uda_p = Udaparams()
-        varname = ""
-        nbp = 1000
-        dec_type = None
-        ts_sn = 0
-        ts_en = 0
-        ts_s = 0
-        ts_e = 0
-        ts_format = "absolute"
-        pulse = None
-        if kwargs.get("varname"):
-            varname = kwargs.get("varname")
-        if kwargs.get("pulse"):
-            pulsenb = kwargs.get("pulse")
-            pulse = self.__parse_pulse(pulsenb)
-        if kwargs.get("nbp"):
-            nbp = kwargs.get("nbp")
-        if kwargs.get("decType"):
-            dec_type = kwargs.get("decType")
-        if kwargs.get("tsS"):
-            ts_s = kwargs.get("tsS")
-            ts_sn = self.convert_to_nanos(ts_s)
-        if kwargs.get("tsE"):
-            ts_e = kwargs.get("tsE")
-            ts_en = self.convert_to_nanos(ts_e)
 
-        if kwargs.get("tsFormat"):
-            ts_format = kwargs.get("tsFormat")
-        logger.debug("init timestamp tSS=%s and tsE=%s and tsformat=%s ", ts_s, ts_e, ts_format)
+        varname = kwargs.get("varname", "")
+        pulse_nb = kwargs.get("pulse", None)
+        pulse = self.__parse_pulse(pulse_nb)
+        nbp = kwargs.get("nbp", 1000)
+        dec_type = kwargs.get("decType", None)
+
+        ts_s = kwargs.get("tsS", "0")
+        ts_sn = self.convert_to_nanos(ts_s)
+        ts_e = kwargs.get("tsE", "0")
+        ts_en = self.convert_to_nanos(ts_e)
+
+        ts_format = kwargs.get("tsFormat", "absolute")
+        logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
         uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format)
         return uda_p
 
@@ -252,9 +235,8 @@ class UdaAccess:
 
     @staticmethod
     def __parse_pulse(pulse):
-
-        if pulse is None:
-            return pulse
+        if not pulse:
+            return None
         p = str(pulse)
         res = p.split("/")
         reslen = len(res)
