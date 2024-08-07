@@ -1,7 +1,6 @@
 import operator
 import re
 import os
-import sys
 import numpy as np
 import xml.etree.ElementTree as ET
 import cachetools as ct
@@ -13,7 +12,7 @@ from cachetools import cachedmethod
 from iplotDataAccess.dataCommon import DataObj, DataType
 from iplotLogging import setupLogger
 
-logger = setupLogger.get_logger(__name__, "DEBUG")
+logger = setupLogger.get_logger(__name__)
 
 try:
     from data_dictionary import idsdef as idsdd
