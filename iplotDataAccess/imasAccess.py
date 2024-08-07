@@ -223,12 +223,12 @@ class IMASDataAccess:
             mycfg.append("uri=" + kwargs.get("uri"))
             self.configure(mycfg)
         if kwargs.get("pulse"):
-            pulse = kwargs.get("pulse")
+            pulseId = kwargs.get("pulse")
             # Detect IMAS URI or pulse/run:
-            if pulse.startswith("imas:"):
-                mycfg.append("uri=" + pulse)
+            if pulseId.startswith("imas:"):
+                mycfg.append("uri=" + pulseId)
             else:
-                mycfg.append("pulseIdent=" + uri)            
+                mycfg.append("pulseIdent=" + pulseId)            
             self.configure(mycfg)
         if kwargs.get("tsS"):
             tsST = kwargs.get("tsS")
