@@ -1,6 +1,7 @@
 import operator
 import re
 import os
+import sys
 import numpy as np
 import xml.etree.ElementTree as ET
 import cachetools as ct
@@ -12,7 +13,7 @@ from cachetools import cachedmethod
 from iplotDataAccess.dataCommon import DataObj, DataType
 from iplotLogging import setupLogger
 
-logger = setupLogger.get_logger(__name__)
+logger = setupLogger.get_logger(__name__, "DEBUG")
 
 try:
     from data_dictionary import idsdef as idsdd
@@ -24,13 +25,10 @@ class IMASDataAccess:
     database = 'iter'
     user_or_path = 'public'
     imas_backend = imas.imasdef.MDSPLUS_BACKEND
-    # imas_dd_units = imas.dd_units.DataDictionaryUnits()
-    __input = None
     pulse = None
     run = None
-
-    # user_or_path = 'public'
-    # database     = 'iter'
+    uri = None
+    __input = None
     __isConnected = False
     try:
         dd = idsdd.IDSDef()
@@ -42,30 +40,34 @@ class IMASDataAccess:
         self.idsdef_path = self.getIdsDefXml()
 
     def connect_source(self, connection_string=""):
-        # self.connection_string="database=ITER,user_or_path=public,backend=MDSPLUS"##
-        myconn = connection_string.split(",")
-        self.configure(list_i=myconn)
+        if connection_string.startswith("imas:"):
+            self.uri = connection_string
+        else:
+            myconn = connection_string.split(",")
+            self.configure(list_i=myconn)
         # self.connect()
         return self.__input, self.__isConnected
 
     def configure(self, list_i=None):
         if list_i is None:
             list_i = []
+            return
         for s in list_i:
+            if s.startswith("uri"):
+                self.uri = s.split("=", 1)[1]
+                break
             if s.startswith("database"):
-                temp = s.split("=")
-                self.database = temp[1]
+                self.database = s.split("=")[1]
             if s.startswith("path"):
-                temp = s.split("=")
-                self.user_or_path = temp[1]
+                self.user_or_path = s.split("=")[1]
             if s.startswith("backend"):
                 temp = s.split("=")
                 if temp[1] == "MDSPLUS":
-                    self.imas_backend = imas.imasdef.MDSPLUS_BACKEND
+                    self.backend = imas.imasdef.MDSPLUS_BACKEND
                 if temp[1] == "MEMORY":
-                    self.imas_backend = imas.imasdef.MEMORY_BACKEND
+                    self.backend = imas.imasdef.MEMORY_BACKEND
                 if temp[1] == "HDF5":
-                    self.imas_backend = imas.imasdef.HDF5_BACKEND
+                    self.backend = imas.imasdef.HDF5_BACKEND
             if s.startswith("pulseIdent"):
                 temp = s.split("=")[1]
                 ret = temp.split("/")
@@ -82,25 +84,35 @@ class IMASDataAccess:
 
     def connect(self):
         try:
-            if self.pulse is None or self.run is None:
-                logger.warning("not connected to imas db,pulse or pulse is empty")
-                self.__isConnected = False
-                self.__input = None
-                return
-            self.__input = imas.DBEntry(self.imas_backend, self.database, self.pulse, self.run, self.user_or_path)
+            if self.uri is None:
+                self.uri = imas.DBEntry.build_uri_from_legacy_parameters(
+                    backend_id=self.backend,
+                    pulse=self.pulse,
+                    run=self.run,
+                    db_name=self.database,
+                    user_name=self.user_or_path,
+                    data_version="3",
+                )
+            logger.info(f"IMAS URI = {self.uri}")
+            self.__input = imas.DBEntry(uri=self.uri, mode="r")
             [err, _] = self.__input.open()
             if err != 0:
                 logger.warning("not connected to imas db")
                 self.__isConnected = False
                 self.__input = None
-
             else:
                 logger.debug("connected to imas db")
             self.__isConnected = True
+        except (TypeError, UnboundLocalError) as e:
+            logger.warning("not connected to imas db, URI is invalid or empty")
+            self.__isConnected = False
+            self.__input = None
+            return
         except imas.UALBackendException as ual:
             logger.warning("issue with opening the file %s ", ual)
             self.__isConnected = False
             self.__input = None
+            return
 
     def is_connected(self):
         return self.__isConnected
@@ -207,8 +219,16 @@ class IMASDataAccess:
             #     varname = varname1.replace(varprefix, "", 1)
             # else:
             #     varname = varname1
+        if kwargs.get("uri"):
+            mycfg.append("uri=" + kwargs.get("uri"))
+            self.configure(mycfg)
         if kwargs.get("pulse"):
-            mycfg.append("pulseIdent=" + kwargs.get("pulse"))
+            pulse = kwargs.get("pulse")
+            # Detect IMAS URI or pulse/run:
+            if pulse.startswith("imas:"):
+                mycfg.append("uri=" + pulse)
+            else:
+                mycfg.append("pulseIdent=" + uri)            
             self.configure(mycfg)
         if kwargs.get("tsS"):
             tsST = kwargs.get("tsS")
