@@ -57,66 +57,66 @@ class NestedDatatype:
         self.fields = []
         self.name = name
 
-    def existsField(self, field_name):
+    def exists_field(self, field_name):
         return any(f.name == field_name for f in self.fields)
 
-    def existsDatatype(self, typename):
+    def exists_datatype(self, typename):
         return is_primitive_datatype(typename) or typename in self.data_types
 
-    def addNestedField(self, jfield: NestedField):
-        if self.existsField(jfield.name):
+    def add_nested_field(self, jfield: NestedField):
+        if self.exists_field(jfield.name):
             logger.error(
                 f"addField. Error: adding field {self.name} to {jfield.name} datatype. It already exists")
             return False
-        if not self.existsDatatype(jfield.typename):
+        if not self.exists_datatype(jfield.typename):
             return False
         self.fields.append(jfield)
         return True
 
-    def addField(self, name: str, typename: str, dimensionality: list, units="", description=""):
+    def add_field(self, name: str, typename: str, dimensionality: list, units="", description=""):
         jfield = NestedField(name, typename, dimensionality, units, description)
-        return self.addNestedField(jfield)
+        return self.add_nested_field(jfield)
 
-    def addDataType(self, typename, jtype):
-        if self.existsDatatype(typename):
+    def add_data_type(self, typename, jtype):
+        if self.exists_datatype(typename):
             return
         self.data_types[typename] = jtype
 
-    def loadUDAJson(self, json_type: dict):
+    def load_uda_json(self, json_type: dict):
         for datatype in json_type['datatypes']:
             if datatype['name'] == "main":
                 for field in datatype['fields']:
                     mul = [field['multiplicity']]
-                    self.addField(field['name'], field['type'], mul, field['unit'], field['description'])
+                    self.add_field(field['name'], field['type'], mul, field['unit'], field['description'])
             else:
                 data_type = NestedDatatype(datatype['name'], self.data_types)
                 for field in datatype['fields']:
                     mul = [field['multiplicity']]
-                    data_type.addField(field['name'], field['type'], mul, field['unit'], field['description'])
-                self.addDataType(datatype['name'], data_type)
+                    data_type.add_field(field['name'], field['type'], mul, field['unit'], field['description'])
+                self.add_data_type(datatype['name'], data_type)
 
-    def flatDatatype(self, name: str):
+    def flat_datatype(self, name: str):
         data_type = NestedDatatype(name, self.data_types)
         for field in self.fields:
             if is_primitive_datatype(field.typename):
-                data_type.addNestedField(field)
+                data_type.add_nested_field(field)
             else:
                 if field.typename not in self.flat_data_types:
-                    self.flat_data_types[field.typename] = self.data_types[field.typename].flatDatatype(field.typename)
+                    self.flat_data_types[field.typename] = self.data_types[field.typename].flat_datatype(field.typename)
                 ftype = self.flat_data_types[field.typename]
                 combs = list(itertools.product(*[range(v) for v in field.dimensionality]))
                 if field.dimensionality == [1]:
                     for ff in ftype.fields:
                         field_copy = copy.copy(ff)
                         field_copy.name = f'{field.name}/{ff.name}'
-                        data_type.addNestedField(field_copy)
+                        data_type.add_nested_field(field_copy)
                 else:
                     for comb in combs:
                         s = ",".join(map(str, comb))
                         for ff in ftype.fields:
                             field_copy = copy.copy(ff)
                             field_copy.name = f'{field.name}[{s}]/{ff.name}'
-                            data_type.addNestedField(field_copy)
+                            data_type.add_nested_field(field_copy)
         return data_type
 
     def fields_to_json(self):
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     # --- DAN --
     # UCR = UdaClientReaderPython("4501as-hpc-0002.codac.iter.org", 3090)
     # -- SDN ---
-    UCR = UdaClientReaderPython("4509dr-srv-7201-X.codac.iter.org", 3090)
+    UCR = UdaClientReaderPython("localhost", 3090)
     if UCR.getErrorCode() != 0:
         print("Cannot create UdaClientReader. Error: {} {}".format(UCR.getErrorCode(), UCR.getErrorMsg()))
         exit()
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     js_nested = json.loads(metaJSON, object_pairs_hook=collections.OrderedDict)
 
     dt = NestedDatatype("test")
-    dt.loadUDAJson(js_nested)
-    fdt = dt.flatDatatype("test2")
+    dt.load_uda_json(js_nested)
+    fdt = dt.flat_datatype("test2")
     json_fdt = fdt.to_json()
     print(json_fdt)
