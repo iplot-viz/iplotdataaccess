@@ -119,7 +119,7 @@ class UdaAccess:
             try:
                 parsed_t = dp.parse(ts_e)
                 t_in_nsec = parsed_t.replace(tzinfo=timezone.utc).timestamp() * 1000000000
-                return format(t_in_nsec, '.0f')
+                return f"{t_in_nsec:.0f}"
             except OverflowError as _:
                 logger.error("overflow error got invalid date %s ", ts_e)
                 return -1
@@ -178,9 +178,9 @@ class UdaAccess:
             return dobj
 
         # print("value of query =%s", query)
-        tobeCached = self.check_to_add_in_cache(uda_p)
+        tobe_cached = self.check_to_add_in_cache(uda_p)
 
-        if tobeCached:
+        if tobe_cached:
             dobj = self.__fetch_data_with_cache(query)
         else:
             dobj = self.__fetch_data_x(query)
@@ -261,17 +261,17 @@ class UdaAccess:
         return unitval
 
     def get_pulse_info(self, pulse_id="0"):
-        logger.debug(("requires a pulse {} and the cache {} ".format(pulse_id, self.pulses_cache)))
+        logger.debug(f"requires a pulse {pulse_id} and the cache {self.pulses_cache}")
         if pulse_id in self.pulses_cache.keys():
             pulse_info = self.pulses_cache.get(pulse_id)
             logger.debug("found pulse in the cache", pulse_id)
         else:
             pulse_info = self.UCR.getPulseInfo2(pulse_id)
             if self.UCR.getErrorCode() != 0:
-                logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+                logger.error(f"Request error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
                 return None
             if self.UCR.isEmptyPulse2(pulse_info.pulseID):
-                logger.error(("Request error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+                logger.error(f"Request error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
                 return None
             if pulse_info.timeTo < time.time_ns():
                 self.pulses_cache.update({pulse_id: pulse_info})
@@ -281,7 +281,7 @@ class UdaAccess:
     def get_pulses(self, pattern="ITER:PCS/*"):
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
-            logger.error(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return None
         return pulses_list
 
@@ -302,7 +302,7 @@ class UdaAccess:
     def get_var_fields(self, variable, timestamp='-1'):
         uda_type = self.UCR.getMetaTypeJSONCollapsed(variable, str(timestamp))
         if self.UCR.getErrorCode() != 0:
-            print(("Response error. Error: {} {}".format(self.UCR.getErrorCode(), self.UCR.getErrorMsg())))
+            logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return None
 
         if uda_type:
@@ -326,10 +326,8 @@ class UdaAccess:
                 return dobj
         # we query always absolute to ease adding first and last data point, and we transform the data aftewrads
         if uda_p.pulse is None or uda_p.pulse == "None":
-            query1 = "variable={},tsFormat={},decSamples={},startTime={},endTime={}".format(uda_p.varname,
-                                                                                            uda_p.tsFormat,
-                                                                                            uda_p.nbps, uda_p.startT,
-                                                                                            uda_p.endT)
+            query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                      f"startTime={uda_p.startT},endTime={uda_p.endT}")
         else:
             if uda_p.pulse == "0":
                 uda_p.pulse = self.UCR.getLastPulse()
@@ -353,31 +351,23 @@ class UdaAccess:
                 # get
                 logger.debug("current pulse et=%d st=%d", uda_p.endT, uda_p.startT)
 
-                # to bypass the cache we explicitely move the end time...udaP.tsFormat,
-                query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(
-                    uda_p.varname,
-                    uda_p.tsFormat,
-                    uda_p.nbps,
-                    uda_p.pulse,
-                    uda_p.startT,
-                    uda_p.endT)
+                # to bypass the cache we explicitly move the end time...udaP.tsFormat,
+                query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                          f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S")
+
             else:
                 if isnew == 1:
                     self.pulses_cache.update({uda_p.pulse: pulse_i})
-                    logger.debug("completed pulse tsE=%d,tsS=%d and added to the cache", uda_p.endT, uda_p.startT)
+                    logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
                 if uda_p.endT == 0:
-                    query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S".format(uda_p.varname,
-                                                                                                   uda_p.tsFormat,
-                                                                                                   uda_p.nbps,
-                                                                                                   uda_p.pulse,
-                                                                                                   uda_p.startT,
-                                                                                                   uda_p.endT)
+                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S")
                 else:
-                    query1 = "variable={},tsFormat={},decSamples={},pulse={},startTime={}S,endTime={}S".format(
-                        uda_p.varname, uda_p.tsFormat, uda_p.nbps, uda_p.pulse, uda_p.startT, uda_p.endT)
+                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S")
 
         if uda_p.decType is not None:
-            query = query1 + ",decType={}".format(uda_p.decType)
+            query = query1 + f",decType={uda_p.decType}"
         else:
             query = query1
         return query
@@ -429,7 +419,7 @@ class UdaAccess:
             dobj.set_data(self.UCR.getDataNativeRank(handle), 2)
         if dobj.ydata is None:
             self.UCR.releaseData(handle)
-            self.errdesc = "no data found {}for query ".format(query)
+            self.errdesc = f"No data found for query '{query}'"
             self.errcode = -3
             # self.UCR.resetAll()
             dobj.set_err(self.errcode, self.errdesc)
@@ -483,7 +473,7 @@ class UdaAccess:
 
         if data is None:
             self.UCR.releaseData(handle)
-            self.errdesc = "no data found {}for query ".format(query)
+            self.errdesc = f"No data found for query '{query}'"
             self.errdesc = -3
             # self.UCR.resetAll()
             d_env.set_err(self.errcode, self.errdesc)
@@ -511,9 +501,9 @@ class UdaAccess:
             logger.debug("getEnveloppe exiting pulse does not exist")
             return dobj
 
-        tobeCached = self.check_to_add_in_cache(uda_p)
+        tobe_cached = self.check_to_add_in_cache(uda_p)
 
-        if tobeCached:
+        if tobe_cached:
             d_env = self.__fetch_envelope_with_cache(query)
         else:
             d_env = self.__fetch_envelope(query)
