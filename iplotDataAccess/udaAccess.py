@@ -22,7 +22,7 @@ import cachetools as ct
 logger = setupLog.get_logger(__name__)
 
 
-class Udaparams:
+class UdaParams:
     def __init__(self):
         self.varname = None
         self.nbps = 0
@@ -33,8 +33,9 @@ class Udaparams:
         self.tsFormat = None
         self.pStart = None
         self.pEnd = None
+        self.extSamples = None
 
-    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format):
+    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples):
         self.varname = varname
         self.nbps = nbps
         self.decType = dec_type
@@ -42,6 +43,7 @@ class Udaparams:
         self.endT = end_t
         self.pulse = pulse
         self.tsFormat = ts_format
+        self.extSamples = ext_samples
 
 
 # class to interface with data source - here UDA
@@ -130,7 +132,7 @@ class UdaAccess:
             return ts_e
 
     def get_uda_params(self, **kwargs):
-        uda_p = Udaparams()
+        uda_p = UdaParams()
 
         varname = kwargs.get("varname", "")
         pulse_nb = kwargs.get("pulse", None)
@@ -142,10 +144,10 @@ class UdaAccess:
         ts_sn = self.convert_to_nanos(ts_s)
         ts_e = kwargs.get("tsE", "0")
         ts_en = self.convert_to_nanos(ts_e)
-
+        ext_samples = kwargs.get("extremities", False)
         ts_format = kwargs.get("tsFormat", "absolute")
         logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
-        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format)
+        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples)
         return uda_p
 
     def check_to_add_in_cache(self, uda_p):
@@ -327,7 +329,7 @@ class UdaAccess:
         # we query always absolute to ease adding first and last data point, and we transform the data aftewrads
         if uda_p.pulse is None or uda_p.pulse == "None":
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                      f"startTime={uda_p.startT},endTime={uda_p.endT}")
+                      f"startTime={uda_p.startT},endTime={uda_p.endT},extSamples={uda_p.extSamples}")
         else:
             if uda_p.pulse == "0":
                 uda_p.pulse = self.UCR.getLastPulse()
@@ -353,7 +355,8 @@ class UdaAccess:
 
                 # to bypass the cache we explicitly move the end time...udaP.tsFormat,
                 query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                          f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S")
+                          f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S,"
+                          f"extSamples={uda_p.extSamples}")
 
             else:
                 if isnew == 1:
@@ -361,10 +364,11 @@ class UdaAccess:
                     logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
                 if uda_p.endT == 0:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S")
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,extSamples={uda_p.extSamples}")
                 else:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S")
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S,"
+                              f"extSamples={uda_p.extSamples}")
 
         if uda_p.decType is not None:
             query = query1 + f",decType={uda_p.decType}"
