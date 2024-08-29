@@ -119,7 +119,7 @@ class IMASDataAccess:
     def is_connected(self):
         return self.__isConnected
 
-    def get_pulses(self, pulse='*', run='????'):
+    def get_pulses(self, pulse='*', run='????', **kwargs):
         run_path = '0'
         user = 'public'
         db = 'ITER'
