@@ -187,8 +187,7 @@ class UdaAccess:
         else:
             dobj = self.__fetch_data_x(query)
 
-        if (dobj.errcode == -1 or os.getenv("MINT_GET_EXTRE") is None
-                or uda_p.tsFormat == "relative" or os.getenv("MINT_GET_EXTRE") == "False"):
+        if dobj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
             return dobj
 
         # we retrieve the extremities
@@ -329,7 +328,7 @@ class UdaAccess:
         # we query always absolute to ease adding first and last data point, and we transform the data aftewrads
         if uda_p.pulse is None or uda_p.pulse == "None":
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                      f"startTime={uda_p.startT},endTime={uda_p.endT},extSamples={uda_p.extSamples}")
+                      f"startTime={uda_p.startT},endTime={uda_p.endT}")  # ,extSamples={uda_p.extSamples}")
         else:
             if uda_p.pulse == "0":
                 uda_p.pulse = self.UCR.getLastPulse()
@@ -356,7 +355,7 @@ class UdaAccess:
                 # to bypass the cache we explicitly move the end time...udaP.tsFormat,
                 query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                           f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S,"
-                          f"extSamples={uda_p.extSamples}")
+                          )  # f"extSamples={uda_p.extSamples}")
 
             else:
                 if isnew == 1:
@@ -364,11 +363,11 @@ class UdaAccess:
                     logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
                 if uda_p.endT == 0:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,extSamples={uda_p.extSamples}")
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S")  # ,extSamples={uda_p.extSamples}")
                 else:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S,"
-                              f"extSamples={uda_p.extSamples}")
+                              )  # f"extSamples={uda_p.extSamples}")
 
         if uda_p.decType is not None:
             query = query1 + f",decType={uda_p.decType}"
