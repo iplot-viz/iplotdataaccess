@@ -231,6 +231,13 @@ class IMASDataAccess:
 
                 if "units" in field.attrib.keys():
                     attributes["units"] = field.attrib["units"]
+                    if "as_parent" in attributes["units"]: # go up the AoS until we find the real unit:
+                        for sfield in reversed(fieldlist):
+                            if "units" in sfield.attrib.keys():
+                                if "as_parent" not in sfield.attrib["units"]:
+                                    attributes["units"] = sfield.attrib["units"]
+                                    break
+                    attributes["units"] = field.attrib["units"]
                 if "documentation" in field.attrib.keys():
                     attributes["documentation"] = field.attrib["documentation"]
                 if "data_type" in field.attrib.keys():
@@ -386,6 +393,12 @@ class IMASDataAccess:
                 dobj.set_data(self.__get_time_data(idsn=res[-2], idsp=idsp), 1)
                 metadata = self.__get_metadata(res[-2], res[-1])
                 dobj.yunit = self.__get_units(metadata)
+                if "as_parent" in dobj.yunit: # we go up until we find the parent unit:
+                    res_up = res[-1]
+                    while "as_parent" in dobj.yunit:
+                        res_up = res_up.rpartition("/")[0]
+                        meta_up = self.__get_metadata(res[-2], res_up)
+                        dobj.yunit = self.__get_units(meta_up)
                 time_type = self.__input.partial_get(ids_name=res[-2], data_path="ids_properties/homogeneous_time")
                 if time_type == 0:  # time under each data (heterogenous)
                     dpath = res[-1].rpartition('/')[0] + "/time"
