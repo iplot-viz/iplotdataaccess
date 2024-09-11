@@ -36,7 +36,7 @@ class RTHException(Exception):
 class DataSource:
 
     def __init__(self, dtype=None, name=None):
-        self.connected = False
+        self._connected = False
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
         self.rterrcode = 0
@@ -62,6 +62,14 @@ class DataSource:
         elif dtype == dSC.DS_IMAS_TYPE:
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
         self.dtype = dtype
+
+    @property
+    def connected(self):
+        return self._connected
+
+    @connected.setter
+    def connected(self, connected):
+        self._connected = connected
 
     def set_connection_string(self, conninfo):
         self.connectionString = conninfo
@@ -309,23 +317,23 @@ class DataAccess:
                     ds = DataSource(name=dname)
                     self.dslist[dname] = ds
 
-                if line.rstrip().startswith("conninfo") and dname != "":
+                elif line.rstrip().startswith("conninfo") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_connection_string(s)
-                if line.rstrip().startswith("rturl") and dname != "":
+                elif line.rstrip().startswith("rturl") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_url(s)
-                if line.rstrip().startswith("rtauth") and dname != "":
+                elif line.rstrip().startswith("rtauth") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_auth(s)
-                if line.rstrip().startswith("rtheaders") and dname != "":
+                elif line.rstrip().startswith("rtheaders") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_headers(s)
-                if line.rstrip().startswith("default") and dname != "":
+                elif line.rstrip().startswith("default") and dname != "":
                     s = line.rstrip().split("=", 1)[1].lower()
                     self.dslist[dname].set_default_ds(s == "true")
 
-                if line.rstrip().startswith("varprefix") and dname != "":
+                elif line.rstrip().startswith("varprefix") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
                     self.dslist[dname].set_var_prefix(s)
