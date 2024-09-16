@@ -140,21 +140,33 @@ class RTStreamer:
         if len(line) == 1:  # If data is only one token, it is only time
             return
 
+        num_samples = int(line[ProtoHeader.NB_SMP.value])
         xtype = DataType.DA_TYPE_ULONG
         xlabel = "Time"
-        ylabel = ""
         xunit = "ns"
+        ylabel = ""
+        ytype = ""
         drank = 1
         try:
             ytype = self.__convert_type(line[ProtoHeader.VAL_DT.value])
         except IndexError as _:
-            logger.warning("index error for line %s", line)
+            logger.warning(f"index error for line {line}")
             return
         if ytype == DataType.DA_TYPE_STRING:
             logger.warning("string not currently supported for streaming, skipping")
             return
 
-        val = data.split(" V ")
+        if line[ProtoHeader.VAL_DT.value].startswith("E"):
+            logger.warning(f"Event message for line {line}")
+            return
+        if line[ProtoHeader.VAL_DT.value] in ['PD', 'PS']:
+            val = data.split(" V ")
+        elif line[ProtoHeader.VAL_DT.value] == "ED":
+            val = data.split()
+            val = [" ".join(val[:4])] + [" ".join(val[i:i + 4]) for i in range(4, len(val), 4)]
+        else:
+            val = data.split()
+            val = [" ".join(val[:4])] + [" ".join(val[i:i + 2]) for i in range(4, len(val), 2)]
         # TODO
         # protect the code in case of event mixing up
         # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513472231 ', '0.421761 NO_ALARM NO_ALARM']
@@ -164,21 +176,23 @@ class RTStreamer:
         # '0.000000 NO_ALARM NO_ALARM']
         # ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ',
         # '0.000000 NO_ALARM NO_ALARM']
-        if len(val) < int(line[ProtoHeader.NB_SMP.value]) + 1:
-            logger.warning("sline mixing event and data skipping %s", val)
+
+        if len(val) < num_samples + 1:
+            logger.warning(f"sline mixing event and data skipping {val}")
             return
-        xdata = np.zeros(int(line[ProtoHeader.NB_SMP.value]), dtype='uint64')
-        ydata = np.zeros(int(line[ProtoHeader.NB_SMP.value]))
+        xdata = np.zeros(num_samples, dtype='uint64')
+        ydata = np.zeros(num_samples)
         d = DataObj()
         yunit = self.__units.get(line[ProtoHeader.VARNAME.value])
         d.set_a(xtype, ytype, xlabel, ylabel, xunit, yunit, drank)
-        for i in range(int(line[ProtoHeader.NB_SMP.value])):
+
+        for i in range(num_samples):
             xdata[i] = int(line[ProtoHeader.NB_SMP.value + i + 1]) * 1000000
             ydata[i] = float(val[i + 1].split(" ")[0])
 
         d.set_data(xdata, 1)
         d.set_data(ydata, 2)
-        # logger.debug("before calling check duplocate")
+        # logger.debug("before calling check duplicate")
         vkeys = self.__check_if_duplicate(line[ProtoHeader.VARNAME.value], params=params)
         self.__create_queues(vkeys, line[ProtoHeader.VAL_DT.value], d, params=params)
 

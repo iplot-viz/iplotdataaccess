@@ -36,7 +36,7 @@ class RTHException(Exception):
 class DataSource:
 
     def __init__(self, dtype=None, name=None):
-        self.connected = False
+        self._connected = False
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
         self.rterrcode = 0
@@ -62,6 +62,14 @@ class DataSource:
         elif dtype == dSC.DS_IMAS_TYPE:
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
         self.dtype = dtype
+
+    @property
+    def connected(self):
+        return self._connected
+
+    @connected.setter
+    def connected(self, connected):
+        self._connected = connected
 
     def set_connection_string(self, conninfo):
         self.connectionString = conninfo
@@ -245,6 +253,12 @@ class DataSource:
             logger.warning("ModuleNotFound_%s", self.dtype)
         return ret
 
+    def get_pulse_list(self, **kwargs) -> List[str]:
+        return self.daHandler.get_pulses(**kwargs)
+
+    def get_pulse_info(self, **kwargs) -> List[str]:
+        return self.daHandler.get_pulse_info(**kwargs)
+
     def get_cbs_list(self, **kwargs):
         return self.daHandler.get_cbs_list(**kwargs)
 
@@ -303,23 +317,23 @@ class DataAccess:
                     ds = DataSource(name=dname)
                     self.dslist[dname] = ds
 
-                if line.rstrip().startswith("conninfo") and dname != "":
+                elif line.rstrip().startswith("conninfo") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_connection_string(s)
-                if line.rstrip().startswith("rturl") and dname != "":
+                elif line.rstrip().startswith("rturl") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_url(s)
-                if line.rstrip().startswith("rtauth") and dname != "":
+                elif line.rstrip().startswith("rtauth") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_auth(s)
-                if line.rstrip().startswith("rtheaders") and dname != "":
+                elif line.rstrip().startswith("rtheaders") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_headers(s)
-                if line.rstrip().startswith("default") and dname != "":
+                elif line.rstrip().startswith("default") and dname != "":
                     s = line.rstrip().split("=", 1)[1].lower()
                     self.dslist[dname].set_default_ds(s == "true")
 
-                if line.rstrip().startswith("varprefix") and dname != "":
+                elif line.rstrip().startswith("varprefix") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
                     self.dslist[dname].set_var_prefix(s)
@@ -439,6 +453,20 @@ class DataAccess:
                 return self.defaultds.get_envelope(**kwargs)
 
         return None
+
+    def get_pulse_list(self, data_source_name, **kwargs) -> List[str]:
+        ds = self.get_data_source(data_source_name)
+        if ds is None:
+            return []
+        pulse_list = ds.get_pulse_list(**kwargs)
+        return pulse_list
+
+    def get_pulse_info(self, data_source_name, **kwargs):
+        ds = self.get_data_source(data_source_name)
+        if ds is None:
+            return []
+        pulse_info = ds.get_pulse_info(**kwargs)
+        return pulse_info
 
     def get_cbs_list(self, data_source_name, **kwargs):
         ds = self.get_data_source(data_source_name)
