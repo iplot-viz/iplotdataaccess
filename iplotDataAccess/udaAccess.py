@@ -171,69 +171,69 @@ class UdaAccess:
         return True
 
     def get_data(self, **kwargs):
-        fneeded = True
-        lneeded = True
+        first_needed = True
+        last_needed = True
         uda_p = self.get_uda_params(**kwargs)
         query = self.get_data_i(uda_p)
         if query is None:
-            dobj = dataCommon.DataObj()
-            dobj.set_err(-1, "Invalid Pulse ID")
-            return dobj
+            data_obj = dataCommon.DataObj()
+            data_obj.set_err(-1, "Invalid Pulse ID")
+            return data_obj
 
         # print("value of query =%s", query)
         tobe_cached = self.check_to_add_in_cache(uda_p)
 
         if tobe_cached:
-            dobj = self.__fetch_data_with_cache(query)
+            data_obj = self.__fetch_data_with_cache(query)
         else:
-            dobj = self.__fetch_data_x(query)
+            data_obj = self.__fetch_data_x(query)
 
-        if dobj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
-            return dobj
-
+        if (data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples or
+                os.getenv("MINT_GET_EXTRE") is None or os.getenv("MINT_GET_EXTRE").lower() == "false"):
+            return data_obj
         # we retrieve the extremities
         if "decType=" in query:
             query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
         else:
             query_l1 = query + ",decType=last"
 
-        if dobj.errcode == 0:
+        if data_obj.errcode == 0:
             # check if we need to retrieve the point before thet beginning decType=last
-            if dobj.xdata[0] == uda_p.startT:
-                lneeded = False
-            if dobj.xdata[-1] == uda_p.endT:
-                fneeded = False
-        logger.debug("dobj first len=%d", len(dobj.xdata))
+            if data_obj.xdata[0] == uda_p.startT:
+                last_needed = False
+            if data_obj.xdata[-1] == uda_p.endT:
+                first_needed = False
+        logger.debug("dobj first len=%d", len(data_obj.xdata))
 
-        if lneeded:
+        if last_needed:
             query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
             query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
             dobj_f = self.__fetch_data_x(query_l)
             # last query performed to retrieve the last point and to be put at the beginning
 
             if dobj_f.errcode == 0:
-                if dobj.errcode == -3:
-                    dobj = dataCommon.DataObj()
-                    dobj.xdata = np.empty(0)
-                    dobj.ydata = np.empty(0)
+                if data_obj.errcode == -3:
+                    data_obj = dataCommon.DataObj()
+                    data_obj.xdata = np.empty(0)
+                    data_obj.ydata = np.empty(0)
 
-                xdata = np.insert(dobj.xdata, 0, uda_p.startT)
-                ydata = np.insert(dobj.ydata, 0, dobj_f.ydata[0])
-                dobj.xdata = xdata
-                dobj.ydata = ydata
+                xdata = np.insert(data_obj.xdata, 0, uda_p.startT)
+                ydata = np.insert(data_obj.ydata, 0, dobj_f.ydata[0])
+                data_obj.xdata = xdata
+                data_obj.ydata = ydata
                 logger.debug("dobj F %d", dobj_f.xdata[0])
-                dobj.errcode = 0
+                data_obj.errcode = 0
         # if no data at the end make it constant to have a line especially when there is one point
         # if errcode==0 means no archive data
-        if fneeded and dobj.errcode == 0:
-            xdata1 = np.append(dobj.xdata, uda_p.endT)
-            lastp = dobj.ydata[-1]
-            ydata1 = np.append(dobj.ydata, lastp)
-            dobj.xdata = xdata1
-            dobj.ydata = ydata1
-            logger.debug("dobj final len=%d", len(dobj.xdata))
+        if first_needed and data_obj.errcode == 0:
+            xdata1 = np.append(data_obj.xdata, uda_p.endT)
+            lastp = data_obj.ydata[-1]
+            ydata1 = np.append(data_obj.ydata, lastp)
+            data_obj.xdata = xdata1
+            data_obj.ydata = ydata1
+            logger.debug("dobj final len=%d", len(data_obj.xdata))
 
-        return dobj
+        return data_obj
 
     @staticmethod
     def __parse_pulse(pulse):
@@ -326,10 +326,16 @@ class UdaAccess:
             if self.errcode == -1:
                 dobj.set_err(self.errcode, self.errdesc)
                 return dobj
-        # we query always absolute to ease adding first and last data point, and we transform the data aftewrads
+        # If venv extremities is activated disable extSamples option in query
+        if os.getenv("MINT_GET_EXTRE") is None or os.getenv("MINT_GET_EXTRE").lower() == "false":
+            ext_query = f",extSamples={uda_p.extSamples}"
+        else:
+            ext_query = ""
+
+        # we query always absolute to ease adding first and last data point, and we transform the data afterward
         if uda_p.pulse is None or uda_p.pulse == "None":
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                      f"startTime={uda_p.startT},endTime={uda_p.endT}")  # ,extSamples={uda_p.extSamples}")
+                      f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
             if uda_p.pulse == "0":
                 uda_p.pulse = self.UCR.getLastPulse()
@@ -355,8 +361,7 @@ class UdaAccess:
 
                 # to bypass the cache we explicitly move the end time...udaP.tsFormat,
                 query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                          f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S,"
-                          )  # f"extSamples={uda_p.extSamples}")
+                          f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
 
             else:
                 if isnew == 1:
@@ -364,11 +369,10 @@ class UdaAccess:
                     logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
                 if uda_p.endT == 0:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S")  # ,extSamples={uda_p.extSamples}")
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S{ext_query}")
                 else:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
-                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S,"
-                              )  # f"extSamples={uda_p.extSamples}")
+                              f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
 
         if uda_p.decType is not None:
             query = query1 + f",decType={uda_p.decType}"
