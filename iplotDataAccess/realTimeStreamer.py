@@ -90,9 +90,8 @@ class RTStreamer:
     @staticmethod
     def __convert_type(utype):
 
-        if utype == "D" or utype == "PD":
+        if utype in ["D", "PD", "ED"]:
             return DataType.DA_TYPE_DOUBLE
-
         elif utype == "L":
             return DataType.DA_TYPE_LONG
         elif utype == "S" or utype == "PS":
@@ -136,8 +135,8 @@ class RTStreamer:
             params = []
         if data.startswith("heartbeat"):
             return
-        line = data.split(" ")
-        if len(line) == 1:  # If data is only one token, it is only time
+        line = data.split()
+        if len(line) <= 1:  # If data is only one token, it is only time
             return
 
         num_samples = int(line[ProtoHeader.NB_SMP.value])
@@ -145,7 +144,6 @@ class RTStreamer:
         xlabel = "Time"
         xunit = "ns"
         ylabel = ""
-        ytype = ""
         drank = 1
         try:
             ytype = self.__convert_type(line[ProtoHeader.VAL_DT.value])
@@ -156,29 +154,24 @@ class RTStreamer:
             logger.warning("string not currently supported for streaming, skipping")
             return
 
-        if line[ProtoHeader.VAL_DT.value].startswith("E"):
-            logger.warning(f"Event message for line {line}")
-            return
-        if line[ProtoHeader.VAL_DT.value] in ['PD', 'PS']:
-            val = data.split(" V ")
+        if line[ProtoHeader.VAL_DT.value] == 'PD':
+            values = [[line[4 + i], line[5 + num_samples + 4*i]] for i in range(num_samples)]
         elif line[ProtoHeader.VAL_DT.value] == "ED":
-            val = data.split()
-            val = [" ".join(val[:4])] + [" ".join(val[i:i + 4]) for i in range(4, len(val), 4)]
+            values = [[line[4 + i]] + line[4 + num_samples + i: 7 + num_samples + i] for i in range(num_samples)]
         else:
-            val = data.split()
-            val = [" ".join(val[:4])] + [" ".join(val[i:i + 2]) for i in range(4, len(val), 2)]
-        # TODO
-        # protect the code in case of event mixing up
-        # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513472231 ', '0.421761 NO_ALARM NO_ALARM']
-        # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513480496 ', '0.333320 NO_ALARM NO_ALARM']
-        # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513492192 ', '0.000000 NO_ALARM NO_ALARM']
-        # ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ',
-        # '0.000000 NO_ALARM NO_ALARM']
-        # ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ',
-        # '0.000000 NO_ALARM NO_ALARM']
+            values = [[line[4 + i], line[4 + num_samples + i]] for i in range(num_samples)]
+            # TODO
+            # protect the code in case of event mixing up
+            # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513472231 ', '0.421761 NO_ALARM NO_ALARM']
+            # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513480496 ', '0.333320 NO_ALARM NO_ALARM']
+            # ['UTIL-HV-S22-BUS3:TOTAL_POWER L PD 1 1631513492192 ', '0.000000 NO_ALARM NO_ALARM']
+            # ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ',
+            # '0.000000 NO_ALARM NO_ALARM']
+            # ['UTIL-HV-S22:TOTAL_POWER_LC13 L PD 2 1629706018897 1629706018901  E[9] Connected ',
+            # '0.000000 NO_ALARM NO_ALARM']
 
-        if len(val) < num_samples + 1:
-            logger.warning(f"sline mixing event and data skipping {val}")
+            if len(values) < num_samples + 1:
+                logger.warning(f"sline mixing event and data skipping {values}")
             return
         xdata = np.zeros(num_samples, dtype='uint64')
         ydata = np.zeros(num_samples)
@@ -186,9 +179,9 @@ class RTStreamer:
         yunit = self.__units.get(line[ProtoHeader.VARNAME.value])
         d.set_a(xtype, ytype, xlabel, ylabel, xunit, yunit, drank)
 
-        for i in range(num_samples):
-            xdata[i] = int(line[ProtoHeader.NB_SMP.value + i + 1]) * 1000000
-            ydata[i] = float(val[i + 1].split(" ")[0])
+        for i, val in enumerate(values):
+            xdata[i] = int(val[0]) * 1000000
+            ydata[i] = float(val[1])
 
         d.set_data(xdata, 1)
         d.set_data(ydata, 2)
