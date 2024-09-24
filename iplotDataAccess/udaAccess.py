@@ -281,7 +281,7 @@ class UdaAccess:
         return pulse_info
 
     def get_pulses(self, pattern='*:*/*') -> List[str]:
-        pulses_list = self.UCR.getPulses2(pattern)
+        pulses_list = self.UCR.getPulses2(pattern, "")
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return []
