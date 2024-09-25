@@ -352,7 +352,7 @@ class UdaAccess:
                 return query
             # ongoing pulse
             if pulse_i.timeTo >= time.time_ns() and (
-                    pulse_i.timeFrom + int(uda_p.endT * 1000000000) >= time.time_ns() or uda_p.endT == 0):
+                    uda_p.endT is None or pulse_i.timeFrom + int(uda_p.endT * 1000000000) >= time.time_ns()):
 
                 uda_p.endT = math.ceil((time.time_ns() - pulse_i.timeFrom) / 1000000000)
 
@@ -367,7 +367,7 @@ class UdaAccess:
                 if isnew == 1:
                     self.pulses_cache.update({uda_p.pulse: pulse_i})
                     logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
-                if uda_p.endT == 0:
+                if uda_p.endT is None:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S{ext_query}")
                 else:
