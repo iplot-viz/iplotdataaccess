@@ -363,10 +363,10 @@ class IMASDataAccess:
         try:
             level1 = res[-1].split("/", 1)
             metadata = self.__get_metadata(res[-2], level1[0])
-            print("found meta %s", metadata)
+            # print("found meta %s", metadata)
             dp = metadata["data_type"]
             ts = metadata["timebasepath"]
-            print("found dp =%s and ts=%s ", dp, ts)
+            # print("found dp =%s and ts=%s ", dp, ts)
             if dp == "struct_array" and ts == "time":
                 if re.search(r'\(:\)|\(0\)|\(\d+\)', level1[0]):
                     idsp = '/'.join(level1)
@@ -383,7 +383,7 @@ class IMASDataAccess:
             return dobj
         dobj.set_a(DataType.DA_TYPE_FLOAT, DataType.DA_TYPE_FLOAT, 'Time', '', '', '', 1)
         try:
-            print("ids res %s", res[-1], idsp)
+            # print("ids res %s", res[-1], idsp)
 
             if len(res) == 1:
                 dobj.set_data(self.__input.partial_get(ids_name=res[-1], data_path=""), 2)
@@ -426,7 +426,7 @@ class IMASDataAccess:
                     dobj.xdata = dobj.xdata[idx]
                     # newidx=[slice(None)] * (dobj.ydata.ndim - 1) + [idx]
                     # this extracts the last dimension
-                    print(dobj.ydata.ndim)
+                    # print("ndim: ", dobj.ydata.ndim)
                     if dobj.ydata.ndim == 1:
                         dobj.ydata = dobj.ydata[idx]
                     elif dobj.ydata.ndim == 2:
