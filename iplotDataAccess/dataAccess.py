@@ -77,6 +77,8 @@ class DataSource:
             self.dtype = dSC.DS_CODAC_TYPE
         elif "database" in conninfo:
             self.dtype = dSC.DS_IMAS_TYPE
+        elif "csv" in conninfo:
+            self.dtype = dSC.DS_CSV_TYPE
 
     def set_default_ds(self, default):
         self.default = default
@@ -137,6 +139,13 @@ class DataSource:
                 logger.debug("connect %s ", self.connectionString)
                 self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
 
+            except ModuleNotFoundError:
+                self.errcode = -1
+                self.connected = False
+        elif self.dtype == dSC.DS_CSV_TYPE:
+            try:
+                self.daHandler = iplotDataAccess.csvAccess.CsvAccess(self.connectionString.split("=")[1])
+                self.connected = True
             except ModuleNotFoundError:
                 self.errcode = -1
                 self.connected = False

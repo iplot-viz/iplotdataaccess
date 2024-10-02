@@ -4,6 +4,8 @@ logger = setupLogger.get_logger(__name__)
 
 DS_CODAC_TYPE = "CODAC_UDA"
 DS_IMAS_TYPE = "IMAS_UDA"
+DS_CSV_TYPE = "CSV"
+
 
 class DataSourceConfig:
 
@@ -34,5 +36,11 @@ class DataSourceConfig:
             logger.info("module sseclient is installed")
         except ModuleNotFoundError:
             logger.error("module 'sseclient' is not installed")
+
+        try:
+            import iplotDataAccess.csvAccess
+            self.supportedDataSources.append(DS_CSV_TYPE)
+        except ModuleNotFoundError:
+            logger.error("module 'csvAccess' is not installed")
 
         return self.supportedDataSources
