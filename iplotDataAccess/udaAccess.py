@@ -188,52 +188,87 @@ class UdaAccess:
         else:
             data_obj = self.__fetch_data_x(query)
 
-        if (data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples or
-                os.getenv("MINT_GET_EXTRE") is None or os.getenv("MINT_GET_EXTRE").lower() == "false"):
+        if data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
             return data_obj
-        # we retrieve the extremities
-        if "decType=" in query:
-            query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
+
+        if os.getenv("MINT_GET_EXTRE").lower() == "true":
+            # we retrieve the extremities
+            if "decType=" in query:
+                query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
+            else:
+                query_l1 = query + ",decType=last"
+
+            if data_obj.errcode == 0:
+                # check if we need to retrieve the point before thet beginning decType=last
+                if data_obj.xdata[0] == uda_p.startT:
+                    last_needed = False
+                if data_obj.xdata[-1] == uda_p.endT:
+                    first_needed = False
+            logger.debug("dobj first len=%d", len(data_obj.xdata))
+
+            if last_needed:
+                query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
+                query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
+                dobj_f = self.__fetch_data_x(query_l)
+                # last query performed to retrieve the last point and to be put at the beginning
+
+                if dobj_f.errcode == 0:
+                    if data_obj.errcode == -3:
+                        data_obj = dataCommon.DataObj()
+                        data_obj.xdata = np.empty(0)
+                        data_obj.ydata = np.empty(0)
+
+                    xdata = np.insert(data_obj.xdata, 0, uda_p.startT)
+                    ydata = np.insert(data_obj.ydata, 0, dobj_f.ydata[0])
+                    data_obj.xdata = xdata
+                    data_obj.ydata = ydata
+                    logger.debug("dobj F %d", dobj_f.xdata[0])
+                    data_obj.errcode = 0
+            # if no data at the end make it constant to have a line especially when there is one point
+            # if errcode==0 means no archive data
+            if first_needed and data_obj.errcode == 0:
+                xdata1 = np.append(data_obj.xdata, uda_p.endT)
+                lastp = data_obj.ydata[-1]
+                ydata1 = np.append(data_obj.ydata, lastp)
+                data_obj.xdata = xdata1
+                data_obj.ydata = ydata1
+                logger.debug("dobj final len=%d", len(data_obj.xdata))
+
         else:
-            query_l1 = query + ",decType=last"
+            x_data = data_obj.xdata
+            y_data = data_obj.ydata
 
-        if data_obj.errcode == 0:
-            # check if we need to retrieve the point before thet beginning decType=last
-            if data_obj.xdata[0] == uda_p.startT:
-                last_needed = False
-            if data_obj.xdata[-1] == uda_p.endT:
-                first_needed = False
-        logger.debug("dobj first len=%d", len(data_obj.xdata))
+            if uda_p.startT not in x_data:
+                x_idx_start = sum(x_data < uda_p.startT) - 1
+                if x_idx_start != -1:
+                    y_value = y_data[x_idx_start]
+                    x_data = x_data[x_idx_start + 1:]
+                    y_data = y_data[x_idx_start + 1:]
+                    x_data = np.insert(x_data, 0, uda_p.startT)
+                    y_data = np.insert(y_data, 0, y_value)
 
-        if last_needed:
-            query_l2 = query_l1.replace("startTime=" + str(uda_p.startT), "startTime=0")
-            query_l = query_l2.replace("endTime=" + str(uda_p.endT), "endTime=" + str(uda_p.startT))
-            dobj_f = self.__fetch_data_x(query_l)
-            # last query performed to retrieve the last point and to be put at the beginning
+            if uda_p.endT not in data_obj.xdata:
+                x_idx_end = sum(x_data < uda_p.endT) - 1
+                if x_idx_end != -1:
+                    y_value = y_data[x_idx_end]
+                    x_data = x_data[:x_idx_end + 1]
+                    y_data = y_data[:x_idx_end + 1]
+                    x_data = np.append(x_data, uda_p.endT)
+                    y_data = np.append(y_data, y_value)
 
-            if dobj_f.errcode == 0:
-                if data_obj.errcode == -3:
-                    data_obj = dataCommon.DataObj()
-                    data_obj.xdata = np.empty(0)
-                    data_obj.ydata = np.empty(0)
-
-                xdata = np.insert(data_obj.xdata, 0, uda_p.startT)
-                ydata = np.insert(data_obj.ydata, 0, dobj_f.ydata[0])
-                data_obj.xdata = xdata
-                data_obj.ydata = ydata
-                logger.debug("dobj F %d", dobj_f.xdata[0])
-                data_obj.errcode = 0
-        # if no data at the end make it constant to have a line especially when there is one point
-        # if errcode==0 means no archive data
-        if first_needed and data_obj.errcode == 0:
-            xdata1 = np.append(data_obj.xdata, uda_p.endT)
-            lastp = data_obj.ydata[-1]
-            ydata1 = np.append(data_obj.ydata, lastp)
-            data_obj.xdata = xdata1
-            data_obj.ydata = ydata1
-            logger.debug("dobj final len=%d", len(data_obj.xdata))
-
+            data_obj.xdata = x_data
+            data_obj.ydata = y_data
         return data_obj
+
+    @staticmethod
+    def max_value_index_less_than(arr, num):
+        filtered_index = np.where(arr < num)[0]
+        if filtered_index.size == 0:
+            return None
+
+        max_index = filtered_index[np.argmax(arr[filtered_index])]
+
+        return max_index
 
     @staticmethod
     def __parse_pulse(pulse):
@@ -281,7 +316,7 @@ class UdaAccess:
         return pulse_info
 
     def get_pulses(self, pattern='*:*/*') -> List[str]:
-        pulses_list = self.UCR.getPulses2(pattern, "")
+        pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return []
