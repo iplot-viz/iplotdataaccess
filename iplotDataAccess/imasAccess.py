@@ -140,16 +140,16 @@ class IMASDataAccess:
         idss.setNameFilters([glob])
         plist=[]
         for i in idss.entryList():
-        	runt=QDir(path+"/"+i)
-        	runF=runt.entryList()
-        	for run in runF:
-        		try :
-        			int(run)
-        			plist.append(i+"_"+run)
-        		except ValueError:
-        			logger.warning("discarding the . folder")
-        	
-
+            runt=QDir(path+"/"+i)
+            runF=runt.entryList()
+            for run in runF:
+                try :
+                    int(run)
+                    plist.append(i+"_"+run)
+                except ValueError:
+                    #logger.warning("discarding the . folder")
+                    pass
+                
         return plist
 
     def get_pulse_info(self, pulse, run):
