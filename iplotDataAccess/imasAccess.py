@@ -51,38 +51,41 @@ class IMASDataAccess:
         return self.__input, self.__isConnected
 
     def configure(self, list_i=None):
-        if list_i is None:
-            list_i = []
-            return
-        for s in list_i:
-            if s.startswith("uri"):
-                self.uri = s.split("=", 1)[1]
-                break
-            if s.startswith("database"):
-                self.database = s.split("=")[1]
-            if s.startswith("path"):
-                self.user_or_path = s.split("=")[1]
-            if s.startswith("backend"):
-                temp = s.split("=")
-                if temp[1] == "MDSPLUS":
-                    self.backend = imas.imasdef.MDSPLUS_BACKEND
-                if temp[1] == "MEMORY":
-                    self.backend = imas.imasdef.MEMORY_BACKEND
-                if temp[1] == "HDF5":
-                    self.backend = imas.imasdef.HDF5_BACKEND
-            if s.startswith("pulseIdent"):
-                temp = s.split("=")[1]
-                ret = temp.split("/")
-                try:
-                    self.pulse = int(ret[0])
-                    if len(ret) == 2:
-                        self.run = int(ret[1])
-                    else:
-                        self.run = 0
-                except ValueError:
-                    logger.error("got an invalid pulse identifier %s ", temp)
-                    self.run = 0
-                    self.pulse = 0
+    	self.uri=None
+    	if list_i is None:
+    		list_i = []
+    		return
+    	for s in list_i:
+    		if s.startswith("uri"):
+    			self.uri = s.split("=", 1)[1]
+    			break
+    		if s.startswith("database"):
+    			self.database = s.split("=")[1]
+    		if s.startswith("path"):
+    			self.user_or_path = s.split("=")[1]
+    		if s.startswith("backend"):
+    			temp = s.split("=")
+    			if temp[1] == "MDSPLUS":
+    				self.backend = imas.imasdef.MDSPLUS_BACKEND
+    			if temp[1] == "MEMORY":
+    				self.backend = imas.imasdef.MEMORY_BACKEND
+    			if temp[1] == "HDF5":
+    				self.backend = imas.imasdef.HDF5_BACKEND
+    		if s.startswith("pulseIdent"):
+    			temp = s.split("=")[1]
+    			ret = temp.split("/")
+    			try:
+    				logger.info(" ret %s",ret)
+    				self.pulse = int(ret[0])
+    				if len(ret) == 2:
+    					self.run = int(ret[1])
+    				else:
+    					self.run = 0
+    				logger.info(" ret %s",ret)
+    			except ValueError:
+    				logger.error("got an invalid pulse identifier %s ", temp)
+    				self.run = 0
+    				self.pulse = 0
 
     def connect(self):
         try:
@@ -127,21 +130,33 @@ class IMASDataAccess:
 
         path: str
         if user == 'public':
-            path = QDir().rootPath() + QDir('/work/imas/shared/imasdb').path()
+            path = QDir().rootPath() + QDir(os.getenv('IMAS_HOME','work/imas')+'/shared/imasdb').path()
 
-        path = QDir().separator().join([path, db, str(version), str(run_path)])
+        path = QDir().separator().join([path, self.database, str(version)])
         path = QDir.cleanPath(path)
 
-        glob = f'ids_{pulse}{(run):0>4}.tree'
+        glob = f'1*'
         idss = QDir(path)
         idss.setNameFilters([glob])
+        plist=[]
+        for i in idss.entryList():
+        	runt=QDir(path+"/"+i)
+        	runF=runt.entryList()
+        	for run in runF:
+        		try :
+        			int(run)
+        			plist.append(i+"_"+run)
+        		except ValueError:
+        			logger.warning("discarding the . folder")
+        	
 
-        return idss.entryList()
+        return plist
 
     def get_pulse_info(self, pulse, run):
         db = 'ITER'
         user = 'public'
-        input_imas = imas.DBEntry(imas.imasdef.MDSPLUS_BACKEND, db, pulse, run, user)
+        logger.info("in get pulse info %s",pulse)
+        input_imas = imas.DBEntry(self.backend, self.database, pulse, run, user)
         error = input_imas.open()
         if error[0] < 0:
             print("Data entry not valid: ", error)
@@ -273,13 +288,13 @@ class IMASDataAccess:
             mycfg.append("uri=" + kwargs.get("uri"))
             self.configure(mycfg)
         if kwargs.get("pulse"):
-            pulseId = kwargs.get("pulse")
-            # Detect IMAS URI or pulse/run:
-            if pulseId.startswith("imas:"):
-                mycfg.append("uri=" + pulseId)
-            else:
-                mycfg.append("pulseIdent=" + pulseId)            
-            self.configure(mycfg)
+        	logger.info("get a pulse %s",kwargs.get("pulse"))
+        	pulseId = kwargs.get("pulse")
+        	if pulseId.startswith("imas:"):
+        		mycfg.append("uri=" + pulseId)
+        	else:
+        		mycfg.append("pulseIdent=" + pulseId)
+        	self.configure(mycfg)
         if kwargs.get("tsS"):
             tsST = kwargs.get("tsS")
             try:
