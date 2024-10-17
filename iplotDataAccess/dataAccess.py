@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+from typing import Dict, List, Union
 
 import iplotDataAccess.dataSourceConfig as dSC
 from iplotLogging import setupLogger
@@ -23,7 +24,7 @@ except ModuleNotFoundError:
     logger.warning("import'uda client' is not installed")
 
 try:
-    import iplotDataAccess.realTimeStreamer
+    from iplotDataAccess.realTimeStreamer import RTStreamer, RTStreamerException
 except ModuleNotFoundError:
     logger.warning("import'uda RT streamer' is not installed")
 
@@ -35,7 +36,7 @@ class RTHException(Exception):
 class DataSource:
 
     def __init__(self, dtype=None, name=None):
-        self.connected = False
+        self._connected = False
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
         self.rterrcode = 0
@@ -56,19 +57,26 @@ class DataSource:
             self.name = "DS _" + str(id(self))
         else:
             self.name = name
-        if dtype == "CODAC_UDA":
+        if dtype == dSC.DS_CODAC_TYPE:
             self.connectionString = "host=X,port=3090"
-            self.dtype = "CODAC_UDA"
-        elif dtype == "IMAS_UDA":
+        elif dtype == dSC.DS_IMAS_TYPE:
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
-            self.dtype = "IMAS_UDA"
+        self.dtype = dtype
+
+    @property
+    def connected(self):
+        return self._connected
+
+    @connected.setter
+    def connected(self, connected):
+        self._connected = connected
 
     def set_connection_string(self, conninfo):
         self.connectionString = conninfo
         if "host" in conninfo:
-            self.dtype = "CODAC_UDA"
+            self.dtype = dSC.DS_CODAC_TYPE
         elif "database" in conninfo:
-            self.dtype = "IMAS_UDA"
+            self.dtype = dSC.DS_IMAS_TYPE
 
     def set_default_ds(self, default):
         self.default = default
@@ -87,7 +95,7 @@ class DataSource:
 
     def set_rt_handler(self):
         myhd = {}
-        if self.dtype == "IMAS_UDA":
+        if self.dtype == dSC.DS_IMAS_TYPE:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
             raise RTHException("Real Time Handler is not supported")
@@ -102,8 +110,8 @@ class DataSource:
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
-            self.RTHandler = iplotDataAccess.realTimeStreamer.RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
-                                                                         uda_a=self.daHandler)
+            self.RTHandler = RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
+                                        uda_a=self.daHandler)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -115,7 +123,7 @@ class DataSource:
             self.rtStatus = "UNEXISTING"
 
     def connect(self):
-        if self.dtype == "IMAS_UDA":
+        if self.dtype == dSC.DS_IMAS_TYPE:
             try:
                 self.daHandler = iplotDataAccess.imasAccess.IMASDataAccess()
                 self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
@@ -123,7 +131,7 @@ class DataSource:
                 self.errcode = -1
                 self.connected = False
 
-        if self.dtype == "CODAC_UDA":
+        elif self.dtype == dSC.DS_CODAC_TYPE:
             try:
                 self.daHandler = iplotDataAccess.udaAccess.UdaAccess()
                 logger.debug("connect %s ", self.connectionString)
@@ -167,7 +175,7 @@ class DataSource:
                 kwargs["params"] = newparams
                 logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
                 self.RTHandler.start_subscription(**kwargs)
-            except iplotDataAccess.realTimeStreamer.RTStreamerException:
+            except RTStreamerException:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
@@ -178,7 +186,7 @@ class DataSource:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stop_subscription()
                 self.rtStatus = "STOPPED"
-            except iplotDataAccess.realTimeStreamer.RTStreamerException as _:
+            except RTStreamerException as _:
                 self.rtStatus = "ERROR"
                 self.rterrcode = -2
 
@@ -193,7 +201,7 @@ class DataSource:
             dobj.set_empty("Streamer not properly initialized: did the subscription start?")
             return dobj
 
-        return self.RTHandler.getNextData(vname)
+        return self.RTHandler.get_next_data(vname)
 
     def __get_data_i(self, **kwargs):
         return self.daHandler.get_data(**kwargs)
@@ -245,6 +253,12 @@ class DataSource:
             logger.warning("ModuleNotFound_%s", self.dtype)
         return ret
 
+    def get_pulse_list(self, **kwargs) -> List[str]:
+        return self.daHandler.get_pulses(**kwargs)
+
+    def get_pulse_info(self, **kwargs) -> List[str]:
+        return self.daHandler.get_pulse_info(**kwargs)
+
     def get_cbs_list(self, **kwargs):
         return self.daHandler.get_cbs_list(**kwargs)
 
@@ -261,10 +275,10 @@ class DataAccess:
 
     def __init__(self):
         d = dSC.DataSourceConfig()
-        self.proto = d.get_supported_data_source()
-        self.dslist = {}
-        self.defaultds = None
-        self.confFile = None
+        self.proto: List[str] = d.get_supported_data_source()
+        self.dslist: Dict[str, DataSource] = {}
+        self.defaultds: Union[DataSource, None] = None
+        self.confFile: str = ""
 
     def get_default_ds_name(self):
         if self.defaultds is None:
@@ -303,23 +317,23 @@ class DataAccess:
                     ds = DataSource(name=dname)
                     self.dslist[dname] = ds
 
-                if line.rstrip().startswith("conninfo") and dname != "":
+                elif line.rstrip().startswith("conninfo") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_connection_string(s)
-                if line.rstrip().startswith("rturl") and dname != "":
+                elif line.rstrip().startswith("rturl") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_url(s)
-                if line.rstrip().startswith("rtauth") and dname != "":
+                elif line.rstrip().startswith("rtauth") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_auth(s)
-                if line.rstrip().startswith("rtheaders") and dname != "":
+                elif line.rstrip().startswith("rtheaders") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     self.dslist[dname].set_rt_headers(s)
-                if line.rstrip().startswith("default") and dname != "":
+                elif line.rstrip().startswith("default") and dname != "":
                     s = line.rstrip().split("=", 1)[1].lower()
                     self.dslist[dname].set_default_ds(s == "true")
 
-                if line.rstrip().startswith("varprefix") and dname != "":
+                elif line.rstrip().startswith("varprefix") and dname != "":
                     s = line.rstrip().split("=", 1)[1]
                     logger.debug("found varprefix %s", s)
                     self.dslist[dname].set_var_prefix(s)
@@ -440,6 +454,20 @@ class DataAccess:
 
         return None
 
+    def get_pulse_list(self, data_source_name, **kwargs) -> List[str]:
+        ds = self.get_data_source(data_source_name)
+        if ds is None:
+            return []
+        pulse_list = ds.get_pulse_list(**kwargs)
+        return pulse_list
+
+    def get_pulse_info(self, data_source_name, **kwargs):
+        ds = self.get_data_source(data_source_name)
+        if ds is None:
+            return []
+        pulse_info = ds.get_pulse_info(**kwargs)
+        return pulse_info
+
     def get_cbs_list(self, data_source_name, **kwargs):
         ds = self.get_data_source(data_source_name)
         if ds is None:
@@ -460,11 +488,20 @@ class DataAccess:
             return None
         return ds.get_var_fields(**kwargs)
 
+    # TODO change to a better name
     def get_connected_data_sources(self):
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.dslist.items():
             if ds_name not in data_sources and ds.connected:
                 data_sources.append(ds_name)
+        return data_sources
+
+    # TODO change to a better name
+    def get_connected_data_sources2(self):
+        data_sources = []
+        for ds_name, ds in self.dslist.items():
+            if ds.connected:
+                data_sources.append(ds)
         return data_sources
 
     # Clear cache of all the dataSources
