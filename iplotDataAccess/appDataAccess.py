@@ -1,23 +1,19 @@
-from iplotDataAccess.dataAccess import DataAccess
+from iplotDataAccess.dataAccess2 import DataAccess2
 from iplotLogging import setupLogger
 
 logger = setupLogger.get_logger(__name__)
 
 
 class AppDataAccess:
-    da: DataAccess = None
+    da: DataAccess2 = None
     configured: bool = False
 
     # ---------------
 
     @staticmethod
     def initialize(config_file=None):
-        return AppDataAccess.load_configuration(config_file)
-
-    @staticmethod
-    def load_configuration(config_file=None):
         if AppDataAccess.da is None:
-            AppDataAccess.da = DataAccess()
+            AppDataAccess.da = DataAccess2()
         AppDataAccess.configured = AppDataAccess.da.load_config(config_file)
         return AppDataAccess.configured
 
