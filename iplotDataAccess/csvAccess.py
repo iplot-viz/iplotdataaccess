@@ -3,11 +3,11 @@ import re
 import pandas as pd
 
 from iplotDataAccess import dataCommon
-from iplotDataAccess.dataSource2 import DataSource2
+from iplotDataAccess.dataSource import DataSource
 
 
-class CsvAccess2(DataSource2):
-    # Constructor method to initialize the CsvAccess object with the folder path
+class CsvAccess(DataSource):
+    source_type = "CSV"
 
     def __init__(self, name: str, config: dict):
         super().__init__(name, config)
@@ -15,7 +15,8 @@ class CsvAccess2(DataSource2):
         self.folder_path = config.get("path", "")  # Store the folder path for accessing CSV files
 
     def connect(self) -> bool:
-        return self.folder_path != ""
+        self.connected = os.path.isdir(self.folder_path)
+        return self.connected
 
     # Method to get data from a CSV file based on the 'pulse' and 'varname' arguments in kwargs
     def get_data(self, **kwargs):

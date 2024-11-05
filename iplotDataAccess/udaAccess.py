@@ -1,6 +1,8 @@
 import operator
 from typing import List
 
+from pandas import DataFrame
+
 import iplotDataAccess.dataCommon as dataCommon
 import iplotDataAccess.nestedDatatype as nDT
 from cachetools import cachedmethod
@@ -12,6 +14,7 @@ import dateutil.parser as dp
 from datetime import timezone
 
 import numpy as np
+import pandas as pd
 
 import time
 import os
@@ -19,6 +22,9 @@ import math
 import json
 import collections
 import cachetools as ct
+
+from iplotDataAccess.dataSource import DataSource
+from iplotWidgets.variableBrowser.tools.converters import parse_vars_to_dict, parse_search_to_dict
 
 logger = setupLog.get_logger(__name__)
 
@@ -48,48 +54,37 @@ class UdaParams:
 
 
 # class to interface with data source - here UDA
-class UdaAccess:
-    def __init__(self):
-        self.udahost = "localhost"
-        self.uport = 3090
+class UdaAccess(DataSource):
+    source_type = "CODAC_UDA"
+
+    def __init__(self, name: str, config: dict):
+        super().__init__(name, config)
+        self.host = config.get("host")
+        self.port = config.get("port")
         self.errcode = 0
         self.errdesc = ""
         self.UCR = None
         self.connected = False
-        self.__NODATAFOUND = ["Requested data cannot be located", "data cannot be retrieved", "could not retrieve data",
-                              "Incorrect time"]
+        self.__NO_DATA_FOUND = ["Requested data cannot be located", "data cannot be retrieved",
+                                "could not retrieve data", "Incorrect time"]
         self.access_cache = ct.LRUCache(maxsize=100)
         self.pulses_cache = {}
 
-    def connect_source(self, connection_string):
-        myconn = connection_string.split(",")
-        logger.debug("connect source myconn=%s", myconn)
-        return self.connect(myconn)
+    def connect(self) -> bool:
 
-    def connect(self, arglist=None):
-        if arglist is None:
-            arglist = []
-        for s in arglist:
-            if s.startswith("host"):
-                self.udahost = s.split("=")[1]
-            if s.startswith("port"):
-                self.uport = int(s.split("=")[1])
-
-        logger.debug("Connecting to UDA host  %s", self.udahost)
-        self.UCR = uc.UdaClientReaderPython(self.udahost, self.uport)
+        logger.debug("Connecting to UDA host  %s", self.host)
+        self.UCR = uc.UdaClientReaderPython(self.host, self.port)
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
         self.errcode = self.UCR.getErrorCode()
-        # self.UCR.resetAll()
 
         return self.connected
-        # self.dataR=DataObj()
 
     def is_connected(self):
         return self.connected
 
     @staticmethod
-    def convertudatypes(utype=None):
+    def convert_uda_types(utype=None):
 
         if utype == uc.RAW_TYPE_FLOAT:
             return dataCommon.DataType.DA_TYPE_FLOAT
@@ -191,7 +186,7 @@ class UdaAccess:
         if data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
             return data_obj
 
-        if os.getenv("MINT_GET_EXTRE").lower() == "true":
+        if os.getenv("MINT_GET_EXTRE") and os.getenv("MINT_GET_EXTRE").lower() == "true":
             # we retrieve the extremities
             if "decType=" in query:
                 query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
@@ -289,7 +284,7 @@ class UdaAccess:
         if varname is None:
             return unitval
         if not self.connected:
-            self.connect(self.udahost)
+            self.connect()
         meta_data = self.UCR.getMeta(varname, tsmp)
         for i in meta_data:
             if i.name.lower() == "units":
@@ -315,26 +310,58 @@ class UdaAccess:
 
         return pulse_info
 
-    def get_pulses(self, pattern='*:*/*') -> List[str]:
+    def get_pulses(self, pattern='*:*/*') -> DataFrame:
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
-            return []
-        return pulses_list
+            return DataFrame(columns=["pulseId", 'description', 'status', 'timeFrom', 'timeTo', 'duration'])
+        pulse_df = DataFrame([{
+            'pulseID': line.pulseID,
+            'description': line.description,
+            'status': line.status.strip(),
+            'timeFrom': pd.to_datetime(line.timeFrom),
+            'timeTo': pd.to_datetime(line.timeTo),
+            'duration': pd.to_datetime(line.timeTo) - pd.to_datetime(line.timeFrom)
+        } for line in pulses_list])
+        return pulse_df
 
-    def get_cbs_list(self, sep=':', pattern='*', times='0'):
+    def get_cbs_list(self, sep=':', pattern='*', times='0') -> List[str]:
         cbs_list = self.UCR.getCbsList(sep, pattern, times)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
-            return None
+            return []
         return cbs_list
 
-    def get_var_list(self, pattern='.*'):
+    def get_cbs_dict(self, sep=':', pattern='*', times='0') -> dict:
+        cbs_list = self.get_cbs_list(sep, pattern, times)
+        cbs_dict = dict()
+        for line in cbs_list:
+            cur_dict = cbs_dict
+            list_line = line.split('-')
+            for var in list_line:
+                if var.endswith('?V'):
+                    cur_dict = cur_dict.setdefault('-'.join(list_line).replace('?V', ''), '')
+                else:
+                    cur_dict = cur_dict.setdefault(var, {})
+
+        return cbs_dict
+
+    def get_var_list(self, pattern='.*') -> List[str]:
         var_list = self.UCR.getVariableList(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
-            return None
+            return []
+
         return var_list
+
+    def get_var_dict(self, pattern='.*', path=None) -> dict:
+        var_list = self.get_var_list(pattern)
+        if path:
+            var_dict = parse_vars_to_dict(var_list, path)
+        else:
+            var_dict = parse_search_to_dict(var_list)
+
+        return var_dict
 
     def get_var_fields(self, variable, timestamp='-1'):
         uda_type = self.UCR.getMetaTypeJSONCollapsed(variable, str(timestamp))
@@ -357,7 +384,7 @@ class UdaAccess:
         isnew = 0
         logger.debug(" entering getDataI for pulse=%s", uda_p.pulse)
         if not self.connected:
-            self.connect(self.udahost)
+            self.connect()
             if self.errcode == -1:
                 dobj.set_err(self.errcode, self.errdesc)
                 return dobj
@@ -438,7 +465,7 @@ class UdaAccess:
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
             logger.info("could not retrieve data and %s", self.errdesc)
-            for s in self.__NODATAFOUND:
+            for s in self.__NO_DATA_FOUND:
                 if s in self.errdesc:
                     self.UCR.releaseData(handle)
                     self.errcode = -3
@@ -451,8 +478,8 @@ class UdaAccess:
             return dobj
 
         # self.dataR.clearData()
-        dobj.set_a(self.convertudatypes(self.UCR.getFetchedTimeType(handle)),
-                   self.convertudatypes(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
+        dobj.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
+                   self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
                    self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
                    self.UCR.getRank(handle))
 
@@ -491,7 +518,7 @@ class UdaAccess:
             self.errcode = -1
             self.errdesc = self.UCR.getErrorMsg()
             logger.info("could not retrieve data and %s", self.errdesc)
-            for s in self.__NODATAFOUND:
+            for s in self.__NO_DATA_FOUND:
                 if s in self.errdesc:
                     self.UCR.releaseData(handle)
                     self.errcode = -3
@@ -507,8 +534,8 @@ class UdaAccess:
             d_env.set_err(-1, "Envelope has no meaning for string datatypes")
             return d_env
         # self.dataR.clearData()
-        d_env.set_a(self.convertudatypes(self.UCR.getFetchedTimeType(handle)),
-                    self.convertudatypes(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
+        d_env.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
+                    self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
                     self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
                     self.UCR.getRank(handle))
 

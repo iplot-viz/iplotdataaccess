@@ -1,8 +1,10 @@
 import copy
 import time
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import List
+
+from pandas import DataFrame
 
 import iplotDataAccess
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
@@ -19,17 +21,19 @@ class RTHException(Exception):
     pass
 
 
-class DataSource2(ABC):
+class DataSource(ABC):
+    source_type = None
 
     def __init__(self, name: str, config: dict):
         self.default = config.get("default", False)
         self.name = name
         self.connected = False
+
+        # Stream config
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
         self.rterrcode = 0
         self.errdesc = ""
-        self.dtype = ""
         self.connectionString = None
         self.daHandler = None
         self.rth = None
@@ -37,6 +41,12 @@ class DataSource2(ABC):
         self.rtu = None
         self.MAX_ITER = 1000
         self.SLEEP_TO = 0.1
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Verify that derived class has 'source_type' defined
+        if not hasattr(cls, 'source_type') or cls.source_type is None:
+            raise TypeError(f"Class '{cls.__name__}' needs to define 'source_type'.")
 
     def clear_cache(self) -> None:
         pass
@@ -46,45 +56,27 @@ class DataSource2(ABC):
 
     def get_envelope(self, **kwargs) -> DataEnvelope:
         pass
-        # ret = (None, None)
-        # try:
-        #     if self.daHandler is None:
-        #         dobj = DataEnvelope()
-        #         dobj.set_empty(self.dtype + "_DataHandler is null")
-        #     else:
-        #         varname = kwargs.get("varname")
-        #         logger.debug(f"varname: {varname}")
-        #         ret = self.__get_envelope_i(**kwargs)
-        #
-        #         if ret.errcode == 0 and ret.xdata is not None and len(ret.xdata) > 0:
-        #             logger.debug(f"dtype: {ret.ytype}")
-        #             logger.debug(f"actual dtype: {type(ret.ydata_min)}")
-        #
-        # except ModuleNotFoundError:
-        #     logger.warning("ModuleNotFound_%s", self.dtype)
-        # return ret
 
-    def get_pulses(self, **kwargs) -> List[str]:
+    def get_pulses(self, **kwargs) -> DataFrame:
         pass
 
-    def get_pulse_info(self, **kwargs) -> List[str]:
+    def get_pulse_info(self, **kwargs):
         pass
 
-    def get_cbs_list(self, **kwargs):
+    def get_cbs_list(self, **kwargs) -> List[str]:
         pass
 
-    def get_var_list(self, **kwargs):
+    def get_cbs_dict(self, **kwargs) -> dict:
+        pass
+
+    def get_var_list(self, **kwargs) -> List[str]:
+        pass
+
+    def get_var_dict(self, **kwargs) -> dict:
         pass
 
     def get_var_fields(self, **kwargs):
         pass
-
-    def set_connection_string(self, conninfo):
-        self.connectionString = conninfo
-        if "host" in conninfo:
-            self.dtype = DS_CODAC_TYPE
-        elif "database" in conninfo:
-            self.dtype = DS_IMAS_TYPE
 
     def set_rt_headers(self, headers):
         self.rth = headers
@@ -97,7 +89,7 @@ class DataSource2(ABC):
 
     def set_rt_handler(self):
         myhd = {}
-        if self.dtype == DS_IMAS_TYPE:
+        if self.source_type == DS_IMAS_TYPE:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
             raise RTHException("Real Time Handler is not supported")
@@ -187,44 +179,3 @@ class DataSource2(ABC):
             return dobj
 
         return self.RTHandler.get_next_data(vname)
-
-    def clear_cache(self) -> None:
-        pass
-
-    def get_data(self, **kwargs) -> DataObj:
-        pass
-
-    def get_envelope(self, **kwargs) -> DataEnvelope:
-        pass
-        # ret = (None, None)
-        # try:
-        #     if self.daHandler is None:
-        #         dobj = DataEnvelope()
-        #         dobj.set_empty(self.dtype + "_DataHandler is null")
-        #     else:
-        #         varname = kwargs.get("varname")
-        #         logger.debug(f"varname: {varname}")
-        #         ret = self.__get_envelope_i(**kwargs)
-        #
-        #         if ret.errcode == 0 and ret.xdata is not None and len(ret.xdata) > 0:
-        #             logger.debug(f"dtype: {ret.ytype}")
-        #             logger.debug(f"actual dtype: {type(ret.ydata_min)}")
-        #
-        # except ModuleNotFoundError:
-        #     logger.warning("ModuleNotFound_%s", self.dtype)
-        # return ret
-
-    def get_pulses(self, **kwargs) -> List[str]:
-        pass
-
-    def get_pulse_info(self, **kwargs) -> List[str]:
-        pass
-
-    def get_cbs_list(self, **kwargs):
-        pass
-
-    def get_var_list(self, **kwargs):
-        pass
-
-    def get_var_fields(self, **kwargs):
-        pass
