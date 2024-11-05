@@ -56,8 +56,8 @@ class DataAccess:
         if not isinstance(iplot_sources, list):
             return supported_data_sources
         for source in iplot_sources:
-            if len(source)!=2:
-                logger.error(f"New DataSource should have format ['path','ClassName'] instad of {source}")
+            if len(source) != 2:
+                logger.error(f"New DataSource should have format ['path','ClassName'] instead of {source}")
                 continue
             file_path, class_name = source
             try:
@@ -69,7 +69,6 @@ class DataAccess:
                 supported_data_sources[imported_class.source_type] = imported_class
             except Exception as e:
                 logger.error(f"Error loading '{class_name}' {e}")
-
 
         return supported_data_sources
 
