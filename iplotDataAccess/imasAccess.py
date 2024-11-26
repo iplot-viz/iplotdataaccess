@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import cachetools as ct
 from PySide6.QtCore import QDir
 from iplotLogging import setupLogger
+
 try:
     from data_dictionary import idsdef as idsdd
 except ImportError:
@@ -51,41 +52,41 @@ class IMASDataAccess:
         return self.__input, self.__isConnected
 
     def configure(self, list_i=None):
-    	self.uri=None
-    	if list_i is None:
-    		list_i = []
-    		return
-    	for s in list_i:
-    		if s.startswith("uri"):
-    			self.uri = s.split("=", 1)[1]
-    			break
-    		if s.startswith("database"):
-    			self.database = s.split("=")[1]
-    		if s.startswith("path"):
-    			self.user_or_path = s.split("=")[1]
-    		if s.startswith("backend"):
-    			temp = s.split("=")
-    			if temp[1] == "MDSPLUS":
-    				self.backend = imas.imasdef.MDSPLUS_BACKEND
-    			if temp[1] == "MEMORY":
-    				self.backend = imas.imasdef.MEMORY_BACKEND
-    			if temp[1] == "HDF5":
-    				self.backend = imas.imasdef.HDF5_BACKEND
-    		if s.startswith("pulseIdent"):
-    			temp = s.split("=")[1]
-    			ret = temp.split("/")
-    			try:
-    				logger.info(" ret %s",ret)
-    				self.pulse = int(ret[0])
-    				if len(ret) == 2:
-    					self.run = int(ret[1])
-    				else:
-    					self.run = 0
-    				logger.info(" ret %s",ret)
-    			except ValueError:
-    				logger.error("got an invalid pulse identifier %s ", temp)
-    				self.run = 0
-    				self.pulse = 0
+        self.uri = None
+        if list_i is None:
+            list_i = []
+            return
+        for s in list_i:
+            if s.startswith("uri"):
+                self.uri = s.split("=", 1)[1]
+                break
+            if s.startswith("database"):
+                self.database = s.split("=")[1]
+            if s.startswith("path"):
+                self.user_or_path = s.split("=")[1]
+            if s.startswith("backend"):
+                temp = s.split("=")
+                if temp[1] == "MDSPLUS":
+                    self.backend = imas.imasdef.MDSPLUS_BACKEND
+                if temp[1] == "MEMORY":
+                    self.backend = imas.imasdef.MEMORY_BACKEND
+                if temp[1] == "HDF5":
+                    self.backend = imas.imasdef.HDF5_BACKEND
+            if s.startswith("pulseIdent"):
+                temp = s.split("=")[1]
+                ret = temp.split("/")
+                try:
+                    logger.info(" ret %s", ret)
+                    self.pulse = int(ret[0])
+                    if len(ret) == 2:
+                        self.run = int(ret[1])
+                    else:
+                        self.run = 0
+                    logger.info(" ret %s", ret)
+                except ValueError:
+                    logger.error("got an invalid pulse identifier %s ", temp)
+                    self.run = 0
+                    self.pulse = 0
 
     def connect(self):
         try:
@@ -130,7 +131,7 @@ class IMASDataAccess:
 
         path: str
         if user == 'public':
-            path = QDir().rootPath() + QDir(os.getenv('IMAS_HOME','work/imas')+'/shared/imasdb').path()
+            path = QDir().rootPath() + QDir(os.getenv('IMAS_HOME', 'work/imas') + '/shared/imasdb').path()
 
         path = QDir().separator().join([path, self.database, str(version)])
         path = QDir.cleanPath(path)
@@ -138,24 +139,24 @@ class IMASDataAccess:
         glob = f'1*'
         idss = QDir(path)
         idss.setNameFilters([glob])
-        plist=[]
+        plist = []
         for i in idss.entryList():
-            runt=QDir(path+"/"+i)
-            runF=runt.entryList()
+            runt = QDir(path + "/" + i)
+            runF = runt.entryList()
             for run in runF:
-                try :
+                try:
                     int(run)
-                    plist.append(i+"_"+run)
+                    plist.append(i + "_" + run)
                 except ValueError:
-                    #logger.warning("discarding the . folder")
+                    # logger.warning("discarding the . folder")
                     pass
-                
+
         return plist
 
     def get_pulse_info(self, pulse, run):
         db = 'ITER'
         user = 'public'
-        logger.info("in get pulse info %s",pulse)
+        logger.info("in get pulse info %s", pulse)
         input_imas = imas.DBEntry(self.backend, self.database, pulse, run, user)
         error = input_imas.open()
         if error[0] < 0:
@@ -246,7 +247,7 @@ class IMASDataAccess:
 
                 if "units" in field.attrib.keys():
                     attributes["units"] = field.attrib["units"]
-                    if "as_parent" in attributes["units"]: # go up the AoS until we find the real unit:
+                    if "as_parent" in attributes["units"]:  # go up the AoS until we find the real unit:
                         for sfield in reversed(fieldlist):
                             if "units" in sfield.attrib.keys():
                                 if "as_parent" not in sfield.attrib["units"]:
@@ -288,13 +289,13 @@ class IMASDataAccess:
             mycfg.append("uri=" + kwargs.get("uri"))
             self.configure(mycfg)
         if kwargs.get("pulse"):
-        	logger.info("get a pulse %s",kwargs.get("pulse"))
-        	pulseId = kwargs.get("pulse")
-        	if pulseId.startswith("imas:"):
-        		mycfg.append("uri=" + pulseId)
-        	else:
-        		mycfg.append("pulseIdent=" + pulseId)
-        	self.configure(mycfg)
+            logger.info("get a pulse %s", kwargs.get("pulse"))
+            pulseId = kwargs.get("pulse")
+            if pulseId.startswith("imas:"):
+                mycfg.append("uri=" + pulseId)
+            else:
+                mycfg.append("pulseIdent=" + pulseId)
+            self.configure(mycfg)
         if kwargs.get("tsS"):
             tsST = kwargs.get("tsS")
             try:
@@ -408,7 +409,7 @@ class IMASDataAccess:
                 dobj.set_data(self.__get_time_data(idsn=res[-2], idsp=idsp), 1)
                 metadata = self.__get_metadata(res[-2], res[-1])
                 dobj.yunit = self.__get_units(metadata)
-                if "as_parent" in dobj.yunit: # we go up until we find the parent unit:
+                if "as_parent" in dobj.yunit:  # we go up until we find the parent unit:
                     res_up = res[-1]
                     while "as_parent" in dobj.yunit:
                         res_up = res_up.rpartition("/")[0]
