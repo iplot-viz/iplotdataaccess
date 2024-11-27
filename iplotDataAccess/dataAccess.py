@@ -1,8 +1,7 @@
 import json
 import os
-import sys
 import importlib.util
-import ast
+from pathlib import Path
 from typing import Dict, List, Union, Type
 
 from iplotDataAccess.dataSource import DataSource
@@ -11,10 +10,6 @@ from iplotLogging import setupLogger
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
 
 logger = setupLogger.get_logger(__name__)
-
-DS_CODAC_TYPE = "CODAC_UDA"
-DS_IMAS_TYPE = "IMAS_UDA"
-DS_CSV_TYPE = "CSV"
 
 
 # class to interface with data source - here UDA
@@ -29,46 +24,24 @@ class DataAccess:
     @staticmethod
     def get_supported_data_source() -> Dict[str, Type[DataSource]]:
         supported_data_sources = {}
-        # Check CODAC UDA module is installed
 
+        data_access_folder = Path(__file__).resolve().parents[1]
         try:
-            from iplotDataAccess.udaAccess import UdaAccess
-            logger.info("module 'uda client' is installed")
-            supported_data_sources[DS_CODAC_TYPE] = UdaAccess
-        except ModuleNotFoundError:
-            logger.error("module 'uda client' is not installed")
-        except TypeError as e:
-            logger.error(f"{e} module 'uda client' is not installed")
+            with open(data_access_folder / "data_sources.cfg", 'r') as file:
+                data_sources = json.load(file)
+                for key, value in data_sources.items():
+                    try:
+                        module_name = os.path.splitext(os.path.basename(data_access_folder / value['path']))[0]
+                        spec = importlib.util.spec_from_file_location(module_name, data_access_folder / value['path'])
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        imported_class = getattr(module, value['class'])
+                        supported_data_sources[imported_class.source_type] = imported_class
+                    except Exception as e:
+                        logger.error(f"Error loading DataSource {key} -> {e}")
 
-        try:
-            from iplotDataAccess import imasAccess
-            logger.info("module imas is installed")
-            supported_data_sources[DS_IMAS_TYPE] = imasAccess
-        except ModuleNotFoundError:
-            logger.error("module 'imas' is not installed")
-
-        iplot_sources = os.environ.get("IPLOT_DATASOURCES_FILES")
-        try:
-            iplot_sources = ast.literal_eval(iplot_sources)
-        except SyntaxError:
-            logger.warning("Fail to load IPLOT_DATASOURCES_FILES")
-            return supported_data_sources
-        if not isinstance(iplot_sources, list):
-            return supported_data_sources
-        for source in iplot_sources:
-            if len(source) != 2:
-                logger.error(f"New DataSource should have format ['path','ClassName'] instead of {source}")
-                continue
-            file_path, class_name = source
-            try:
-                module_name = os.path.splitext(os.path.basename(file_path))[0]  # Extract module name
-                spec = importlib.util.spec_from_file_location(module_name, file_path)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                imported_class = getattr(module, class_name)
-                supported_data_sources[imported_class.source_type] = imported_class
-            except Exception as e:
-                logger.error(f"Error loading '{class_name}' {e}")
+        except Exception as e:
+            logger.error(f"Error loading DataSources config file ->{e}")
 
         return supported_data_sources
 
@@ -92,12 +65,16 @@ class DataAccess:
 
     def load_config_file(self, dspath: str) -> bool:
         with open(dspath) as f:
-            config = json.load(f)
+            try:
+                config = json.load(f)
+            except Exception as e:
+                logger.warning(f"Wrong json format in {dspath} -> {e}")
+                return False
             for ds_name, ds_config in config.items():
                 ds_type = ds_config.get("type")
                 ds_class = self.proto.get(ds_type)
                 if not ds_class:
-                    logger.warning(f"{ds_name} has an unsupported data source -> {ds_type}")
+                    logger.warning(f"DataSource '{ds_name}' has an unsupported data source type-> {ds_type}")
                     continue
 
                 data_source = ds_class(ds_name, ds_config)
@@ -117,7 +94,7 @@ class DataAccess:
         logger.debug("entering getDataSource  %s", data_s_name)
         if data_s_name is None:
             if self.default_ds is not None:
-                logger.info(" default source used ")
+                logger.info("default source used ")
                 return self.default_ds
             else:
                 logger.error("DataSourceName is None and not default data source name has been defined")
@@ -232,7 +209,7 @@ class DataAccess:
         return ds.get_var_fields(**kwargs)
 
     # TODO change to a better name
-    def get_connected_data_sources(self):
+    def get_connected_data_source_names(self) -> List[str]:
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.ds_list.items():
             if ds_name not in data_sources and ds.connected:
@@ -240,7 +217,7 @@ class DataAccess:
         return data_sources
 
     # TODO change to a better name
-    def get_connected_data_sources2(self):
+    def get_connected_data_sources(self)->List[DataSource]:
         data_sources = []
         for ds_name, ds in self.ds_list.items():
             if ds.connected:

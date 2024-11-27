@@ -24,10 +24,13 @@ import collections
 import cachetools as ct
 
 from iplotDataAccess.dataSource import DataSource
+from iplotDataAccess.realTimeStreamer import RTStreamer
 from iplotWidgets.variableBrowser.tools.converters import parse_vars_to_dict, parse_search_to_dict
 
 logger = setupLog.get_logger(__name__)
 
+class RTHException(Exception):
+    pass
 
 class UdaParams:
     def __init__(self):
@@ -61,6 +64,10 @@ class UdaAccess(DataSource):
         super().__init__(name, config)
         self.host = config.get("host")
         self.port = config.get("port")
+
+        self.rturl = config.get("rturl")
+        self.rtheaders = config.get("rtheaders")
+        self.rtauth = config.get("rtauth")
         self.errcode = 0
         self.errdesc = ""
         self.UCR = None
@@ -77,6 +84,8 @@ class UdaAccess(DataSource):
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
         self.errcode = self.UCR.getErrorCode()
+
+        self.set_rt_handler()
 
         return self.connected
 
@@ -108,6 +117,30 @@ class UdaAccess(DataSource):
             return dataCommon.DataType.DA_TYPE_INT
         elif utype == uc.RAW_TYPE_UNSIGNED_INT:
             return dataCommon.DataType.DA_TYPE_UINT
+
+    def set_rt_handler(self):
+        myhd = {}
+        if self.rth is not None:
+            sd = self.rth.split(",")
+            for i in range(len(sd)):
+                entry = sd[i].split(":")
+                if len(entry) != 2:
+                    self.rterrcode = -1
+                    self.rtStatus = "UNEXISTING"
+                    raise RTHException("Invalid entry except 2 elements")
+                myhd[entry[0]] = entry[1]
+        try:
+            self.RTHandler = RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
+                                        uda_a=self.daHandler)
+            self.rterrcode = 0
+            self.rtStatus = "INITIALISED"
+            logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
+        except ModuleNotFoundError:
+            self.rterrcode = -1
+            self.rtStatus = "UNEXISTING"
+        except AttributeError:
+            self.rterrcode = -1
+            self.rtStatus = "UNEXISTING"
 
     @staticmethod
     def convert_to_nanos(ts_e: str):

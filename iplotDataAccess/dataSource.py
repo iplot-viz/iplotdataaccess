@@ -63,6 +63,9 @@ class DataSource(ABC):
     def get_pulse_info(self, **kwargs):
         pass
 
+    def get_pulse_list(self, **kwargs):
+        pass
+
     def get_cbs_list(self, **kwargs) -> List[str]:
         pass
 
