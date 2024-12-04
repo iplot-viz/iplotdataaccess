@@ -191,7 +191,7 @@ class UdaAccess:
         if data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
             return data_obj
 
-        if os.getenv("MINT_GET_EXTRE").lower() == "true":
+        if os.getenv("MINT_GET_EXTRE", "").lower() == "true":
             # we retrieve the extremities
             if "decType=" in query:
                 query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
