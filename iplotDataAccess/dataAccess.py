@@ -1,12 +1,12 @@
 import json
 import os
 import importlib.util
+import importlib.resources as pkg_resources
 from pathlib import Path
 from typing import Dict, List, Union, Type
 
 from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
-
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
 
 logger = setupLogger.get_logger(__name__)
@@ -25,16 +25,15 @@ class DataAccess:
     def get_supported_data_source() -> Dict[str, Type[DataSource]]:
         supported_data_sources = {}
 
-        data_access_folder = Path(__file__).resolve().parents[1]
         try:
-            with open(data_access_folder / "data_sources.cfg", 'r') as file:
+            file_path = str(pkg_resources.files('iplotdataaccess').joinpath('data_sources.cfg'))
+            with open(file_path, 'r') as file:
+
+
                 data_sources = json.load(file)
                 for key, value in data_sources.items():
                     try:
-                        module_name = os.path.splitext(os.path.basename(data_access_folder / value['path']))[0]
-                        spec = importlib.util.spec_from_file_location(module_name, data_access_folder / value['path'])
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
+                        module = importlib.import_module(value['pymodule'])
                         imported_class = getattr(module, value['class'])
                         supported_data_sources[imported_class.source_type] = imported_class
                     except Exception as e:
