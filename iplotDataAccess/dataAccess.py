@@ -2,7 +2,6 @@ import json
 import os
 import importlib.util
 import importlib.resources as pkg_resources
-from pathlib import Path
 from typing import Dict, List, Union, Type
 
 from iplotDataAccess.dataSource import DataSource
@@ -28,7 +27,6 @@ class DataAccess:
         try:
             file_path = str(pkg_resources.files('iplotdataaccess').joinpath('data_sources.cfg'))
             with open(file_path, 'r') as file:
-
 
                 data_sources = json.load(file)
                 for key, value in data_sources.items():
@@ -207,7 +205,6 @@ class DataAccess:
             return None
         return ds.get_var_fields(**kwargs)
 
-    # TODO change to a better name
     def get_connected_data_source_names(self) -> List[str]:
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.ds_list.items():
@@ -215,8 +212,7 @@ class DataAccess:
                 data_sources.append(ds_name)
         return data_sources
 
-    # TODO change to a better name
-    def get_connected_data_sources(self)->List[DataSource]:
+    def get_connected_data_sources(self) -> List[DataSource]:
         data_sources = []
         for ds_name, ds in self.ds_list.items():
             if ds.connected:
