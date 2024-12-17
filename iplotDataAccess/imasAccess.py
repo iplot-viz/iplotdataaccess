@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import cachetools as ct
 from PySide6.QtCore import QDir
 from iplotLogging import setupLogger
+
 try:
     from data_dictionary import idsdef as idsdd
 except ImportError:
@@ -51,6 +52,7 @@ class IMASDataAccess:
         return self.__input, self.__isConnected
 
     def configure(self, list_i=None):
+        self.uri = None
         if list_i is None:
             list_i = []
             return
@@ -74,11 +76,13 @@ class IMASDataAccess:
                 temp = s.split("=")[1]
                 ret = temp.split("/")
                 try:
+                    logger.info(" ret %s", ret)
                     self.pulse = int(ret[0])
                     if len(ret) == 2:
                         self.run = int(ret[1])
                     else:
                         self.run = 0
+                    logger.info(" ret %s", ret)
                 except ValueError:
                     logger.error("got an invalid pulse identifier %s ", temp)
                     self.run = 0
@@ -127,21 +131,33 @@ class IMASDataAccess:
 
         path: str
         if user == 'public':
-            path = QDir().rootPath() + QDir('/work/imas/shared/imasdb').path()
+            path = QDir().rootPath() + QDir(os.getenv('IMAS_HOME', 'work/imas') + '/shared/imasdb').path()
 
-        path = QDir().separator().join([path, db, str(version), str(run_path)])
+        path = QDir().separator().join([path, self.database, str(version)])
         path = QDir.cleanPath(path)
 
-        glob = f'ids_{pulse}{(run):0>4}.tree'
+        glob = f'1*'
         idss = QDir(path)
         idss.setNameFilters([glob])
+        plist = []
+        for i in idss.entryList():
+            runt = QDir(path + "/" + i)
+            runF = runt.entryList()
+            for run in runF:
+                try:
+                    int(run)
+                    plist.append(i + "_" + run)
+                except ValueError:
+                    # logger.warning("discarding the . folder")
+                    pass
 
-        return idss.entryList()
+        return plist
 
     def get_pulse_info(self, pulse, run):
         db = 'ITER'
         user = 'public'
-        input_imas = imas.DBEntry(imas.imasdef.MDSPLUS_BACKEND, db, pulse, run, user)
+        logger.info("in get pulse info %s", pulse)
+        input_imas = imas.DBEntry(self.backend, self.database, pulse, run, user)
         error = input_imas.open()
         if error[0] < 0:
             print("Data entry not valid: ", error)
@@ -231,7 +247,7 @@ class IMASDataAccess:
 
                 if "units" in field.attrib.keys():
                     attributes["units"] = field.attrib["units"]
-                    if "as_parent" in attributes["units"]: # go up the AoS until we find the real unit:
+                    if "as_parent" in attributes["units"]:  # go up the AoS until we find the real unit:
                         for sfield in reversed(fieldlist):
                             if "units" in sfield.attrib.keys():
                                 if "as_parent" not in sfield.attrib["units"]:
@@ -273,12 +289,12 @@ class IMASDataAccess:
             mycfg.append("uri=" + kwargs.get("uri"))
             self.configure(mycfg)
         if kwargs.get("pulse"):
+            logger.info("get a pulse %s", kwargs.get("pulse"))
             pulseId = kwargs.get("pulse")
-            # Detect IMAS URI or pulse/run:
             if pulseId.startswith("imas:"):
                 mycfg.append("uri=" + pulseId)
             else:
-                mycfg.append("pulseIdent=" + pulseId)            
+                mycfg.append("pulseIdent=" + pulseId)
             self.configure(mycfg)
         if kwargs.get("tsS"):
             tsST = kwargs.get("tsS")
@@ -363,10 +379,10 @@ class IMASDataAccess:
         try:
             level1 = res[-1].split("/", 1)
             metadata = self.__get_metadata(res[-2], level1[0])
-            print("found meta %s", metadata)
+            # print("found meta %s", metadata)
             dp = metadata["data_type"]
             ts = metadata["timebasepath"]
-            print("found dp =%s and ts=%s ", dp, ts)
+            # print("found dp =%s and ts=%s ", dp, ts)
             if dp == "struct_array" and ts == "time":
                 if re.search(r'\(:\)|\(0\)|\(\d+\)', level1[0]):
                     idsp = '/'.join(level1)
@@ -383,7 +399,7 @@ class IMASDataAccess:
             return dobj
         dobj.set_a(DataType.DA_TYPE_FLOAT, DataType.DA_TYPE_FLOAT, 'Time', '', '', '', 1)
         try:
-            print("ids res %s", res[-1], idsp)
+            # print("ids res %s", res[-1], idsp)
 
             if len(res) == 1:
                 dobj.set_data(self.__input.partial_get(ids_name=res[-1], data_path=""), 2)
@@ -393,7 +409,7 @@ class IMASDataAccess:
                 dobj.set_data(self.__get_time_data(idsn=res[-2], idsp=idsp), 1)
                 metadata = self.__get_metadata(res[-2], res[-1])
                 dobj.yunit = self.__get_units(metadata)
-                if "as_parent" in dobj.yunit: # we go up until we find the parent unit:
+                if "as_parent" in dobj.yunit:  # we go up until we find the parent unit:
                     res_up = res[-1]
                     while "as_parent" in dobj.yunit:
                         res_up = res_up.rpartition("/")[0]
@@ -426,7 +442,7 @@ class IMASDataAccess:
                     dobj.xdata = dobj.xdata[idx]
                     # newidx=[slice(None)] * (dobj.ydata.ndim - 1) + [idx]
                     # this extracts the last dimension
-                    print(dobj.ydata.ndim)
+                    # print("ndim: ", dobj.ydata.ndim)
                     if dobj.ydata.ndim == 1:
                         dobj.ydata = dobj.ydata[idx]
                     elif dobj.ydata.ndim == 2:

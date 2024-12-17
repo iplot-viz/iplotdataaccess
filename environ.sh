@@ -30,25 +30,26 @@ echo "Toolchain: $toolchain"
 try module purge
 
 # Other IDV components
-try module load iplotLogging/0.3.0-GCCcore-10.2.0
+try module load iplotLogging
 
 # Testing/Coverage requirements
-try module load coverage/5.5-GCCcore-10.2.0
 case $toolchain in
 
   "foss")
-      try module load IMAS/3.38.0-4.11.1-foss-2020b
-      try module load m-uda-client/7.0.1-foss-2020b
+      try module load IMAS-AL-Python/5.3.0-foss-2023b-DD-3.42.0
+      try module load m-uda-client/7.2.0-gfbf-2023b
+      try module load coverage
     ;;
   "intel")
-      try module load IMAS/3.38.1-4.11.1-2020b
-      try module load m-uda-client/7.0.1-intel-2020b
+      try module load IMAS-AL-Python/5.3.0-intel-2023b-DD-3.42.0
+      try module load m-uda-client/7.2.0-iimkl-2023b
+      try module load coverage
     ;;
    *)
     echo "Unknown toolchain $toolchain"
     ;;
 esac
-try module list -t 2>&1 |grep sseclient
+try module -t list 2>&1 | sort
 
 export HOME=$PWD
 echo "HOME was set to $HOME"
