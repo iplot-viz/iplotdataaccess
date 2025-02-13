@@ -228,7 +228,7 @@ def get_available_ids_and_times(db_entry_object) -> list:
             time_array = None
             try:
                 ids_object = db_entry_object.get(
-                    _ids_name, occurrence=occurrence, lazy=True
+                    _ids_name, occurrence=occurrence, lazy=True, autoconvert=False
                 )
                 homogeneous_time = ids_object.ids_properties.homogeneous_time
                 if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_UNKNOWN:

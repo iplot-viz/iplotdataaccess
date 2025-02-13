@@ -125,7 +125,7 @@ class IMASPYDataAccess:
         object, values, unit, and name. The `err
         """
         ids_name, ids_fragment = parse_idspath(ids_path)
-        ids = self.connection.get(ids_name, lazy=True)
+        ids = self.connection.get(ids_name, lazy=True, autoconvert=False)
 
         x_dict = {}
         y_dict = {}
@@ -328,7 +328,7 @@ class IMASPYDataAccess:
     def get_var_list(self, pattern=".*"):
         return self.get_dd_fields(pattern)
 
-    def get_pulse_info(self):
+    def get_pulse_info(self, pulse, run, version="3"):
         """
         The function `get_pulse_info` retrieves a list of available IDs and times if a connection is
         established.
@@ -336,9 +336,13 @@ class IMASPYDataAccess:
         Returns:
             The `ids_list` will be returned
         """
+        uri = (
+            f"imas:hdf5?user=public;shot={pulse};" f"run={run};database=ITER;version=3"
+        )
+        entry = imas.DBEntry(uri, "r")
         ids_list = None
-        if self.connection:
-            ids_list = get_available_ids_and_times(self.connection)
+        if entry:
+            ids_list = get_available_ids_and_times(entry)
 
         return ids_list
 
@@ -368,17 +372,17 @@ class IMASPYDataAccess:
     # TODO implement pulse and run filter
     def get_pulses(
         self,
-        pulse_filter="",
-        run_filter="",
-        user="public",
-        database="ITER",
-        version="3",
-        backends="mdsplus",
         **kwargs,
     ):
+        pulse = kwargs["pulse"] if "pulse" in kwargs.keys() else ""
+        run = kwargs["run"] if "run" in kwargs.keys() else ""
+        user = kwargs["user"] if "user" in kwargs.keys() else "public"
+        database = kwargs["database"] if "database" in kwargs.keys() else "ITER"
+        version = kwargs["version"] if "version" in kwargs.keys() else "3"
+        backends = kwargs["backends"] if "backends" in kwargs.keys() else "mdsplus"
         pulses = IMASDBMaster.get_database_files(
-            pulse_filter=pulse_filter,
-            run_filter=run_filter,
+            pulse=pulse,
+            run=run,
             user=user,
             database=database,
             version=version,
