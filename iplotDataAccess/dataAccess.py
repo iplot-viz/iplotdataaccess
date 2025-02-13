@@ -12,6 +12,12 @@ logger = setupLogger.get_logger(__name__)
 
 # Should import possible data sources like IMAS UDA and CODAC UDA
 try:
+    import imaspy
+    import iplotDataAccess.imaspyAccess
+except ModuleNotFoundError:
+    logger.warning("import 'imaspy client' is not installed")
+
+try:
     import imas
     import iplotDataAccess.imasAccess
 except ModuleNotFoundError:
@@ -59,7 +65,7 @@ class DataSource:
             self.name = name
         if dtype == dSC.DS_CODAC_TYPE:
             self.connectionString = "host=X,port=3090"
-        elif dtype == dSC.DS_IMAS_TYPE:
+        elif dtype == dSC.DS_IMAS_TYPE or dtype == dSC.DS_IMASPY_TYPE:
             self.connectionString = "database=ITER,path=public,backend=MDSPLUS"
         self.dtype = dtype
 
@@ -73,7 +79,9 @@ class DataSource:
 
     def set_connection_string(self, conninfo):
         self.connectionString = conninfo
-        if "host" in conninfo:
+        if self.name == "imaspy":
+            self.dtype = dSC.DS_IMASPY_TYPE
+        elif "host" in conninfo:
             self.dtype = dSC.DS_CODAC_TYPE
         elif "database" in conninfo:
             self.dtype = dSC.DS_IMAS_TYPE
@@ -95,7 +103,7 @@ class DataSource:
 
     def set_rt_handler(self):
         myhd = {}
-        if self.dtype == dSC.DS_IMAS_TYPE:
+        if self.dtype == dSC.DS_IMAS_TYPE or self.dtype == dSC.DS_IMASPY_TYPE:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
             raise RTHException("Real Time Handler is not supported")
@@ -130,7 +138,13 @@ class DataSource:
             except ModuleNotFoundError:
                 self.errcode = -1
                 self.connected = False
-
+        elif self.dtype == dSC.DS_IMASPY_TYPE:
+            try:
+                self.daHandler = iplotDataAccess.imaspyAccess.IMASPYDataAccess()
+                self.connected = self.daHandler.connect_source(connection_string=self.connectionString)
+            except ModuleNotFoundError:
+                self.errcode = -1
+                self.connected = False
         elif self.dtype == dSC.DS_CODAC_TYPE:
             try:
                 self.daHandler = iplotDataAccess.udaAccess.UdaAccess()

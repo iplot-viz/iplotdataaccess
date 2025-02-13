@@ -4,6 +4,7 @@ logger = setupLogger.get_logger(__name__)
 
 DS_CODAC_TYPE = "CODAC_UDA"
 DS_IMAS_TYPE = "IMAS_UDA"
+DS_IMASPY_TYPE = "IMASPY"
 
 class DataSourceConfig:
 
@@ -21,6 +22,14 @@ class DataSourceConfig:
             self.supportedDataSources.append(DS_CODAC_TYPE)
         except ModuleNotFoundError:
             logger.error("module 'uda client' is not installed")
+
+        try:
+            import imaspy
+            import iplotDataAccess.imaspyAccess
+            logger.info("module imaspy is installed")
+            self.supportedDataSources.append(DS_IMASPY_TYPE)
+        except ModuleNotFoundError:
+            logger.error("module 'imaspy' is not installed")
 
         try:
             import imas
