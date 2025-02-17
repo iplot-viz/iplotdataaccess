@@ -25,7 +25,7 @@ class DataAccess:
         supported_data_sources = {}
 
         try:
-            file_path = str(pkg_resources.files('iplotdataaccess').joinpath('data_sources.cfg'))
+            file_path = str(pkg_resources.files('iplotDataAccess').joinpath('data_sources.cfg'))
             with open(file_path, 'r') as file:
 
                 data_sources = json.load(file)
