@@ -57,7 +57,7 @@ def get_length_of_partial_field(ids, ids_path):
     partial_field = re.sub(r"[\[\(](t|[\d]*)[\]\)]", "", ids_path)
     partial_field = partial_field.split(".")[0]
     try:
-        _inner_data = eval("ids." + partial_field)
+        _inner_data = ids[partial_field]
         coordinate_partial = _inner_data
         coordinate_unit = ""
         if isinstance(_inner_data, IDSPrimitive):

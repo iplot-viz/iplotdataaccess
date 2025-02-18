@@ -153,9 +153,7 @@ class IMASPYDataAccess:
 
         x_dict = {}
         y_dict = {}
-        ids_fragment = (
-            ids_fragment.replace("(", "[").replace(")", "]").replace("/", ".")
-        )
+
         node = None
         coordinate = None
         coordinate_index = 0
@@ -175,7 +173,7 @@ class IMASPYDataAccess:
                 logger.error(f"Non homogeneous time {ids_path} ")
         else:
             try:
-                node = eval("ids." + ids_fragment)
+                node = ids[ids_fragment]
             except Exception as e:
                 errcode = -1
                 errdesc = f"ids path is not present {ids_path}"
