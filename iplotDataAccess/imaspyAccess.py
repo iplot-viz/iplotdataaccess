@@ -2,6 +2,7 @@ import re
 
 import imaspy as imas
 import numpy as np
+from functools import lru_cache
 from imaspy.ids_primitive import IDSNumericArray, IDSPrimitive
 from iplotLogging import setupLogger
 
@@ -391,7 +392,7 @@ class IMASPYDataAccess:
         denv.ydata_avg = dobj.ydata  # dummy
         return denv
 
-    # TODO implement pulse and run filter
+    @lru_cache(maxsize=10)
     def get_pulses(
         self,
         **kwargs,
@@ -402,6 +403,7 @@ class IMASPYDataAccess:
         database = kwargs["database"] if "database" in kwargs.keys() else "ITER"
         version = kwargs["version"] if "version" in kwargs.keys() else "3"
         backends = kwargs["backends"] if "backends" in kwargs.keys() else "mdsplus"
+        logger.info("retriving list of pulses for imaspy data source, please wait...")
         pulses = IMASDBMaster.get_database_files(
             pulse=pulse,
             run=run,
@@ -410,4 +412,5 @@ class IMASPYDataAccess:
             version=version,
             backends=backends,
         )
+        logger.info("retriving list of pulses for imaspy data source is finished")
         return pulses

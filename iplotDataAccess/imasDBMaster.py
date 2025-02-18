@@ -2,7 +2,6 @@ import logging
 import os
 import re
 from datetime import datetime
-from functools import lru_cache
 from glob import iglob
 from pathlib import Path
 
@@ -218,7 +217,6 @@ class IMASDBMaster:
         return status
 
     @staticmethod
-    @lru_cache(maxsize=10)
     def get_hdf5_pulses(
         pulse="",
         run="",
@@ -311,7 +309,6 @@ class IMASDBMaster:
         return pulses
 
     @staticmethod
-    @lru_cache(maxsize=10)
     def get_mds_plus_pulses(
         pulse="",
         run="",
