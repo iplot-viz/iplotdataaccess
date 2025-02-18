@@ -35,4 +35,7 @@ setuptools.setup(
         "requests >= 2.25.1",
         "sseclient-py >= 1.7",
     ],
+    package_data={
+        "iplotDataAccess": ["data_sources.cfg"],
+    },
 )
