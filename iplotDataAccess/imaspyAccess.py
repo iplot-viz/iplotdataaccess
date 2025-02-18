@@ -4,13 +4,11 @@ import imaspy as imas
 import numpy as np
 from imaspy.ids_primitive import IDSNumericArray, IDSPrimitive
 from iplotLogging import setupLogger
-from scipy.interpolate import interp1d
 
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
 from iplotDataAccess.imasDBMaster import IMASDBMaster
 from iplotDataAccess.imasUtils import (
     get_available_ids_and_times,
-    get_slice,
     parse_idspath,
     parse_string_to_dict,
     partial_get,
@@ -108,6 +106,18 @@ class IMASPYDataAccess:
         else:
             return False
 
+    def get_time(self, ids_name):
+        try:
+            ids = self.connection.get(ids_name, lazy=True, autoconvert=False)
+            homogeneous_time = ids.ids_properties.homogeneous_time
+            if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_HOMOGENEOUS:
+                _time_value = ids.time.value
+                if len(_time_value) != 0:
+                    return _time_value
+            return None
+        except Exception as e:
+            return None
+
     def get_values(self, ids_path, time_start: float = None, time_end: float = None):
         """
         The function `get_values` retrieves data based on the provided `ids_path`, handles different
@@ -125,7 +135,21 @@ class IMASPYDataAccess:
         object, values, unit, and name. The `err
         """
         ids_name, ids_fragment = parse_idspath(ids_path)
-        ids = self.connection.get(ids_name, lazy=True, autoconvert=False)
+
+        if time_start is not None or time_end is not None:
+            if time_end is None:
+                _time = self.get_time(ids_name)
+                if _time is not None:
+                    time_end = _time[-1]
+            elif time_start is None:
+                _time = self.get_time(ids_name)
+                if _time is not None:
+                    time_start = _time[0]
+            ids = self.connection.get_sample(
+                ids_name, time_start, time_end, lazy=True, autoconvert=False
+            )
+        else:
+            ids = self.connection.get(ids_name, lazy=True, autoconvert=False)
 
         x_dict = {}
         y_dict = {}
@@ -172,7 +196,7 @@ class IMASPYDataAccess:
                         xdata = coordinate.value
                         xunit = coordinate.metadata.units
                         xlabel = f"{ids_name}/{coordinate.metadata.path}"
-        xdata, ydata = get_slice(xdata, ydata, time_start, time_end)
+
         x_dict["object"] = coordinate
         x_dict["values"] = xdata
         x_dict["unit"] = xunit

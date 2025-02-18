@@ -2,10 +2,10 @@ import re
 
 import imaspy as imas
 import numpy as np
-from iplotLogging import setupLogger
 from imaspy.ids_primitive import (
     IDSPrimitive,
 )
+from iplotLogging import setupLogger
 
 logger = setupLogger.get_logger(__name__)
 
@@ -132,41 +132,6 @@ def partial_get(ids, ids_path, coordinate_index=0):
                 data = np.vstack((data, _inner_data))
     data = np.array(data)
     return data, coordinate, data_unit, coordinate_unit
-
-
-def get_slice(xdata, ydata, time_start: float = None, time_end: float = None):
-    """
-    The function `get_slice` takes input data along with optional time boundaries and returns a sliced
-    portion of the data within the specified time range.
-
-    Args:
-        xdata: `xdaya` numpy array
-        ydata: `ydata` numpy array
-        time_start (float): The `time_start` parameter in the `get_slice` function is used to specify the
-    starting time for slicing the data.
-        time_end (float): The `time_end` parameter in the `get_slice` function is used to specify the end
-    time for slicing the data.
-
-    Returns:
-        The function `get_slice` returns the sliced `xdata` and `ydata` based on the specified time range
-    (`time_start` and `time_end`).
-    """
-    if xdata is not None and len(xdata) != 0:
-        if time_start is None:
-            time_start = xdata[0]
-        if time_end is None:
-            time_end = xdata[-1]
-    else:
-        return xdata, ydata
-    idx = np.where((xdata >= time_start) & (xdata <= time_end))
-    xdata_sliced = xdata[idx]
-    if ydata.ndim == 1:
-        ydata_sliced = ydata[idx]
-    elif ydata.ndim == 2:
-        ydata_sliced = ydata[:][idx]
-    elif ydata.ndim == 3:
-        ydata_sliced = ydata[:][:][idx]
-    return xdata_sliced, ydata_sliced
 
 
 def parse_string_to_dict(input_string):
