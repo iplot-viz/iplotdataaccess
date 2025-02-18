@@ -7,6 +7,7 @@ from typing import List, Union
 import xml.etree.ElementTree as ET
 
 import cachetools as ct
+import pandas as pd
 from PySide6.QtCore import QDir
 from iplotDataAccess.dataSource import DataSource
 
@@ -125,12 +126,12 @@ class IMASDataAccess(DataSource):
             logger.warning("issue with opening the file %s ", e)
             self.connected = True
             self.__input = None
-            return True # TODO need to change because not exist a way to check if its connected
+            return True  # TODO need to change because not exist a way to check if its connected
 
     def is_connected(self):
         return self.connected
 
-    def get_pulses(self, pulse='*', run='????', **kwargs):
+    def get_pulses(self, pulse='*', run='????', **kwargs) -> pd.DataFrame:
         run_path = '0'
         user = 'public'
         db = 'ITER'
@@ -141,7 +142,7 @@ class IMASDataAccess(DataSource):
             path = QDir().rootPath() + QDir(os.getenv('IMAS_HOME', 'work/imas') + '/shared/imasdb').path()
         else:
             # TODO
-            return []
+            return pd.DataFrame()
 
         path = QDir().separator().join([path, self.database, str(version)])
         path = QDir.cleanPath(path)
@@ -161,7 +162,7 @@ class IMASDataAccess(DataSource):
                     # logger.warning("discarding the . folder")
                     pass
 
-        return plist
+        return pd.DataFrame(plist, columns=["pulseId"])
 
     def get_pulse_info(self, pulse, run):
         db = 'ITER'
