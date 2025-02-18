@@ -196,8 +196,6 @@ def get_available_ids_and_times(db_entry_object) -> list:
                     _ids_name, occurrence=occurrence, lazy=True, autoconvert=False
                 )
                 homogeneous_time = ids_object.ids_properties.homogeneous_time
-                if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_UNKNOWN:
-                    time_array = []
                 if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_HETEROGENEOUS:
                     time_array = [np.NaN]
                 if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_HOMOGENEOUS:
