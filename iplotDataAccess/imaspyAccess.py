@@ -1,8 +1,9 @@
+import os
 import re
+from functools import lru_cache
 
 import imaspy as imas
 import numpy as np
-from functools import lru_cache
 from imaspy.ids_primitive import IDSNumericArray, IDSPrimitive
 from iplotLogging import setupLogger
 
@@ -25,6 +26,7 @@ class IMASPYDataAccess:
         self.connection = None
         self.errcode = 0
         self.errdesc = ""
+        self.pulse_list = None
 
     def connect_source(self, connection_string=""):
         """
@@ -351,7 +353,7 @@ class IMASPYDataAccess:
     def get_var_list(self, pattern=".*"):
         return self.get_dd_fields(pattern)
 
-    def get_pulse_info(self, pulse, run, version="3"):
+    def get_pulse_info(self, pulse, run):
         """
         The function `get_pulse_info` retrieves a list of available IDs and times if a connection is
         established.
@@ -359,15 +361,14 @@ class IMASPYDataAccess:
         Returns:
             The `ids_list` will be returned
         """
-        uri = (
-            f"imas:hdf5?user=public;shot={pulse};" f"run={run};database=ITER;version=3"
-        )
-        entry = imas.DBEntry(uri, "r")
-        ids_list = None
-        if entry:
-            ids_list = get_available_ids_and_times(entry)
-
-        return ids_list
+        if self.pulse_list is not None:
+            filtered = self.pulse_list[
+                (self.pulse_list["pulse"] == pulse) & (self.pulse_list["run"] == run)
+            ]
+            if not filtered.empty:
+                return filtered.iloc[0].dropna().to_string()
+            else:
+                return None
 
     def close(self):
         """
@@ -398,19 +399,55 @@ class IMASPYDataAccess:
         **kwargs,
     ):
         pulse = kwargs["pulse"] if "pulse" in kwargs.keys() else ""
-        run = kwargs["run"] if "run" in kwargs.keys() else ""
-        user = kwargs["user"] if "user" in kwargs.keys() else "public"
-        database = kwargs["database"] if "database" in kwargs.keys() else "ITER"
-        version = kwargs["version"] if "version" in kwargs.keys() else "3"
-        backends = kwargs["backends"] if "backends" in kwargs.keys() else "mdsplus"
-        logger.info("retriving list of pulses for imaspy data source, please wait...")
-        pulses = IMASDBMaster.get_database_files(
-            pulse=pulse,
-            run=run,
-            user=user,
-            database=database,
-            version=version,
-            backends=backends,
-        )
-        logger.info("retriving list of pulses for imaspy data source is finished")
+        if self.pulse_list is None:
+
+            logger.info(
+                "retriving list of pulses for imaspy data source, please wait..."
+            )
+
+            directory_list = [os.environ["IMAS_HOME"] + "/shared/imasdb/ITER/3"]
+            directory_list.append(os.environ["IMAS_HOME"] + "/shared/imasdb/ITER/4")
+            import time
+
+            start_time = time.perf_counter()
+            scenarioDescriptionObj = IMASDBMaster(directory_list=directory_list)
+            df = scenarioDescriptionObj.get_dataframes_from_files(
+                extension=".yaml", add_obsolete=False
+            )
+            df["date"] = df["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            df["ref_name"] = df["ref_name"].str.slice(0, 50)
+            end_time = time.perf_counter()
+            execution_time = end_time - start_time
+            logger.info(f"Retrieved list of pulses in: {execution_time:.6f} seconds")
+            df_sorted = df.sort_values(by=["pulse", "run"])
+            self.pulse_list = df_sorted
+        pulses = {
+            f"{row.pulse}{row.run}": {
+                "pulse": str(row.pulse),
+                "run": str(row.run),
+                "ref_name": str(row.ref_name),
+                "ip": str(row.ip),
+                "b0": str(row.b0),
+                "fuelling": str(row.fuelling),
+                "confinement": str(row.confinement),
+                "workflow": str(row.workflow),
+                "date": str(row.date),
+            }
+            for _, row in self.pulse_list[
+                self.pulse_list["pulse"].astype(str).str.startswith(pulse)
+            ][
+                [
+                    "pulse",
+                    "run",
+                    "ref_name",
+                    "ip",
+                    "b0",
+                    "fuelling",
+                    "confinement",
+                    "workflow",
+                    "date",
+                ]
+            ].iterrows()
+        }
         return pulses
