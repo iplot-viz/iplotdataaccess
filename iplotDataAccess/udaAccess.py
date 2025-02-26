@@ -25,12 +25,13 @@ import cachetools as ct
 
 from iplotDataAccess.dataSource import DataSource
 from iplotDataAccess.realTimeStreamer import RTStreamer
-from iplotWidgets.variableBrowser.tools.converters import parse_vars_to_dict, parse_search_to_dict
 
 logger = setupLog.get_logger(__name__)
 
+
 class RTHException(Exception):
     pass
+
 
 class UdaParams:
     def __init__(self):
@@ -343,19 +344,78 @@ class UdaAccess(DataSource):
 
         return pulse_info
 
-    def get_pulses(self, pattern='*:*/*') -> DataFrame:
+    def search_pulses_df(self, text: str) -> DataFrame:
+        location = ''
+        folder = ''
+        pulse = ''
+        if text.isdigit():
+            pattern = f'*:*/{text}'
+        else:
+            parts = text.split(':')
+            if len(parts) > 1:
+                # At least, location and folder
+                location = parts[0]
+                rest = parts[1].split('/')
+                if len(rest) > 1 and (rest[1].isdigit() or rest[1] == '*'):
+                    # Location, folder and pulse number specified
+                    folder = rest[0]
+                    pulse = rest[1]
+                else:
+                    # Just location and folder
+                    folder = parts[1]
+                    pulse = ''
+            else:
+                # Multiple cases: just location , just folder or folder with pulse
+                ofd = parts[0].split('/')
+                if len(ofd) > 1 and (ofd[1].isdigit() or ofd[1] == '*'):
+                    # Folder and pulse number specified
+                    location = ''
+                    folder = ofd[0] if not ofd[0].startswith('*') else ofd[0][1:]
+                    pulse = ofd[1]
+                else:
+                    # Just location or folder
+                    if ofd[0].startswith('*') and ofd[0].endswith('*'):
+                        # Valid just for folder
+                        location = ''
+                        folder = ofd[0][1:]  # Remove the first '*'
+                        pulse = ''
+                    elif ofd[0].endswith('*'):
+                        # Valid just for location
+                        location = ofd[0]
+                        folder = ''
+                        pulse = ''
+
+            # Set pattern for search
+            if location and folder and pulse:
+                pattern = f'{location}:{folder}/{pulse}'
+            elif location and not folder and not pulse:
+                pattern = f'{location}:*/*'
+            elif location and folder and not pulse:
+                pattern = f'{location}:{folder}/*'
+            elif not location and folder and pulse:
+                pattern = f'*:{folder}/{pulse}'
+            elif not location and folder and not pulse:
+                pattern = f'*:{folder}/*'
+            else:
+                pattern = ' '
+
+        found = self.get_pulses_df(pattern=pattern)
+        return found
+
+    def get_pulses_df(self, pattern='*:*/*') -> DataFrame:
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
-            return DataFrame(columns=["pulseId", 'description', 'status', 'timeFrom', 'timeTo', 'duration'])
-        pulse_df = DataFrame([{
-            'pulseID': line.pulseID,
-            'description': line.description,
-            'status': line.status.strip(),
-            'timeFrom': pd.to_datetime(line.timeFrom),
-            'timeTo': pd.to_datetime(line.timeTo),
-            'duration': pd.to_datetime(line.timeTo) - pd.to_datetime(line.timeFrom)
-        } for line in pulses_list])
+            return DataFrame(columns=['Pulse', 'Description', 'Status', 'Time From', 'Time To', 'Duration'])
+        pulse_df = DataFrame([[
+            line.pulseID,
+            line.description,
+            line.status.strip(),
+            pd.to_datetime(line.timeFrom),
+            pd.to_datetime(line.timeTo),
+            pd.to_datetime(line.timeTo) - pd.to_datetime(line.timeFrom)]
+            for line in pulses_list],
+            columns=["Pulse", "Description", "Status", "Time From", "Time To", "Duration"])
         return pulse_df
 
     def get_cbs_list(self, sep=':', pattern='*', times='0') -> List[str]:
@@ -390,9 +450,9 @@ class UdaAccess(DataSource):
     def get_var_dict(self, pattern='.*', path=None) -> dict:
         var_list = self.get_var_list(pattern)
         if path:
-            var_dict = parse_vars_to_dict(var_list, path)
+            var_dict = self.parse_vars_to_dict(var_list, path)
         else:
-            var_dict = parse_search_to_dict(var_list)
+            var_dict = self.parse_search_to_dict(var_list)
 
         return var_dict
 
@@ -612,3 +672,61 @@ class UdaAccess(DataSource):
             d_env = self.__fetch_envelope(query)
         logger.debug("getEnveloppe exiting pulse does exist ")
         return d_env
+
+    @staticmethod
+    def parse_search_to_dict(lines: List[str]) -> dict:
+        """
+        Parses a list of lines representing search strings and organizes them into a dictionary.
+        :param lines: A list of strings representing search strings to be parsed.
+        :return: A dictionary containing the parsed search strings organized hierarchically.
+        """
+        result = dict()
+        for line in lines:
+            list_line = line.replace(':', '-:', 1).split('-')
+            cur_dict = result
+            for ix in range(len(list_line)):
+                if ix == len(list_line) - 1:
+                    cur_dict = cur_dict.setdefault('-'.join(list_line).replace('-:', ':', 1), '')
+                elif list_line[ix][0] == ':':
+                    temp = '-'.join(list_line[:ix + 1]).replace('-:', ':')
+                    if cur_dict.get(temp, None) != "":
+                        cur_dict = cur_dict.setdefault(temp, {})
+                    cur_dict = cur_dict.setdefault('-'.join(list_line).replace('-:', ':', 1), '')
+                    break
+                else:
+                    cur_dict = cur_dict.setdefault(list_line[ix], {})
+
+        return result
+
+    @staticmethod
+    def parse_vars_to_dict(lines: List[str], path: str) -> dict:
+        """
+        Parses a list of lines and organizes them into a dictionary based on a specified pattern.
+        :param lines: A list of strings representing lines to be parsed.
+        :param path : A string representing the pattern to be used for organizing the lines.
+        :return dict: A dictionary containing the parsed lines organized according to the specified pattern.
+
+        Example:
+            lines = ['x:a-b','x:b-c','x:a-c']
+            pattern = 'x'
+            result = parse_vars_to_dict(lines, pattern)
+            # Output:
+            # {
+            #   'x:a': {'x:a-b': '', 'x:a-c': ''},
+            #   'x:b-c': ''
+            # }
+        """
+        result = {}
+        folder_names = [line.split(':')[1].split('-')[0] for line in lines]
+        folder_counts = collections.Counter(folder_names)
+        for ix, line in enumerate(lines):
+            folder = folder_names[ix]
+            if folder_counts[folder] > 1:
+                key = f'{path}:{folder}'
+                if key not in result:
+                    result[key] = {}
+                result[key][line] = ''
+            else:
+                result[line] = ''
+
+        return result

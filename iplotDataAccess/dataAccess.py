@@ -73,10 +73,13 @@ class DataAccess:
                 if not ds_class:
                     logger.warning(f"DataSource '{ds_name}' has an unsupported data source type-> {ds_type}")
                     continue
+                try:
+                    data_source = ds_class(ds_name, ds_config)
+                    if data_source.connect():
+                        self.ds_list[ds_name] = data_source
+                except Exception as e:
+                    logger.warning(f"Error importing class {ds_class} with error {e}")
 
-                data_source = ds_class(ds_name, ds_config)
-                if data_source.connect():
-                    self.ds_list[ds_name] = data_source
         if self.ds_list:
             # Check which data source to set by default
             # Set first DataSource that has default=true if no one has it, set the first one
@@ -171,33 +174,12 @@ class DataAccess:
 
         return None
 
-    def get_pulse_list(self, data_source_name, **kwargs) -> List[str]:
-        ds = self.get_data_source(data_source_name)
-        if ds is None:
-            return []
-        pulse_list = ds.get_pulses(**kwargs)
-        return pulse_list
-
     def get_pulse_info(self, data_source_name, **kwargs):
         ds = self.get_data_source(data_source_name)
         if ds is None:
             return []
         pulse_info = ds.get_pulse_info(**kwargs)
         return pulse_info
-
-    def get_cbs_list(self, data_source_name, **kwargs):
-        ds = self.get_data_source(data_source_name)
-        if ds is None:
-            return None
-        cbs_list = ds.get_cbs_list(**kwargs)
-        return cbs_list
-
-    def get_var_list(self, data_source_name, **kwargs):
-        ds = self.get_data_source(data_source_name)
-        if ds is None:
-            return None
-        var_list = ds.get_var_list(**kwargs)
-        return var_list
 
     def get_var_fields(self, data_source_name, **kwargs):
         ds = self.get_data_source(data_source_name)

@@ -1,12 +1,10 @@
 import copy
 import time
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import List
 
 from pandas import DataFrame
 
-import iplotDataAccess
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
 from iplotDataAccess.realTimeStreamer import RTStreamer, RTStreamerException
 from iplotLogging import setupLogger
@@ -48,33 +46,35 @@ class DataSource(ABC):
         if not hasattr(cls, 'source_type') or cls.source_type is None:
             raise TypeError(f"Class '{cls.__name__}' needs to define 'source_type'.")
 
+    @abstractmethod
     def clear_cache(self) -> None:
         pass
 
+    @abstractmethod
     def get_data(self, **kwargs) -> DataObj:
         pass
 
+    @abstractmethod
     def get_envelope(self, **kwargs) -> DataEnvelope:
         pass
 
-    def get_pulses(self, **kwargs) -> DataFrame:
+    @abstractmethod
+    def search_pulses_df(self, text: str) -> DataFrame:
         pass
 
+    @abstractmethod
     def get_pulse_info(self, **kwargs):
         pass
 
-    def get_pulse_list(self, **kwargs):
+    @abstractmethod
+    def get_pulses_df(self, **kwargs) -> DataFrame:
         pass
 
-    def get_cbs_list(self, **kwargs) -> List[str]:
-        pass
-
+    @abstractmethod
     def get_cbs_dict(self, **kwargs) -> dict:
         pass
 
-    def get_var_list(self, **kwargs) -> List[str]:
-        pass
-
+    @abstractmethod
     def get_var_dict(self, **kwargs) -> dict:
         pass
 
@@ -119,6 +119,7 @@ class DataSource(ABC):
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
 
+    @abstractmethod
     def connect(self) -> bool:
         if self.rtu is not None:
             try:

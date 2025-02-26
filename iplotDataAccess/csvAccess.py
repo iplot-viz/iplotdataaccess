@@ -1,6 +1,7 @@
 import os
 import re
 import pandas as pd
+from pandas import DataFrame
 
 from iplotDataAccess import dataCommon
 from iplotDataAccess.dataSource import DataSource
@@ -55,7 +56,7 @@ class CsvAccess(DataSource):
         return data_obj  # Return the populated DataObj
 
     # Method to get all pulses (files) in the folder matching a pattern as a list
-    def get_pulses(self, pattern='.*'):
+    def get_pulses_df(self, pattern='.*') -> DataFrame:
         all_pulses = []
         base_folder = os.path.basename(self.folder_path)  # Get the base folder name
         # Walk through all files and folders in the directory
@@ -111,7 +112,4 @@ class CsvAccess(DataSource):
         pass
 
     def get_envelope(self):
-        pass
-
-    def get_cbs_list(self, pattern=".*"):
         pass

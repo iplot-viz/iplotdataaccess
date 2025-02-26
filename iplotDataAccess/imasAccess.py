@@ -9,6 +9,8 @@ import xml.etree.ElementTree as ET
 import cachetools as ct
 import pandas as pd
 from PySide6.QtCore import QDir
+from pandas import DataFrame
+
 from iplotDataAccess.dataSource import DataSource
 
 from iplotLogging import setupLogger
@@ -31,7 +33,7 @@ backend_dict = {"MDSPLUS": imas.imasdef.MDSPLUS_BACKEND,
 
 
 class IMASDataAccess(DataSource):
-    source_type = "IMAS"
+    source_type = "DS_IMAS_TYPE"
     database: str
     user_or_path: str
     backend: int = imas.imasdef.MDSPLUS_BACKEND
@@ -131,7 +133,20 @@ class IMASDataAccess(DataSource):
     def is_connected(self):
         return self.connected
 
-    def get_pulses(self, pulse='*', run='????', **kwargs) -> pd.DataFrame:
+    def search_pulses_df(self, text: str) -> DataFrame:
+        # Check if the text is a string of digits and if so, check if there are 6 digits or 4 digits
+        if text.isdigit() and len(text) == 6:
+            pulse_number = text
+            found = self.get_pulses_df(pulse=pulse_number)
+        elif text.isdigit() and len(text) == 4:
+            run_number = text
+            found = self.get_pulses_df(run=run_number)
+        else:
+            found = pd.DataFrame(columns=["pulseId", "Run"])
+
+        return found
+
+    def get_pulses_df(self, pulse='*', run='????', **kwargs) -> pd.DataFrame:
         run_path = '0'
         user = 'public'
         db = 'ITER'
@@ -162,7 +177,7 @@ class IMASDataAccess(DataSource):
                     # logger.warning("discarding the . folder")
                     pass
 
-        return pd.DataFrame(plist, columns=["pulseId"])
+        return pd.DataFrame([value.split("_") for value in plist], columns=["pulseId", "Run"])
 
     def get_pulse_info(self, pulse, run):
         db = 'ITER'
@@ -187,8 +202,8 @@ class IMASDataAccess(DataSource):
 
         return ids_list
 
-    def get_var_list(self, pattern='.*'):
-        return self.get_cbs_list(pattern)
+    def get_var_dict(self, pattern='.*'):
+        return self.get_cbs_dict(pattern)
 
     def getIDSNames(self) -> Union[List, None]:
         if self.idsdef_path is not None:
@@ -197,9 +212,6 @@ class IMASDataAccess(DataSource):
             idsnames = [ids.attrib["name"] for ids in root.findall("IDS")]
             return idsnames
         return None
-
-    def get_varasdasda(self, sep=':', pattern='*', times='0'):
-        return self.getIDSNames()
 
     def getIdsDefXml(self) -> Union[str, None]:
         idsdef_path = ""
@@ -212,7 +224,7 @@ class IMASDataAccess(DataSource):
             return None
         return idsdef_path
 
-    def get_cbs_list(self, pattern='.*'):
+    def get_cbs_dict(self, pattern='.*'):
         def get_child(element, path, pattern):
             children = {}
             child_returned = False
