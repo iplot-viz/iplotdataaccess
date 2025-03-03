@@ -153,7 +153,7 @@ class IMASDBMaster:
                 return None
 
             with ThreadPoolExecutor() as executor:
-                results = executor.map(process_yaml_file, files[:20])
+                results = executor.map(process_yaml_file, files)
 
             for result in results:
                 if result is not None:
