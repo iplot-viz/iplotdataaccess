@@ -101,11 +101,11 @@ class IMASDBMaster:
             a pandas DataFrame object.
         """
         yaml_data = IMASDBMaster.get_yaml_data(yaml_file_path)
+        if yaml_data is None:
+            return None
         if add_obsolete is False:
             if yaml_data["status"] != "active":
                 return None
-        if yaml_data is None:
-            return None
         flat_table = json_normalize(yaml_data)
         data_frame = pd.DataFrame(flat_table)
         return data_frame
@@ -153,7 +153,7 @@ class IMASDBMaster:
                 return None
 
             with ThreadPoolExecutor() as executor:
-                results = executor.map(process_yaml_file, files)
+                results = executor.map(process_yaml_file, files[:20])
 
             for result in results:
                 if result is not None:

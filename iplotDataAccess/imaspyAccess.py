@@ -4,7 +4,11 @@ from functools import lru_cache
 
 import imaspy as imas
 import numpy as np
+import pandas as pd
 from imaspy.ids_primitive import IDSNumericArray, IDSPrimitive
+from pandas import DataFrame
+
+from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
 
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
@@ -20,42 +24,23 @@ logger = setupLogger.get_logger(__name__)
 IMAS_ATTR = ["documentation", "data_type", "units", "dimension"]
 
 
-class IMASPYDataAccess:
-    def __init__(self):
-        self.uri = None
-        self.connection = None
-        self.errcode = 0
-        self.errdesc = ""
-        self.pulse_list = None
+class IMASPYDataAccess(DataSource):
+    source_type = "DS_IMASPY_TYPE"
 
-    def connect_source(self, connection_string=""):
-        """
-        The `connect_source` function in Python connects to a data entry using a connection string(uri).
-
-        Args:
-            connection_string: The `connect_source` method is used to establish a connection to a data
-        source based on the provided `connection_string`. The `connection_string` parameter should
-        contain uri.
-
-        Returns:
-            The `connect_source` method is returning a boolean value `True`.
-        """
+    def __init__(self, name: str, config: dict):
+        super().__init__(name=name, config=config)
         self.uri = ""
-        if connection_string.startswith("imas:"):
-            self.uri = connection_string
-        else:
-            attributes = parse_string_to_dict(connection_string)
-            backend = (
-                attributes["backend"] if "backend" in attributes.keys() else "mdsplus"
-            )
-            user = attributes["user"] if "user" in attributes.keys() else "public"
-            database = (
-                attributes["database"] if "database" in attributes.keys() else "ITER"
-            )
-            version = attributes["version"] if "version" in attributes.keys() else "3"
-            pulse_ident = (
-                attributes["pulseIdent"] if "pulseIdent" in attributes.keys() else "0/0"
-            )
+        self.pulse_list = None
+        self.set_uri(config)
+        self.connection = None
+
+    def set_uri(self, config: [dict | str]):
+        if type(config) is dict:
+            backend = config.get("backend", "mdsplus")
+            user = config.get("user", "public")
+            database = config.get("database", "ITER")
+            version = config.get("version", "3")
+            pulse_ident = config.get("pulseIdent", "134174/117")
             try:
                 ret = pulse_ident.split("/")
                 pulse = int(ret[0])
@@ -71,8 +56,10 @@ class IMASPYDataAccess:
                 self.errcode = -1
                 self.errdesc = "Received an invalid pulse identifier"
                 logger.exception(f"Received an invalid pulse identifier {e}")
-        # TODO This is required by calling function. after connect function it should report
-        return True
+        elif type(config) is str:
+            self.uri = config
+        else:
+            logger.error(f"Wrong type of config {type(config)}")
 
     def connect(self):
         """
@@ -86,7 +73,7 @@ class IMASPYDataAccess:
         """
         if self.uri is None or self.uri == "":
             logger.error(
-                f"can not connect, uri is not set, set uri using connect_source method {e}"
+                f"can not connect, uri is not set, set uri using connect_source method"
             )
             self.errcode = -1
             self.errdesc = "uri is not set"
@@ -104,10 +91,20 @@ class IMASPYDataAccess:
 
     @property
     def is_connected(self):
-        if self.connection:
-            return True
-        else:
-            return False
+        return self.connection is not None
+
+    def clear_cache(self):
+        # TODO implement
+        pass
+
+    def get_cbs_dict(self, pattern=".*"):
+        return self.get_dd_fields(pattern)
+
+    def get_var_dict(self, pattern=".*"):
+        return self.get_dd_fields(pattern)
+
+    def search_pulses_df(self, text) -> DataFrame:
+        return self.get_pulses_df(pulse=text)
 
     def get_time(self, ids_name):
         try:
@@ -211,7 +208,7 @@ class IMASPYDataAccess:
         return x_dict, y_dict, errcode, errdesc
 
     def get_data_object(
-        self, ids_path, time_start: float = None, time_end: float = None
+            self, ids_path, time_start: float = None, time_end: float = None
     ):
         """
         This function retrieves data values and metadata from a specified path and time range, and
@@ -289,9 +286,9 @@ class IMASPYDataAccess:
         if kwargs.get("pulse"):
             pulse_ident = kwargs.get("pulse")
             if pulse_ident.startswith("imas:"):
-                self.connect_source(connection_string=pulse_ident)
+                self.set_uri(pulse_ident)
             else:
-                self.connect_source(connection_string="pulseIdent=" + pulse_ident)
+                self.set_uri({"pulseIdent": pulse_ident})
             self.connect()
         if self.connection:
             data_obj = self.get_data_object(ids_path, time_start, time_end)
@@ -347,12 +344,6 @@ class IMASPYDataAccess:
 
         return all_children
 
-    def get_cbs_list(self, pattern=".*"):
-        return self.get_dd_fields(pattern)
-
-    def get_var_list(self, pattern=".*"):
-        return self.get_dd_fields(pattern)
-
     def get_pulse_info(self, pulse, run):
         """
         The function `get_pulse_info` retrieves a list of available IDs and times if a connection is
@@ -364,7 +355,7 @@ class IMASPYDataAccess:
         if self.pulse_list is not None:
             filtered = self.pulse_list[
                 (self.pulse_list["pulse"] == pulse) & (self.pulse_list["run"] == run)
-            ]
+                ]
             if not filtered.empty:
                 return filtered.iloc[0].dropna().to_string()
             else:
@@ -394,13 +385,9 @@ class IMASPYDataAccess:
         return denv
 
     @lru_cache(maxsize=10)
-    def get_pulses(
-        self,
-        **kwargs,
-    ):
+    def get_pulses_df(self, **kwargs, ) -> pd.DataFrame:
         pulse = kwargs["pulse"] if "pulse" in kwargs.keys() else ""
         if self.pulse_list is None:
-
             logger.info(
                 "retriving list of pulses for imaspy data source, please wait..."
             )
@@ -422,32 +409,22 @@ class IMASPYDataAccess:
             logger.info(f"Retrieved list of pulses in: {execution_time:.6f} seconds")
             df_sorted = df.sort_values(by=["pulse", "run"])
             self.pulse_list = df_sorted
-        pulses = {
-            f"{row.pulse}{row.run}": {
-                "pulse": str(row.pulse),
-                "run": str(row.run),
-                "ref_name": str(row.ref_name),
-                "ip": str(row.ip),
-                "b0": str(row.b0),
-                "fuelling": str(row.fuelling),
-                "confinement": str(row.confinement),
-                "workflow": str(row.workflow),
-                "date": str(row.date),
-            }
-            for _, row in self.pulse_list[
-                self.pulse_list["pulse"].astype(str).str.startswith(pulse)
-            ][
-                [
-                    "pulse",
-                    "run",
-                    "ref_name",
-                    "ip",
-                    "b0",
-                    "fuelling",
-                    "confinement",
-                    "workflow",
-                    "date",
-                ]
-            ].iterrows()
-        }
-        return pulses
+        pulses_df = self.pulse_list[
+            self.pulse_list["pulse"].astype(str).str.startswith(pulse)
+        ][
+            [
+                "pulse",
+                "run",
+                "ref_name",
+                "ip",
+                "b0",
+                "fuelling",
+                "confinement",
+                "workflow",
+                "date",
+            ]
+        ].astype(str)
+
+        pulses_df["key"] = pulses_df["pulse"] + pulses_df["run"]
+        pulses_df.set_index("key", inplace=True)
+        return pulses_df

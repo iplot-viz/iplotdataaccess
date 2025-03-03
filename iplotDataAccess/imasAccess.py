@@ -135,16 +135,11 @@ class IMASDataAccess(DataSource):
 
     def search_pulses_df(self, text: str) -> DataFrame:
         # Check if the text is a string of digits and if so, check if there are 6 digits or 4 digits
-        if text.isdigit() and len(text) == 6:
+        if text.isdigit():
             pulse_number = text
-            found = self.get_pulses_df(pulse=pulse_number)
-        elif text.isdigit() and len(text) == 4:
-            run_number = text
-            found = self.get_pulses_df(run=run_number)
+            return self.get_pulses_df(pulse=pulse_number)
         else:
-            found = pd.DataFrame(columns=["pulseId", "Run"])
-
-        return found
+            return pd.DataFrame(columns=["pulseId", "Run"])
 
     def get_pulses_df(self, pulse='*', run='????', **kwargs) -> pd.DataFrame:
         run_path = '0'

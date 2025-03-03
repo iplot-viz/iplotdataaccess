@@ -51,6 +51,10 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
+    def is_connected(self) -> bool:
+        pass
+
+    @abstractmethod
     def get_data(self, **kwargs) -> DataObj:
         pass
 

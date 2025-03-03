@@ -174,19 +174,6 @@ class DataAccess:
 
         return None
 
-    def get_pulse_info(self, data_source_name, **kwargs):
-        ds = self.get_data_source(data_source_name)
-        if ds is None:
-            return []
-        pulse_info = ds.get_pulse_info(**kwargs)
-        return pulse_info
-
-    def get_var_fields(self, data_source_name, **kwargs):
-        ds = self.get_data_source(data_source_name)
-        if ds is None:
-            return None
-        return ds.get_var_fields(**kwargs)
-
     def get_connected_data_source_names(self) -> List[str]:
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.ds_list.items():
@@ -197,7 +184,7 @@ class DataAccess:
     def get_connected_data_sources(self) -> List[DataSource]:
         data_sources = []
         for ds_name, ds in self.ds_list.items():
-            if ds.connected:
+            if ds.is_connected:
                 data_sources.append(ds)
         return data_sources
 
