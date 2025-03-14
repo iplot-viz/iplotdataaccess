@@ -12,7 +12,8 @@ from iplotLogging import setupLogger
 logger = setupLogger.get_logger(__name__)
 
 DS_CODAC_TYPE = "CODAC_UDA"
-DS_IMAS_TYPE = "IMAS_UDA"
+DS_IMAS_TYPE = "IMAS"
+DS_IMASPY_TYPE = "IMASPY"
 
 
 class RTHException(Exception):
@@ -25,8 +26,6 @@ class DataSource(ABC):
     def __init__(self, name: str, config: dict):
         self.default = config.get("default", False)
         self.name = name
-        self.connected = False
-
         # Stream config
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
@@ -96,7 +95,7 @@ class DataSource(ABC):
 
     def set_rt_handler(self):
         myhd = {}
-        if self.source_type == DS_IMAS_TYPE:
+        if self.source_type != DS_CODAC_TYPE:
             self.rterrcode = -1
             self.rtStatus = "UNEXISTING"
             raise RTHException("Real Time Handler is not supported")

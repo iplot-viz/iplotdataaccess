@@ -33,7 +33,7 @@ backend_dict = {"MDSPLUS": imas.imasdef.MDSPLUS_BACKEND,
 
 
 class IMASDataAccess(DataSource):
-    source_type = "DS_IMAS_TYPE"
+    source_type = "IMAS"
     database: str
     user_or_path: str
     backend: int = imas.imasdef.MDSPLUS_BACKEND

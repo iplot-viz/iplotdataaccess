@@ -25,7 +25,7 @@ IMAS_ATTR = ["documentation", "data_type", "units", "dimension"]
 
 
 class IMASPYDataAccess(DataSource):
-    source_type = "DS_IMASPY_TYPE"
+    source_type = "IMASPY"
 
     def __init__(self, name: str, config: dict):
         super().__init__(name=name, config=config)
@@ -33,6 +33,7 @@ class IMASPYDataAccess(DataSource):
         self.pulse_list = None
         self.set_uri(config)
         self.connection = None
+        self.connected = False
 
     def set_uri(self, config: [dict | str]):
         if type(config) is dict:
@@ -89,7 +90,6 @@ class IMASPYDataAccess(DataSource):
             self.connection = None
             return False
 
-    @property
     def is_connected(self):
         return self.connection is not None
 

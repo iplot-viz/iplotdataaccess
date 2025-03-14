@@ -177,19 +177,19 @@ class DataAccess:
     def get_connected_data_source_names(self) -> List[str]:
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.ds_list.items():
-            if ds_name not in data_sources and ds.connected:
+            if ds_name not in data_sources and ds.is_connected():
                 data_sources.append(ds_name)
         return data_sources
 
     def get_connected_data_sources(self) -> List[DataSource]:
         data_sources = []
         for ds_name, ds in self.ds_list.items():
-            if ds.is_connected:
+            if ds.is_connected():
                 data_sources.append(ds)
         return data_sources
 
     # Clear cache of all the dataSources
     def clear_cache(self):
         for ds in self.ds_list.values():
-            if ds.connected:
+            if ds.is_connected():
                 ds.daHandler.clear_cache()
