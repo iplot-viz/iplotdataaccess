@@ -34,6 +34,7 @@ setuptools.setup(
         "iplotLogging >= 0.2.0",
         "requests >= 2.25.1",
         "sseclient-py >= 1.7",
+        "PyYAML",
     ],
     package_data={
         "iplotDataAccess": ["data_sources.cfg"],
