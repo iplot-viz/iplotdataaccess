@@ -192,4 +192,4 @@ class DataAccess:
     def clear_cache(self):
         for ds in self.ds_list.values():
             if ds.is_connected():
-                ds.daHandler.clear_cache()
+                ds.clear_cache()
