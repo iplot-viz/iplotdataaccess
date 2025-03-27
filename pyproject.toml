@@ -5,9 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "iplotDataAccess"
 description = "Data access for applications using IDSs or CBS"
-authors = [{ name = "Lana Abadie", email = "lana.abadie@iter.org" }]
+authors = [
+    { name = "Lana Abadie", email = "lana.abadie@iter.org" },
+    { name = "Pablo Martin Villares", email = "pmartin@minsait.com" },
+    { name = "Jhon Steeven Cabanilla Alvarado", email = "jscabanilla@minsait.com" },
+]
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">= 3.8"
+requires-python = ">= 3.11"
 license = { text = "MIT" }
 keywords = ["IDS", "CBS", "Interface Data Structures", "Control Breakdown Structure"]
 classifiers = [
@@ -24,7 +28,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-imaspy = "PyYAML"
+imaspy = "PyYAML >= 6.0.1"
 
 [project.urls]
 Homepage = "https://git.iter.org/scm/vis/data-access.git"
