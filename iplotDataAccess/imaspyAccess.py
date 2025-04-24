@@ -1,27 +1,49 @@
+try:
+    import imaspy as imas
+except ImportError:
+    import imas
+
+
 import os
 import re
 from functools import lru_cache
 
-import imaspy as imas
 import numpy as np
 import pandas as pd
-from imaspy.ids_primitive import IDSNumericArray, IDSPrimitive
+from iplotLogging import setupLogger
 from pandas import DataFrame
 
-from iplotDataAccess.dataSource import DataSource
-from iplotLogging import setupLogger
-
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
+from iplotDataAccess.dataSource import DataSource
 from iplotDataAccess.imasDBMaster import IMASDBMaster
 from iplotDataAccess.imasUtils import (
-    get_available_ids_and_times,
+    InvalidImasError,
     parse_idspath,
-    parse_string_to_dict,
     partial_get,
 )
 
 logger = setupLogger.get_logger(__name__)
 IMAS_ATTR = ["documentation", "data_type", "units", "dimension"]
+
+if not hasattr(imas, "ids_defs"):
+    raise InvalidImasError(
+        """
+[ERROR] Detected an outdated version of the 'imas' module.
+
+The installed 'imas' package appears to be an incompatible legacy version of the high-level
+Python interface of the IMAS Access Layer.
+
+To resolve this, remove / unload this version and re-install using:
+
+    pip install imas-python
+
+or load the appropriate environment module on your system, e.g.
+
+    module load IMAS-Python
+
+More info: https://pypi.org/project/imas-python/
+"""
+    )
 
 
 class IMASPYDataAccess(DataSource):
@@ -35,7 +57,7 @@ class IMASPYDataAccess(DataSource):
         self.connection = None
         self.connected = False
 
-    def set_uri(self, config: [dict | str]):
+    def set_uri(self, config: dict | str):
         if type(config) is dict:
             backend = config.get("backend", "mdsplus")
             user = config.get("user", "public")
@@ -73,9 +95,7 @@ class IMASPYDataAccess(DataSource):
         return `False`.
         """
         if self.uri is None or self.uri == "":
-            logger.error(
-                f"can not connect, uri is not set, set uri using connect_source method"
-            )
+            logger.error("can not connect, uri is not set, set uri using connect_source method")
             self.errcode = -1
             self.errdesc = "uri is not set"
             self.connection = None
@@ -116,6 +136,7 @@ class IMASPYDataAccess(DataSource):
                     return _time_value
             return None
         except Exception as e:
+            logger.exception(f"Error getting time for {ids_name}: {e}")
             return None
 
     def get_values(self, ids_path, time_start: float = None, time_end: float = None):
@@ -134,7 +155,10 @@ class IMASPYDataAccess(DataSource):
         values, unit, and name. The `y_dict` contains information about the y-axis data, including the
         object, values, unit, and name. The `err
         """
-        ids_name, ids_fragment = parse_idspath(ids_path)
+        uri_dict = parse_idspath(ids_path)
+        occurrence = uri_dict["occurrence"] or 0
+        ids_name = uri_dict["ids_name"]
+        ids_path = uri_dict["ids_path"]
 
         if time_start is not None or time_end is not None:
             if time_end is None:
@@ -146,10 +170,10 @@ class IMASPYDataAccess(DataSource):
                 if _time is not None:
                     time_start = _time[0]
             ids = self.connection.get_sample(
-                ids_name, time_start, time_end, lazy=True, autoconvert=False
+                ids_name, time_start, time_end, lazy=True, occurrence=occurrence, autoconvert=False
             )
         else:
-            ids = self.connection.get(ids_name, lazy=True, autoconvert=False)
+            ids = self.connection.get(ids_name, lazy=True, occurrence=occurrence, autoconvert=False)
 
         x_dict = {}
         y_dict = {}
@@ -163,9 +187,10 @@ class IMASPYDataAccess(DataSource):
         xdata = np.array([])
         errcode = 0
 
-        if ":" in ids_fragment:
+        if ":" in ids_path:
             if ids.ids_properties.homogeneous_time == 1:
-                ydata, xdata, yunit, xunit = partial_get(ids, ids_fragment)
+                ydata, xdata, yunit, xunit = partial_get(ids, ids_path)
+
                 ydata = np.transpose(ydata)
             else:
                 errcode = -1
@@ -173,14 +198,13 @@ class IMASPYDataAccess(DataSource):
                 logger.error(f"Non homogeneous time {ids_path} ")
         else:
             try:
-                node = ids[ids_fragment]
+                node = ids[ids_path]
             except Exception as e:
                 errcode = -1
                 errdesc = f"ids path is not present {ids_path}"
-                logger.exception(
-                    f"given ids path {ids_path}  is not available, excepion detailed {e}"
-                )
-            if isinstance(node, IDSNumericArray):
+                logger.exception(f"given ids path {ids_path}  is not available, excepion detailed {e}")
+            if isinstance(node, imas.ids_primitive.IDSNumericArray):
+
                 if not node.has_value:
                     errcode = -1
                     errdesc = "Values are not present for {ids_path}"
@@ -190,10 +214,41 @@ class IMASPYDataAccess(DataSource):
                     yunit = node.metadata.units
 
                     coordinate = node.coordinates[coordinate_index]
-                    if isinstance(coordinate, IDSPrimitive):
+
+                    if isinstance(coordinate, np.ndarray):
+                        xdata = coordinate
+                    elif isinstance(coordinate, int):
+                        _coordinate = node.coordinates[coordinate]
+                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                            if _coordinate.has_value is True:
+                                coordinate = _coordinate
+                    elif coordinate and isinstance(coordinate, str):
+                        _coordinate = ids[coordinate]
+                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                            if _coordinate.has_value is True:
+                                coordinate = _coordinate
+                    else:
+                        for _coordinate in node.coordinates:
+                            if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                                if _coordinate.has_value is True:
+                                    coordinate = _coordinate
+                                    break
+                                else:
+                                    continue
+
+                    if isinstance(coordinate, imas.ids_primitive.IDSPrimitive):
                         xdata = coordinate.value
                         xunit = coordinate.metadata.units
                         xlabel = f"{ids_name}/{coordinate.metadata.path}"
+        if (
+            coordinate is None
+            or isinstance(coordinate, int)
+            or (isinstance(coordinate, imas.ids_primitive.IDSNumericArray) and coordinate.has_value is False)
+        ):
+            logger.error("Coordinates are empty, creating default array, you can also provide custom coordinates")
+            coordinate = xdata = np.arange(len(ydata))
+            xlabel = "Index"
+            xunit = "-"
 
         x_dict["object"] = coordinate
         x_dict["values"] = xdata
@@ -207,9 +262,7 @@ class IMASPYDataAccess(DataSource):
 
         return x_dict, y_dict, errcode, errdesc
 
-    def get_data_object(
-            self, ids_path, time_start: float = None, time_end: float = None
-    ):
+    def get_data_object(self, ids_path, time_start: float = None, time_end: float = None):
         """
         This function retrieves data values and metadata from a specified path and time range, and
         returns a DataObj object containing the extracted information.
@@ -223,9 +276,7 @@ class IMASPYDataAccess(DataSource):
             An instance of the `DataObj` class with the specified data values and attributes set based on
         the input parameters provided to the `get_data_object` method.
         """
-        x_dict, y_dict, errcode, errdesc = self.get_values(
-            ids_path, time_start, time_end
-        )
+        x_dict, y_dict, errcode, errdesc = self.get_values(ids_path, time_start, time_end)
         data_obj = DataObj()
         data_obj.ydata = y_dict["values"]
         data_obj.ylabel = y_dict["name"]
@@ -353,9 +404,7 @@ class IMASPYDataAccess(DataSource):
             The `ids_list` will be returned
         """
         if self.pulse_list is not None:
-            filtered = self.pulse_list[
-                (self.pulse_list["pulse"] == pulse) & (self.pulse_list["run"] == run)
-                ]
+            filtered = self.pulse_list[(self.pulse_list["pulse"] == pulse) & (self.pulse_list["run"] == run)]
             if not filtered.empty:
                 return filtered.iloc[0].dropna().to_string()
             else:
@@ -385,12 +434,13 @@ class IMASPYDataAccess(DataSource):
         return denv
 
     @lru_cache(maxsize=10)
-    def get_pulses_df(self, **kwargs, ) -> pd.DataFrame:
+    def get_pulses_df(
+        self,
+        **kwargs,
+    ) -> pd.DataFrame:
         pulse = kwargs["pulse"] if "pulse" in kwargs.keys() else ""
         if self.pulse_list is None:
-            logger.info(
-                "retriving list of pulses for imaspy data source, please wait..."
-            )
+            logger.info("retriving list of pulses for imaspy data source, please wait...")
 
             directory_list = [os.environ["IMAS_HOME"] + "/shared/imasdb/ITER/3"]
             directory_list.append(os.environ["IMAS_HOME"] + "/shared/imasdb/ITER/4")
@@ -398,9 +448,7 @@ class IMASPYDataAccess(DataSource):
 
             start_time = time.perf_counter()
             scenarioDescriptionObj = IMASDBMaster(directory_list=directory_list)
-            df = scenarioDescriptionObj.get_dataframes_from_files(
-                extension=".yaml", add_obsolete=False
-            )
+            df = scenarioDescriptionObj.get_dataframes_from_files(extension=".yaml", add_obsolete=False)
             df["date"] = df["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
             df["ref_name"] = df["ref_name"].str.slice(0, 50)
@@ -409,9 +457,7 @@ class IMASPYDataAccess(DataSource):
             logger.info(f"Retrieved list of pulses in: {execution_time:.6f} seconds")
             df_sorted = df.sort_values(by=["pulse", "run"])
             self.pulse_list = df_sorted
-        pulses_df = self.pulse_list[
-            self.pulse_list["pulse"].astype(str).str.startswith(pulse)
-        ][
+        pulses_df = self.pulse_list[self.pulse_list["pulse"].astype(str).str.startswith(pulse)][
             [
                 "pulse",
                 "run",

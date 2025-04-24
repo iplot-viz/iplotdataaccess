@@ -1,42 +1,65 @@
 import re
 
-import imaspy as imas
+try:
+    import imaspy as imas
+except ImportError:
+    import imas
 import numpy as np
-from imaspy.ids_primitive import (
-    IDSPrimitive,
-)
 from iplotLogging import setupLogger
 
 logger = setupLogger.get_logger(__name__)
 
 
-def parse_idspath(idspath: str):
-    """
-    The function `parse_idspath` extracts the name and path components from a given IDS path string.
+class InvalidImasError(Exception):
+    pass
 
-    Args:
-        idspath (str): idspath like summary/fusion/power/value
 
-    Returns:
-        The `parse_idspath` function returns a tuple containing the `ids_name` and `ids_path` values
-    parsed from the input `idspath` string. e.g. ids_name : summary and ids_path : fusion/power/value
-    """
+if not hasattr(imas, "ids_defs"):
+    raise InvalidImasError(
+        """
+[ERROR] Detected an outdated version of the 'imas' module.
+
+The installed 'imas' package appears to be an incompatible legacy version of the high-level
+Python interface of the IMAS Access Layer.
+
+To resolve this, remove / unload this version and re-install using:
+
+    pip install imas-python
+
+or load the appropriate environment module on your system, e.g.
+
+    module load IMAS-Python
+
+More info: https://pypi.org/project/imas-python/
+"""
+    )
+
+
+def parse_idspath(ids_fragment: str):
+    result = {}
+
     ids_name = ""
     ids_path = None
-    splitted_idspath = idspath.split("/", 1)
-    if ":" in splitted_idspath[0]:
-        splitted_idspath = idspath.split(":")
-        ids_name = splitted_idspath[0]
-        if len(splitted_idspath) == 2:
-            ids_path_fragment = splitted_idspath[1]
+    occurrence = None
+
+    splitted_ids_fragment = ids_fragment.split("/", 1)
+    if ":" in splitted_ids_fragment[0]:
+        splitted_ids_fragment = ids_fragment.split(":", 1)
+        ids_name = splitted_ids_fragment[0]
+        if len(splitted_ids_fragment) == 2:
+            ids_path_fragment = splitted_ids_fragment[1]
             splitted_ids_path_fragment = ids_path_fragment.split("/", 1)
+            occurrence = int(splitted_ids_path_fragment[0])
             if len(splitted_ids_path_fragment) == 2:
                 ids_path = splitted_ids_path_fragment[1]
     else:
-        ids_name = splitted_idspath[0]
-        if len(splitted_idspath) == 2:
-            ids_path = splitted_idspath[1]
-    return ids_name, ids_path
+        ids_name = splitted_ids_fragment[0]
+        if len(splitted_ids_fragment) == 2:
+            ids_path = splitted_ids_fragment[1]
+    result["occurrence"] = occurrence
+    result["ids_name"] = ids_name
+    result["ids_path"] = ids_path
+    return result
 
 
 def parse_slice_from_string(input_string):
@@ -58,11 +81,14 @@ def get_length_of_partial_field(ids, ids_path):
     partial_field = partial_field.split(".")[0]
     try:
         _inner_data = ids[partial_field]
-        coordinate_partial = _inner_data
+        coordinate_partial = None
         coordinate_unit = ""
-        if isinstance(_inner_data, IDSPrimitive):
+        if isinstance(_inner_data, imas.ids_primitive.IDSPrimitive) or isinstance(
+            _inner_data, imas.ids_struct_array.IDSStructArray
+        ):
             coordinate_partial = _inner_data.coordinates[0]
-            coordinate_unit = _inner_data.coordinates[0].metadata.units
+            if isinstance(coordinate_partial, imas.ids_primitive.IDSPrimitive):
+                coordinate_unit = coordinate_partial.metadata.units
         return coordinate_partial, coordinate_unit
     except Exception as e:
         logger.error(
@@ -72,65 +98,73 @@ def get_length_of_partial_field(ids, ids_path):
         return None
 
 
-def partial_get(ids, ids_path, coordinate_index=0):
-    """
-    The function `partial_get` retrieves partial data based on specified IDs and path from a given
-    array.
-
-    Args:
-        ids: ids object
-        ids_path: ids field path
-
-    Returns:
-        The function `partial_get` returns two arrays: `time_array` and `data`.
-    """
+def partial_get(ids, ids_path, custom_coordinate=None):
     slice_object = parse_slice_from_string(ids_path)
-    ids_path_for_eval = re.sub(
-        r"[\[\(][^:\[\]\(\)]*:[^:\[\]\(\)]*[\]\)]", "(t)", ids_path
-    )
-    ids_path_for_eval = (
-        ids_path_for_eval.replace("(", "[").replace(")", "]").replace("/", ".")
-    )
-    coordinate_partial, coordinate_unit = get_length_of_partial_field(
-        ids, ids_path_for_eval
-    )
+    ids_path_for_eval = re.sub(r"[\[\(][^:\[\]\(\)]*:[^:\[\]\(\)]*[\]\)]", "(t)", ids_path)
+    ids_path_for_eval = ids_path_for_eval.replace("(", "[").replace(")", "]").replace("/", ".")
+    coordinate_partial, coordinate_unit = get_length_of_partial_field(ids, ids_path_for_eval)
     data = np.array([]).reshape(
         0,
     )
+    struct_data = []
     start = slice_object.start if slice_object.start is not None else 0
-    stop = (
-        slice_object.stop if slice_object.start is not None else len(coordinate_partial)
-    )
+    stop = slice_object.stop if slice_object.start is not None else len(coordinate_partial)
     step = slice_object.step if slice_object.step is not None else 1
     data_flag = True
     data_unit = ""
+
     coordinate = coordinate_partial
+
     for t in range(start, stop, step):
         try:
-            _inner_data = eval("ids." + ids_path_for_eval)
+            _inner_data = ids[ids_path_for_eval]
             if data_flag:
                 data_flag = False
-                if isinstance(_inner_data, IDSPrimitive):
+                if isinstance(_inner_data, imas.ids_primitive.IDSPrimitive):
                     data_unit = _inner_data.metadata.units
-                    if coordinate_index >= len(_inner_data.coordinates):
-                        coordinate_index = 0
-                    coordinate = _inner_data.coordinates[coordinate_index]
-                    if isinstance(coordinate, IDSPrimitive):
-                        coordinate_unit = coordinate.metadata.units
+                    if custom_coordinate and custom_coordinate.sdigit():
+                        _coordinate = _inner_data.coordinates[custom_coordinate]
+                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                            if _coordinate.has_value is True:
+                                coordinate = _coordinate
+                    elif custom_coordinate and isinstance(custom_coordinate, str):
+                        _coordinate = ids[custom_coordinate]
+                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                            if _coordinate.has_value is True:
+                                coordinate = _coordinate
+                    else:
+                        for _coordinate in _inner_data.coordinates:
+                            if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                                if _coordinate.has_value is True:
+                                    coordinate_unit = _coordinate.metadata.units
+                                    coordinate = _coordinate
+                                    break
+                                else:
+                                    continue
+                            else:
+                                coordinate = _coordinate
+                                coordinate_unit = "Indices"
         except Exception as e:
             logger.error(
-                f"{ids_path} path/value does not exist, hint: please check length"
-                f"of arrays, detailed error : {e}"
+                f"{ids_path} path/value does not exist, hint: please check length of arrays, detailed error : {e}"
             )
             return data, coordinate, data_unit, coordinate_unit
-        if len(_inner_data.shape) == 0:
-            data = np.append(data, _inner_data)
-        elif len(_inner_data.shape) == 1:
-            if data.size == 0:
-                data = _inner_data
-            else:
-                data = np.vstack((data, _inner_data))
-    data = np.array(data)
+        if isinstance(_inner_data, (imas.ids_structure.IDSStructure, imas.ids_struct_array.IDSStructArray)):
+            struct_data.append(_inner_data)
+        else:
+            if len(_inner_data.shape) == 0:
+                data = np.append(data, _inner_data)
+            elif len(_inner_data.shape) == 1:
+                if data.size == 0:
+                    data = _inner_data
+                else:
+                    data = np.vstack((data, _inner_data))
+    if len(struct_data) == 0:
+        data = np.array(data)
+    else:
+        data = np.array(struct_data)
+    # if len(data) != len(coordinate):
+    #     coordinate=None
     return data, coordinate, data_unit, coordinate_unit
 
 
@@ -192,9 +226,7 @@ def get_available_ids_and_times(db_entry_object) -> list:
         for occurrence in occurrence_list:
             time_array = None
             try:
-                ids_object = db_entry_object.get(
-                    _ids_name, occurrence=occurrence, lazy=True, autoconvert=False
-                )
+                ids_object = db_entry_object.get(_ids_name, occurrence=occurrence, lazy=True, autoconvert=False)
                 homogeneous_time = ids_object.ids_properties.homogeneous_time
                 if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_HETEROGENEOUS:
                     time_array = [np.NaN]
@@ -205,7 +237,8 @@ def get_available_ids_and_times(db_entry_object) -> list:
             except Exception as e:
                 time_array = []
                 logger.exception(
-                    f"ERROR! IDS {_ids_name} (occurrence: {occurrence}) : Reading time array fails due to the following problem: {e}"
+                    f"ERROR! IDS {_ids_name} (occurrence: {occurrence}) : "
+                    f"Reading time array fails due to the following problem: {e}"
                 )
             if time_array is not None and len(time_array):
                 result.append((_ids_name, len(time_array)))
