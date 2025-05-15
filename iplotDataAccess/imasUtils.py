@@ -77,10 +77,12 @@ def parse_slice_from_string(input_string):
 
 
 def get_length_of_partial_field(ids, ids_path):
-    partial_field = re.sub(r"[\[\(](t|[\d]*)[\]\)]", "", ids_path)
-    partial_field = partial_field.split(".")[0]
+    partial_field = ids_path
+    match = re.match(r"^(.*)\[t\]\.(.*)", ids_path)
+    if match:
+        partial_field = match.group(1)
     try:
-        _inner_data = ids[partial_field]
+        _inner_data = eval("ids." + partial_field)
         coordinate_partial = None
         coordinate_unit = ""
         if isinstance(_inner_data, imas.ids_primitive.IDSPrimitive) or isinstance(
@@ -100,24 +102,23 @@ def get_length_of_partial_field(ids, ids_path):
 
 def partial_get(ids, ids_path, custom_coordinate=None):
     slice_object = parse_slice_from_string(ids_path)
-    ids_path_for_eval = re.sub(r"[\[\(][^:\[\]\(\)]*:[^:\[\]\(\)]*[\]\)]", "(t)", ids_path)
+    ids_path_for_eval = re.sub(r"[\[\(][^()\[\]]*:[^()\[\]]*[\]\)]", "(t)", ids_path)
     ids_path_for_eval = ids_path_for_eval.replace("(", "[").replace(")", "]").replace("/", ".")
     coordinate_partial, coordinate_unit = get_length_of_partial_field(ids, ids_path_for_eval)
     data = np.array([]).reshape(
         0,
     )
-    struct_data = []
+    array_data = []
     start = slice_object.start if slice_object.start is not None else 0
-    stop = slice_object.stop if slice_object.start is not None else len(coordinate_partial)
+    stop = slice_object.stop if slice_object.stop is not None else len(coordinate_partial)
     step = slice_object.step if slice_object.step is not None else 1
     data_flag = True
     data_unit = ""
-
     coordinate = coordinate_partial
 
     for t in range(start, stop, step):
         try:
-            _inner_data = ids[ids_path_for_eval]
+            _inner_data = eval("ids." + ids_path_for_eval)
             if data_flag:
                 data_flag = False
                 if isinstance(_inner_data, imas.ids_primitive.IDSPrimitive):
@@ -128,7 +129,7 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                             if _coordinate.has_value is True:
                                 coordinate = _coordinate
                     elif custom_coordinate and isinstance(custom_coordinate, str):
-                        _coordinate = ids[custom_coordinate]
+                        _coordinate = eval("ids." + custom_coordinate)
                         if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
                             if _coordinate.has_value is True:
                                 coordinate = _coordinate
@@ -150,7 +151,9 @@ def partial_get(ids, ids_path, custom_coordinate=None):
             )
             return data, coordinate, data_unit, coordinate_unit
         if isinstance(_inner_data, (imas.ids_structure.IDSStructure, imas.ids_struct_array.IDSStructArray)):
-            struct_data.append(_inner_data)
+            array_data.append(_inner_data)
+        elif isinstance(_inner_data, imas.ids_primitive.IDSString0D):
+            array_data.append(_inner_data.value)
         else:
             if len(_inner_data.shape) == 0:
                 data = np.append(data, _inner_data)
@@ -159,10 +162,10 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                     data = _inner_data
                 else:
                     data = np.vstack((data, _inner_data))
-    if len(struct_data) == 0:
+    if len(array_data) == 0:
         data = np.array(data)
     else:
-        data = np.array(struct_data)
+        data = np.array(array_data)
     # if len(data) != len(coordinate):
     #     coordinate=None
     return data, coordinate, data_unit, coordinate_unit

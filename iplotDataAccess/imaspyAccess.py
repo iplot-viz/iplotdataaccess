@@ -159,7 +159,6 @@ class IMASPYDataAccess(DataSource):
         occurrence = uri_dict["occurrence"] or 0
         ids_name = uri_dict["ids_name"]
         ids_path = uri_dict["ids_path"]
-
         if time_start is not None or time_end is not None:
             if time_end is None:
                 _time = self.get_time(ids_name)
@@ -192,6 +191,16 @@ class IMASPYDataAccess(DataSource):
                 ydata, xdata, yunit, xunit = partial_get(ids, ids_path)
 
                 ydata = np.transpose(ydata)
+
+                x_dict["object"] = xdata
+                x_dict["values"] = xdata
+                x_dict["unit"] = xunit
+                x_dict["name"] = xlabel
+
+                y_dict["object"] = ydata
+                y_dict["values"] = ydata
+                y_dict["unit"] = yunit
+                y_dict["name"] = ylabel
             else:
                 errcode = -1
                 errdesc = "Non homogeneous time"
@@ -240,25 +249,25 @@ class IMASPYDataAccess(DataSource):
                         xdata = coordinate.value
                         xunit = coordinate.metadata.units
                         xlabel = f"{ids_name}/{coordinate.metadata.path}"
-        if (
-            coordinate is None
-            or isinstance(coordinate, int)
-            or (isinstance(coordinate, imas.ids_primitive.IDSNumericArray) and coordinate.has_value is False)
-        ):
-            logger.error("Coordinates are empty, creating default array, you can also provide custom coordinates")
-            coordinate = xdata = np.arange(len(ydata))
-            xlabel = "Index"
-            xunit = "-"
+            if (
+                coordinate is None
+                or isinstance(coordinate, int)
+                or (isinstance(coordinate, imas.ids_primitive.IDSNumericArray) and coordinate.has_value is False)
+            ):
+                logger.error("Coordinates are empty, creating default array, you can also provide custom coordinates")
+                coordinate = xdata = np.arange(len(ydata))
+                xlabel = "Index"
+                xunit = "-"
 
-        x_dict["object"] = coordinate
-        x_dict["values"] = xdata
-        x_dict["unit"] = xunit
-        x_dict["name"] = xlabel
+            x_dict["object"] = coordinate
+            x_dict["values"] = xdata
+            x_dict["unit"] = xunit
+            x_dict["name"] = xlabel
 
-        y_dict["object"] = node
-        y_dict["values"] = ydata
-        y_dict["unit"] = yunit
-        y_dict["name"] = ylabel
+            y_dict["object"] = node
+            y_dict["values"] = ydata
+            y_dict["unit"] = yunit
+            y_dict["name"] = ylabel
 
         return x_dict, y_dict, errcode, errdesc
 
