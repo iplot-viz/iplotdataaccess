@@ -18,27 +18,32 @@ import iplotLogging.setupLogger as ls
 # from iplotDataAccess import realTimeStreamer as rtA
 from iplotDataAccess.dataAccess import DataAccess
 
-dscfg = """[codacuda]
-conninfo=host=10.153.200.61,port=3090
-varprefix=
-rturl=http://io-ls-udaweb1.iter.org/dashboard/backend/sse
-rtheaders=REMOTE_USER:$USERNAME,User-Agent:python_client
-rtauth=None
+dscfg = """{
+    "codacuda": {
+        "type": "CODAC_UDA",
+        "host": "io-ls-udasrv1.iter.org",
+        "port": 3090,
+        "rturl": "https://controls.iter.org/dashboard/backend/sse",
+        "rtheaders": "REMOTE_USER:$USERNAME,User-Agent:python_client",
+        "rtauth": null,
+        "default": true
+    }
+    }
 """
 
 logger = ls.get_logger(__name__)
 class TestRTAccess(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
-        print(os.environ.get('PYTHONPATH'))
-        pintel = os.environ.get('PWD') + "/iplotDataAccess_intel/lib/python3.8/site-packages"
-        pfoss = os.environ.get('PWD') + "/iplotDataAccess_foss/lib/python3.8/site-packages"
-        if os.path.exists(pintel):
-            path1 = os.environ.get('PYTHONPATH') + ":" + pintel
-        else:
-            path1 = os.environ.get('PYTHONPATH') + ":" + pfoss
-        os.environ.update({'PYTHONPATH': path1})
-        print(os.environ.get('PYTHONPATH'))
+        #print(os.environ.get('PYTHONPATH'))
+        #pintel = os.environ.get('PWD') + "/iplotDataAccess_intel/lib/python3.8/site-packages"
+        #pfoss = os.environ.get('PWD') + "/iplotDataAccess_foss/lib/python3.8/site-packages"
+        #if os.path.exists(pintel):
+         #   path1 = os.environ.get('PYTHONPATH') + ":" + pintel
+        #else:
+         #   path1 = os.environ.get('PYTHONPATH') + ":" + pfoss
+        #os.environ.update({'PYTHONPATH': path1})
+        #print(os.environ.get('PYTHONPATH'))
         self.da = DataAccess()
         self.ds = "codacuda"
         print(os.environ.get('PWD'))
@@ -48,13 +53,13 @@ class TestRTAccess(unittest.TestCase):
         with open('/tmp/mydataconf.cfg', mode='w') as fp:
             fp.write(dscfg)
             fp.seek(0)
-            os.environ.update({'DATASOURCESCONF': os.path.abspath(fp.name)})
+            os.environ.update({'IPLOT_SOURCES_CONFIG': os.path.abspath(fp.name)})
 
         ##print(os.environ.get('DATASOURCESCONF'))
         ##with open('/tmp/mydataconf.cfg') as f:
         ##    print( f.readlines())
 
-        if len(self.da.loadConfig()) < 1:
+        if self.da.load_config()==False:
             print("Invalid data source")
             return None
 
@@ -67,7 +72,7 @@ class TestRTAccess(unittest.TestCase):
         varname = ["UTIL-HV-S22-BUS1:TOTAL_POWER"]
         f.write("before thread dcreation")
 
-        x = threading.Thread(name="receiver", target=self.da.startSubscription, args=(ds,), kwargs={'params': varname})
+        x = threading.Thread(name="receiver", target=self.da.start_subscription, args=(ds,), kwargs={'params': varname})
         f.write("before starting the thread")
         x.start()
         ts = time.time_ns()
@@ -79,7 +84,7 @@ class TestRTAccess(unittest.TestCase):
         time.sleep(5)
         while loopCnt < 25:
             loopCnt = loopCnt+1
-            dobj = self.da.getNextData(ds, varname[0])
+            dobj = self.da.get_next_data(ds, varname[0])
             if len(dobj.xdata) == 0:
                 #time.sleep(0.1)
                 errcnt = errcnt + 1
@@ -98,7 +103,7 @@ class TestRTAccess(unittest.TestCase):
         f.write("end of loop")
         f.write("\n")
 
-        self.da.stopSubscription(ds)
+        self.da.stop_subscription(ds)
         f.write("call to stop subscription")
         f.write("\n")
         f.close()

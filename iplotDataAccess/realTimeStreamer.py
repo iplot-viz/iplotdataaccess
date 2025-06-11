@@ -43,7 +43,7 @@ class VarType(Enum):
 
 class RTStreamer:
     def __init__(self, url=None, headers=None, auth=None, uda_a=None):
-        self.urlX = url or 'http://io-ls-udaweb1.iter.org/dashboard/backend/sse'
+        self.urlX = url or 'https://controls.iter.org/dashboard/backend/sse'
         self.params = None
         self.origparams = []
         self.origparams1 = []

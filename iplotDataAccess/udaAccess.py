@@ -66,7 +66,7 @@ class UdaAccess(DataSource):
         self.host = config.get("host")
         self.port = config.get("port")
 
-        self.rturl = config.get("rturl")
+        self.rtu = config.get("rturl")
         self.rtheaders = config.get("rtheaders")
         self.rtauth = config.get("rtauth")
         self.errcode = 0
@@ -80,7 +80,7 @@ class UdaAccess(DataSource):
 
     def connect(self) -> bool:
 
-        logger.debug("Connecting to UDA host  %s", self.host)
+        logger.debug("Connecting to UDA host  %s and url=%s ", self.host,self.url)
         self.UCR = uc.UdaClientReaderPython(self.host, self.port)
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
