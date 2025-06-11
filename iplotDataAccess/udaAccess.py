@@ -77,6 +77,7 @@ class UdaAccess(DataSource):
                                 "could not retrieve data", "Incorrect time"]
         self.access_cache = ct.LRUCache(maxsize=100)
         self.pulses_cache = {}
+        self.cached_idx = 0
 
     def connect(self) -> bool:
 
@@ -200,6 +201,11 @@ class UdaAccess(DataSource):
         return True
 
     def get_data(self, **kwargs):
+        import tracemalloc
+
+        tracemalloc.start()
+        snapshot1 = tracemalloc.take_snapshot()
+
         first_needed = True
         last_needed = True
         uda_p = self.get_uda_params(**kwargs)
@@ -213,7 +219,8 @@ class UdaAccess(DataSource):
         tobe_cached = self.check_to_add_in_cache(uda_p)
 
         if tobe_cached:
-            data_obj = self.__fetch_data_with_cache(query)
+            # data_obj = self.__fetch_data_with_cache(query)
+            data_obj = self.__fetch_data_with_cache_v2(query, kwargs["tsS"], kwargs["tsE"])
         else:
             data_obj = self.__fetch_data_x(query)
 
@@ -287,6 +294,13 @@ class UdaAccess(DataSource):
 
             data_obj.xdata = x_data
             data_obj.ydata = y_data
+
+        snapshot2 = tracemalloc.take_snapshot()
+        top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+        print("[ Top 10 diferencias memoria en get_data ]")
+        for stat in top_stats[:10]:
+            print(stat)
+
         return data_obj
 
     @staticmethod
@@ -536,8 +550,88 @@ class UdaAccess(DataSource):
         return query
 
     def clear_cache(self):
+        import tracemalloc
+
+        tracemalloc.start()
+        snapshot1 = tracemalloc.take_snapshot()
+
         self.access_cache.clear()
         self.pulses_cache.clear()
+
+        snapshot2 = tracemalloc.take_snapshot()
+
+        top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+        print("[ Top 10 diferencias memoria en cache ]")
+        for stat in top_stats[:10]:
+            print(stat)
+
+    def format_query(self, query: str):
+        parts = dict(
+            item.split("=", 1)
+            for item in query.split(",")
+            if "=" in item
+        )
+
+        start_time = int(parts["startTime"])
+        end_time = int(parts["endTime"])
+        return start_time, end_time
+
+    def update_query(self, query, new_start, new_end):
+        parts = query.split(",")
+        updated_parts = []
+        for part in parts:
+            if part.startswith("startTime="):
+                updated_parts.append(f"startTime={new_start}")
+            elif part.startswith("endTime="):
+                updated_parts.append(f"endTime={new_end}")
+            else:
+                updated_parts.append(part)
+        return ",".join(updated_parts)
+
+    def __fetch_data_with_cache_v2(self, query, startT, endT):
+
+        previous_query = list(self.access_cache.keys())
+        if previous_query:
+            prev_query = previous_query[self.cached_idx]
+            cached_start, cached_end = self.format_query(prev_query)
+
+            if cached_start == startT and cached_end == endT:
+                data = self.__fetch_data_x(query)
+                self.access_cache[query] = data
+                return data
+
+            if cached_start < startT < cached_end < endT:
+                # Pedimos los datos actualizando la query
+                new_query = self.update_query(query, cached_end, endT)
+                new_data = self.__fetch_data_x(new_query)
+
+                # Obtener los datos ya presentes en la cache
+                cached_data = self.access_cache[prev_query]
+
+                # Combinar datos si cached_data no esta vacio
+                if new_data.xdata is not None and len(new_data.xdata) > 0:
+                    from copy import deepcopy
+                    merged = deepcopy(cached_data)
+
+                    # Indice correcto para nuevos datos
+                    cut_idx = np.searchsorted(cached_data.xdata, startT)
+
+                    merged.xdata = np.concatenate((cached_data.xdata[cut_idx:], new_data.xdata))
+                    merged.ydata = np.concatenate((cached_data.ydata[cut_idx:], new_data.ydata))
+
+                    self.cached_idx += 1
+                    self.access_cache[query] = merged
+                    return merged
+
+                else:
+                    self.cached_idx += 1
+                    self.access_cache[query] = cached_data
+                    return cached_data
+
+        else:
+            data = self.__fetch_data_x(query)
+            self.access_cache[query] = data
+            return data
 
     @cachedmethod(operator.attrgetter('access_cache'))
     def __fetch_data_with_cache(self, query):
