@@ -80,7 +80,7 @@ class UdaAccess(DataSource):
 
     def connect(self) -> bool:
 
-        logger.debug("Connecting to UDA host  %s and url=%s ", self.host,self.url)
+        logger.debug("Connecting to UDA host  %s and url=%s ", self.host,self.rtu)
         self.UCR = uc.UdaClientReaderPython(self.host, self.port)
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
