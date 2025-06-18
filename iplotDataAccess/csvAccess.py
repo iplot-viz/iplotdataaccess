@@ -9,12 +9,13 @@ from iplotDataAccess.dataSource import DataSource
 
 class CsvAccess(DataSource):
     source_type = "CSV"
+    
 
     def __init__(self, name: str, config: dict):
         super().__init__(name, config)
 
         self.folder_path = config.get("path", "")  # Store the folder path for accessing CSV files
-
+        self.def_pulse_location=self.folder_path.split('/')[-1]
     def connect(self) -> bool:
         self.connected = os.path.isdir(self.folder_path)
         return self.connected
@@ -43,7 +44,7 @@ class CsvAccess(DataSource):
 
         # Set the data for the variable in the DataObj
         data_obj.set_data(sub_data.iloc[:, 0].values, 2)
-
+        print( f" found data_obj {data_obj} ")
         # Extract the unit from the variable's column name (if present)
         yunit = re.findall(r' \((.*?)\)', sub_data.columns[0])
         if yunit:
@@ -58,6 +59,7 @@ class CsvAccess(DataSource):
     # Method to get all pulses (files) in the folder matching a pattern as a list
     def get_pulses_df(self, pattern='.*') -> DataFrame:
         all_pulses = []
+        pstatus="completed"
         base_folder = os.path.basename(self.folder_path)  # Get the base folder name
         # Walk through all files and folders in the directory
         for folder, _, files in os.walk(self.folder_path):
@@ -66,14 +68,70 @@ class CsvAccess(DataSource):
             for file in files:
                 if not file.endswith(".csv"):
                     continue
-                value = f"{relative_folder}:{file.replace('.csv', '').replace('data_', '')}"
+                value = f"{self.def_pulse_location}:{relative_folder}/{file.replace('.csv', '').replace('data_', '')};{pstatus}"
+                print( f" found value and file {value} {file}")
                 if re.match(pattern, value):
                     all_pulses.append(value)
         # Return the pulses
-        return all_pulses
+        print(f" pulses  {all_pulses} ")
+        return pd.DataFrame([value.split(";") for value in all_pulses], columns=["pulseId", "Status"])
+    def get_cbs_list(self,sep=':',  pattern=".*",times='0'):
+        varlist=self.get_var_list(pattern)
+        cbs=set()
+        counter=0
+        
+        for v in varlist:
+            
+            cbs.add(v+"?V")
+         
+        print(f" cbs list {cbs} ")
+        return cbs
+    
+    def get_cbs_dictX(self, sep=':', pattern='.*', times='0') -> dict:
+        cbs_list = self.get_cbs_list(sep, pattern, times)
+        cbs_dict = dict()
+        for line in cbs_list:
+            cur_dict = cbs_dict
+            cbs=line.split(":")
+            for counter, s in enumerate(cbs):
+                data='-'.join(cbs[0:counter])
+                if data not in cur_dict:
+                    cur_dict = cur_dict.setdefault(data,{})
+            cur_dict = cur_dict.setdefault(line.replace('?V'),'')
+        print(f" cbs list {cbs_dict} ")
+        return cbs_dict
+    
+    def get_cbs_dict(self, sep=':', pattern='.*', times='0') -> dict:
+        cbs_list = self.get_cbs_list(sep, pattern, times)
+        cbs_dict = dict()
+        for line in cbs_list:
+            cur_dict = cbs_dict
+            list_line = line.split('-')
+            for var in list_line:
+                if var.endswith('?V'):
+                    cur_dict = cur_dict.setdefault('-'.join(list_line).replace('?V', ''), '')
+                else:
+                    cur_dict = cur_dict.setdefault(var, {})
 
+        return cbs_dict
+    
+            
+    def get_pulse_info (self,pulse,run):
+       all_pulses= self.get_pulses_df()   
+       return None
+    
+    def get_var_dict(self, pattern='.*'):
+        return self.get_cbs_dict(pattern)
+   
+    def is_connected(self):
+        return self.connected is not None
+    
+    def search_pulses_df(self, text) -> DataFrame:
+        return self.get_pulses_df(pulse=text)
+    
+         
     # Method to get a list of all unique variables from CSV files in the folder
-    def get_var_list(self, pattern='.*'):
+    def get_var_list(self, patt='.*'):
         all_variables = set()  # Use a set to store unique variables
 
         # Walk through all files and folders in the directory
@@ -90,10 +148,17 @@ class CsvAccess(DataSource):
 
                 except Exception as e:
                     print(f"Could not open file {file_path}: {e}")  # Handle file reading errors
-
+        print(f" all variable {all_variables} ")
         # Filter variables matching the given pattern
-        filtered_vars = [variable for variable in all_variables if re.match(pattern, variable)]
-
+        filtered_vars =[]
+        for variable in all_variables:
+            s=re.match(patt, variable.strip())
+            print(f"processing variable {variable.strip()} and {s} ")
+            if s is not None:
+                filtered_vars.append(s[0])
+       
+        print(f" variable {filtered_vars} and pattern {patt} ")
+        
         return filtered_vars  # Return the filtered list of variables
 
     # Method to transform a pulse string into a file path
@@ -102,10 +167,12 @@ class CsvAccess(DataSource):
     def transform_pulse_to_file_path(self, pulse):
         # Split the pulse into folder and file
         folders, file = pulse.split(":", 1)
+        f1,f2=file.split("/", 1)
+        print(f" variable {pulse} ")
         # Replace slashes with the OS-specific separator
         folders = folders.replace("/", os.sep)
         # Join all parts
-        result = f"{self.folder_path}{os.sep}{folders}{os.sep}data_{file}.csv"
+        result = f"{self.folder_path}{os.sep}{f1}{os.sep}data_{f2}.csv"
         return result  # Return the constructed file path
 
     def clear_cache(self):

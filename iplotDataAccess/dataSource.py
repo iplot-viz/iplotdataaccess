@@ -14,7 +14,7 @@ logger = setupLogger.get_logger(__name__)
 DS_CODAC_TYPE = "CODAC_UDA"
 DS_IMAS_TYPE = "IMAS"
 DS_IMASPY_TYPE = "IMASPY"
-
+DS_CSV_TYPE = "CSV"
 
 class RTHException(Exception):
     pass
