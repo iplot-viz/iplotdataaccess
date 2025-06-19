@@ -5,8 +5,9 @@ from pandas import DataFrame
 
 from iplotDataAccess import dataCommon
 from iplotDataAccess.dataSource import DataSource
+import iplotLogging.setupLogger as setupLog
 
-
+logger = setupLog.get_logger(__name__)
 class CsvAccess(DataSource):
     source_type = "CSV"
     
@@ -44,7 +45,7 @@ class CsvAccess(DataSource):
 
         # Set the data for the variable in the DataObj
         data_obj.set_data(sub_data.iloc[:, 0].values, 2)
-        print( f" found data_obj {data_obj} ")
+        logger.debug(" found data_obj %s ",data_obj)
         # Extract the unit from the variable's column name (if present)
         yunit = re.findall(r' \((.*?)\)', sub_data.columns[0])
         if yunit:
@@ -69,11 +70,11 @@ class CsvAccess(DataSource):
                 if not file.endswith(".csv"):
                     continue
                 value = f"{self.def_pulse_location}:{relative_folder}/{file.replace('.csv', '').replace('data_', '')};{pstatus}"
-                print( f" found value and file {value} {file}")
+                logger.debug(" found value and file %s %s",value,file)
                 if re.match(pattern, value):
                     all_pulses.append(value)
         # Return the pulses
-        print(f" pulses  {all_pulses} ")
+        logger.debug(" pulses  %s" ,all_pulses)
         return pd.DataFrame([value.split(";") for value in all_pulses], columns=["pulseId", "Status"])
     def get_cbs_list(self,sep=':',  pattern=".*",times='0'):
         varlist=self.get_var_list(pattern)
@@ -84,7 +85,7 @@ class CsvAccess(DataSource):
             
             cbs.add(v+"?V")
          
-        print(f" cbs list {cbs} ")
+        logger.debug(" cbs list %s", cbs)
         return cbs
     
     def get_cbs_dictX(self, sep=':', pattern='.*', times='0') -> dict:
@@ -98,7 +99,7 @@ class CsvAccess(DataSource):
                 if data not in cur_dict:
                     cur_dict = cur_dict.setdefault(data,{})
             cur_dict = cur_dict.setdefault(line.replace('?V'),'')
-        print(f" cbs list {cbs_dict} ")
+        logger.debug(" cbs list %s",cbs_dict)
         return cbs_dict
     
     def get_cbs_dict(self, sep=':', pattern='.*', times='0') -> dict:
@@ -147,17 +148,17 @@ class CsvAccess(DataSource):
                         all_variables = all_variables.union([i.split(" ")[0] for i in x])
 
                 except Exception as e:
-                    print(f"Could not open file {file_path}: {e}")  # Handle file reading errors
-        print(f" all variable {all_variables} ")
+                    logger.error("Could not open file %s for %s ",file_path,e)  # Handle file reading errors
+        logger.debug(" all variable %s" ,all_variables)
         # Filter variables matching the given pattern
         filtered_vars =[]
         for variable in all_variables:
             s=re.match(patt, variable.strip())
-            print(f"processing variable {variable.strip()} and {s} ")
+            
             if s is not None:
                 filtered_vars.append(s[0])
        
-        print(f" variable {filtered_vars} and pattern {patt} ")
+        logger.debug(" variable  %s  and pattern %s ",filtered_vars,patt)
         
         return filtered_vars  # Return the filtered list of variables
 
