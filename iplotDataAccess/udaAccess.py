@@ -219,8 +219,7 @@ class UdaAccess(DataSource):
         tobe_cached = self.check_to_add_in_cache(uda_p)
 
         if tobe_cached:
-            # data_obj = self.__fetch_data_with_cache(query)
-            data_obj = self.__fetch_data_with_cache_v2(query, kwargs["tsS"], kwargs["tsE"])
+            data_obj = self.__fetch_data_with_cache(query)
         else:
             data_obj = self.__fetch_data_x(query)
 
