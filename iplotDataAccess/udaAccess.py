@@ -406,16 +406,16 @@ class UdaAccess(DataSource):
         pulses_list = self.UCR.getPulses2(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
-            return DataFrame(columns=['Pulse', 'Description', 'Status', 'Time From', 'Time To', 'Duration'])
+            return DataFrame(columns=['Pulse', 'Time From', 'Time To', 'Duration', 'Status', 'Description'])
         pulse_df = DataFrame([[
             line.pulseID,
-            line.description,
-            line.status.strip(),
             pd.to_datetime(line.timeFrom),
             pd.to_datetime(line.timeTo),
-            pd.to_datetime(line.timeTo) - pd.to_datetime(line.timeFrom)]
+            pd.to_datetime(line.timeTo) - pd.to_datetime(line.timeFrom),
+            line.status.strip(),
+            line.description]
             for line in pulses_list],
-            columns=["Pulse", "Description", "Status", "Time From", "Time To", "Duration"])
+            columns=['Pulse', 'Time From', 'Time To', 'Duration', 'Status', 'Description'])
         return pulse_df
 
     def get_cbs_list(self, sep=':', pattern='*', times='0') -> List[str]:
