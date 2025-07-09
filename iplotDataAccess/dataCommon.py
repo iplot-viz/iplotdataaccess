@@ -27,8 +27,9 @@ class DataCore:
         self.drank = ""
         self.errcode = 0
         self.errdesc = None
+        self.isdecimated=False
 
-    def set_a(self, xtype, ytype, xlabel, ylabel, xunit, yunit, drank):
+    def set_a(self, xtype, ytype, xlabel, ylabel, xunit, yunit, drank,isdownsmpld):
         if isinstance(xtype, DataType):
             self.xtype = xtype
         if isinstance(ytype, DataType):
@@ -40,10 +41,12 @@ class DataCore:
         self.drank = drank
         self.errcode = 0
         self.errdesc = ""
+        self.isdecimated=isdownsmpld
 
     def set_empty(self, mess=None):
         self.errcode = -1
         self.errdesc = mess
+
 
     def clear_data(self):
         self.xtype = ""
@@ -69,7 +72,6 @@ class DataObj(DataCore):
 
     def __init__(self):
         super().__init__()
-
         self.xdata = []
         self.ydata = []
 
@@ -107,7 +109,6 @@ class DataEnvelope(DataCore):
         self.xdata = xdata
 
     def set_y_data(self, datamin, datamax, datavg):
-
         if len(datavg) == len(datamax) == len(datamin):
             self.ydata_min = datamin
             self.ydata_max = datamax

@@ -482,14 +482,12 @@ class UdaAccess(DataSource):
                 dobj.set_err(self.errcode, self.errdesc)
                 return dobj
         # If venv extremities is activated disable extSamples option in query
-        if os.getenv("MINT_GET_EXTRE") is None or os.getenv("MINT_GET_EXTRE").lower() == "false":
-            ext_query = f",extSamples={uda_p.extSamples}"
-        else:
-            ext_query = ""
+
+        ext_query = f",extSamples={uda_p.extSamples}"
 
         # we query always absolute to ease adding first and last data point, and we transform the data afterward
         if uda_p.pulse is None or uda_p.pulse == "None":
-            query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+            query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples=-1|{uda_p.nbps},"
                       f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
             if uda_p.pulse == "0":
@@ -515,7 +513,7 @@ class UdaAccess(DataSource):
                 logger.debug("current pulse et=%d st=%d", uda_p.endT, uda_p.startT)
 
                 # to bypass the cache we explicitly move the end time...udaP.tsFormat,
-                query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples=-1|{uda_p.nbps},"
                           f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
 
             else:
@@ -523,10 +521,10 @@ class UdaAccess(DataSource):
                     self.pulses_cache.update({uda_p.pulse: pulse_i})
                     logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
                 if uda_p.endT is None:
-                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples=-1|{uda_p.nbps},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S{ext_query}")
                 else:
-                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples=-1|{uda_p.nbps},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
 
         if uda_p.decType is not None:
@@ -574,7 +572,7 @@ class UdaAccess(DataSource):
         dobj.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
                    self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
                    self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
-                   self.UCR.getRank(handle))
+                   self.UCR.getRank(handle),self.UCR.isDecimated(handle))
 
         if dobj.ytype == dataCommon.DataType.DA_TYPE_STRING:
             dobj.set_data(self.UCR.getDataAsStrings(handle), 2)
