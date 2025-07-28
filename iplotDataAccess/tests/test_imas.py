@@ -6,17 +6,18 @@ import tempfile
 
 from iplotDataAccess.dataAccess import DataAccess
 
-dscfg = """[imasuda]
-conninfo=database=iter,path=public,backend=MDSPLUS
-varprefix=
+dscfg = """[imaspy]
+type=IMASPY
+database=iter
+path=public
+backend=MDSPLUS
 """
 
-@unittest.skip("imasuda datasource removed for IDV‑723")
 class TestUDAAccess(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.da = DataAccess()
-        self.ds = "imasuda"
+        self.ds = "imaspy"
         with open('/tmp/mydataconf.cfg',mode='w') as fp:
             fp.write(dscfg)
             fp.seek(0)
@@ -25,11 +26,6 @@ class TestUDAAccess(unittest.TestCase):
             print("Invalid data source")
             return None
 
-
-
-	
-
-               
     def test_IMASAccessInvVar(self)-> None:
         dobj=self.da.getData(self.ds,varname="BUIL-SYSM-COM-XX03-BU:SRV6101-NSBPS",pulse="130012/2",nbp=-1)
         self.assertEqual(len(dobj.xdata),0)
