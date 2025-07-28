@@ -11,6 +11,7 @@ conninfo=database=iter,path=public,backend=MDSPLUS
 varprefix=
 """
 
+@unittest.skip("imasuda datasource removed for IDV‑723")
 class TestUDAAccess(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
