@@ -206,7 +206,6 @@ class IMASPYDataAccess(DataSource):
         else:
             try:
                 node = ids[ids_path]
-                print(node)
             except Exception as e:
                 errcode = -1
                 errdesc = f"ids path is not present {ids_path}"
