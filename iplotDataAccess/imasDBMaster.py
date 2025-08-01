@@ -77,6 +77,9 @@ class IMASDBMaster:
         Returns:
             the data loaded from the YAML file.
         """
+        if not os.path.exists(yaml_file_path):
+            logger.warning(f"YAML file does not exist: {yaml_file_path}")
+            return None
         with open(yaml_file_path, "r", encoding="utf-8") as file_handle:
             try:
                 yaml_data = yaml.load(file_handle, Loader=Loader)
@@ -135,9 +138,7 @@ class IMASDBMaster:
             append_df = data_frames.append
 
             def process_yaml_file(yaml_file):
-                df = IMASDBMaster.get_data_frame_from_yaml(
-                    yaml_file, add_obsolete=add_obsolete
-                )
+                df = IMASDBMaster.get_data_frame_from_yaml(yaml_file, add_obsolete=add_obsolete)
                 if df is not None:
                     df["dd_version"] = ""
                     if "ITER/3/0" in yaml_file or "iterdb/3/0" in yaml_file:
@@ -186,13 +187,7 @@ class IMASDBMaster:
             n_over_ne = n_over_ne.split()
 
             species_dict = {k: v for k, v in zip(species, n_over_ne)}
-            sorted_dict = dict(
-                sorted(
-                    species_dict.items(), key=lambda item: float(item[1]), reverse=True
-                )
-            )
-            df["composition"] = ",".join(
-                [f"{key}({value})" for key, value in sorted_dict.items()]
-            )
+            sorted_dict = dict(sorted(species_dict.items(), key=lambda item: float(item[1]), reverse=True))
+            df["composition"] = ",".join([f"{key}({value})" for key, value in sorted_dict.items()])
         else:
             df["composition"] = "None"

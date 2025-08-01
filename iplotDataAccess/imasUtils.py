@@ -115,7 +115,6 @@ def partial_get(ids, ids_path, custom_coordinate=None):
     data_flag = True
     data_unit = ""
     coordinate = coordinate_partial
-
     for t in range(start, stop, step):
         try:
             _inner_data = eval("ids." + ids_path_for_eval)
@@ -136,21 +135,25 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                     else:
                         for _coordinate in _inner_data.coordinates:
                             if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
-                                if _coordinate.has_value is True:
+                                if _coordinate.has_value is True and coordinate is None:
                                     coordinate_unit = _coordinate.metadata.units
                                     coordinate = _coordinate
                                     break
                                 else:
                                     continue
                             else:
-                                coordinate = _coordinate
-                                coordinate_unit = "Indices"
+                                if coordinate is None:
+                                    coordinate = _coordinate
+                                    coordinate_unit = "Indices"
         except Exception as e:
             logger.error(
                 f"{ids_path} path/value does not exist, hint: please check length of arrays, detailed error : {e}"
             )
             return data, coordinate, data_unit, coordinate_unit
-        if isinstance(_inner_data, (imas.ids_structure.IDSStructure, imas.ids_struct_array.IDSStructArray)):
+        if isinstance(
+            _inner_data,
+            (imas.ids_structure.IDSStructure, imas.ids_struct_array.IDSStructArray, imas.ids_primitive.IDSNumericArray),
+        ):
             array_data.append(_inner_data)
         elif isinstance(_inner_data, imas.ids_primitive.IDSString0D):
             array_data.append(_inner_data.value)
@@ -163,11 +166,12 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                 else:
                     data = np.vstack((data, _inner_data))
     if len(array_data) == 0:
-        data = np.array(data)
+        data = np.stack(data)
     else:
-        data = np.array(array_data)
+        data = np.stack(array_data)
     # if len(data) != len(coordinate):
     #     coordinate=None
+
     return data, coordinate, data_unit, coordinate_unit
 
 

@@ -190,8 +190,6 @@ class IMASPYDataAccess(DataSource):
             if ids.ids_properties.homogeneous_time == 1:
                 ydata, xdata, yunit, xunit = partial_get(ids, ids_path)
 
-                ydata = np.transpose(ydata)
-
                 x_dict["object"] = xdata
                 x_dict["values"] = xdata
                 x_dict["unit"] = xunit
@@ -208,6 +206,7 @@ class IMASPYDataAccess(DataSource):
         else:
             try:
                 node = ids[ids_path]
+                print(node)
             except Exception as e:
                 errcode = -1
                 errdesc = f"ids path is not present {ids_path}"
@@ -268,7 +267,6 @@ class IMASPYDataAccess(DataSource):
             y_dict["values"] = ydata
             y_dict["unit"] = yunit
             y_dict["name"] = ylabel
-
         return x_dict, y_dict, errcode, errdesc
 
     def get_data_object(self, ids_path, time_start: float = None, time_end: float = None):
