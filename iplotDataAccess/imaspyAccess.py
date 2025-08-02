@@ -266,6 +266,22 @@ class IMASPYDataAccess(DataSource):
             y_dict["values"] = ydata
             y_dict["unit"] = yunit
             y_dict["name"] = ylabel
+            def _first(arr):
+                if isinstance(arr, np.ndarray) and arr.size > 0:
+                    return arr.flat[0]
+                return 'N/A'
+
+            def _last(arr):
+                if isinstance(arr, np.ndarray) and arr.size > 0:
+                    return arr.flat[-1]
+                return 'N/A'
+
+            logger.info(
+                f"IMAS IDS: {ids_name}/{ids_path} | "
+                f"X: shape={np.shape(xdata)}, unit={xunit}, label={xlabel}, range=[{_first(xdata)}, {_last(xdata)}] | "
+                f"Y: shape={np.shape(ydata)}, unit={yunit}, label={ylabel}, range=[{_first(ydata)}, {_last(ydata)}] | "
+                f"errcode={errcode}, errdesc={errdesc}"
+            )
         return x_dict, y_dict, errcode, errdesc
 
     def get_data_object(self, ids_path, time_start: float = None, time_end: float = None):
