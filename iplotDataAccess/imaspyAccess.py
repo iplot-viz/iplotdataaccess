@@ -59,7 +59,7 @@ class IMASPYDataAccess(DataSource):
 
     def set_uri(self, config: dict | str):
         if type(config) is dict:
-            backend = config.get("backend", "mdsplus")
+            backend = config.get("backend", "hdf5")
             user = config.get("user", "public")
             database = config.get("database", "ITER")
             version = config.get("version", "3")
@@ -160,16 +160,13 @@ class IMASPYDataAccess(DataSource):
         ids_name = uri_dict["ids_name"]
         ids_path = uri_dict["ids_path"]
         if time_start is not None or time_end is not None:
-            if time_end is None:
-                _time = self.get_time(ids_name)
-                if _time is not None:
-                    time_end = _time[-1]
-            elif time_start is None:
-                _time = self.get_time(ids_name)
-                if _time is not None:
+            _time = self.get_time(ids_name)
+            if time_start is None and _time is not None:
                     time_start = _time[0]
+            if time_end is None and  _time is not None:
+                    time_end = _time[-1]
             ids = self.connection.get_sample(
-                ids_name, time_start, time_end, lazy=True, occurrence=occurrence, autoconvert=False
+                ids_name, time_start, time_end, occurrence=occurrence, autoconvert=False
             )
         else:
             ids = self.connection.get(ids_name, lazy=True, occurrence=occurrence, autoconvert=False)
@@ -189,11 +186,16 @@ class IMASPYDataAccess(DataSource):
         if ":" in ids_path:
             if ids.ids_properties.homogeneous_time == 1:
                 ydata, xdata, yunit, xunit = partial_get(ids, ids_path)
-
+                
                 x_dict["object"] = xdata
-                x_dict["values"] = xdata
+                
                 x_dict["unit"] = xunit
-                x_dict["name"] = xlabel
+                if isinstance(xdata, imas.ids_primitive.IDSNumericArray):
+                    x_dict["name"] = xdata.metadata.name
+                    x_dict["values"] = xdata.value
+                else:
+                    x_dict["name"] = xlabel
+                    x_dict["values"] = xdata
 
                 y_dict["object"] = ydata
                 y_dict["values"] = ydata
@@ -214,7 +216,7 @@ class IMASPYDataAccess(DataSource):
 
                 if not node.has_value:
                     errcode = -1
-                    errdesc = "Values are not present for {ids_path}"
+                    errdesc = f"Values are not present for {ids_path}"
                     logger.error(f"data for {ids_path}  is not available.")
                 else:
                     ydata = node.value
@@ -266,22 +268,24 @@ class IMASPYDataAccess(DataSource):
             y_dict["values"] = ydata
             y_dict["unit"] = yunit
             y_dict["name"] = ylabel
-            def _first(arr):
-                if isinstance(arr, np.ndarray) and arr.size > 0:
-                    return arr.flat[0]
-                return 'N/A'
+        def _first(arr):
+            if isinstance(arr, (np.ndarray,imas.ids_primitive.IDSNumericArray)) and arr.size > 0:
+                return arr.flat[0]
+            return 'N/A'
 
-            def _last(arr):
-                if isinstance(arr, np.ndarray) and arr.size > 0:
-                    return arr.flat[-1]
-                return 'N/A'
+        def _last(arr):
+            if isinstance(arr, (np.ndarray, imas.ids_primitive.IDSNumericArray)) and arr.size > 0:
+                return arr.flat[-1]
+            return 'N/A'
 
-            logger.info(
-                f"IMAS IDS: {ids_name}/{ids_path} | "
-                f"X: shape={np.shape(xdata)}, unit={xunit}, label={xlabel}, range=[{_first(xdata)}, {_last(xdata)}] | "
-                f"Y: shape={np.shape(ydata)}, unit={yunit}, label={ylabel}, range=[{_first(ydata)}, {_last(ydata)}] | "
-                f"errcode={errcode}, errdesc={errdesc}"
-            )
+        logger.info(
+            f"{'-' * 80}\n"
+            f"Accessed data from IMASPY DATA Source for IDS Path: {ids_name}/{ids_path} \n"
+            f"X: shape={np.shape(x_dict['values'])}, unit={x_dict['unit']}, label={x_dict['name']}, values=[{_first(x_dict['values'])}, {_last(x_dict['values'])}] \n"
+            f"Y: shape={np.shape(y_dict['values'])}, unit={y_dict['unit']}, label={y_dict['name']}, values=[{_first(y_dict['values'])}, {_last(y_dict['values'])}] \n"
+            f"errcode={errcode}, errdesc={errdesc}\n"
+            f"{'-' * 80}\n"
+        )
         return x_dict, y_dict, errcode, errdesc
 
     def get_data_object(self, ids_path, time_start: float = None, time_end: float = None):

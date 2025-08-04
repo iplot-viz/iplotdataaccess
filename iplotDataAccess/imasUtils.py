@@ -49,7 +49,8 @@ def parse_idspath(ids_fragment: str):
         if len(splitted_ids_fragment) == 2:
             ids_path_fragment = splitted_ids_fragment[1]
             splitted_ids_path_fragment = ids_path_fragment.split("/", 1)
-            occurrence = int(splitted_ids_path_fragment[0])
+            if splitted_ids_path_fragment[0].isdigit():
+                occurrence = int(splitted_ids_path_fragment[0])
             if len(splitted_ids_path_fragment) == 2:
                 ids_path = splitted_ids_path_fragment[1]
     else:
@@ -125,12 +126,12 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                     if custom_coordinate and custom_coordinate.sdigit():
                         _coordinate = _inner_data.coordinates[custom_coordinate]
                         if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
-                            if _coordinate.has_value is True:
+                            if _coordinate.has_value is True and coordinate is None:
                                 coordinate = _coordinate
                     elif custom_coordinate and isinstance(custom_coordinate, str):
                         _coordinate = eval("ids." + custom_coordinate)
                         if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
-                            if _coordinate.has_value is True:
+                            if _coordinate.has_value is True and coordinate is None:
                                 coordinate = _coordinate
                     else:
                         for _coordinate in _inner_data.coordinates:
