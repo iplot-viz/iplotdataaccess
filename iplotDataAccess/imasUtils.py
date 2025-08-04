@@ -104,14 +104,20 @@ def get_length_of_partial_field(ids, ids_path):
 def partial_get(ids, ids_path, custom_coordinate=None):
     slice_object = parse_slice_from_string(ids_path)
     ids_path_for_eval = re.sub(r"[\[\(][^()\[\]]*:[^()\[\]]*[\]\)]", "(t)", ids_path)
-    ids_path_for_eval = ids_path_for_eval.replace("(", "[").replace(")", "]").replace("/", ".")
-    coordinate_partial, coordinate_unit = get_length_of_partial_field(ids, ids_path_for_eval)
+    ids_path_for_eval = (
+        ids_path_for_eval.replace("(", "[").replace(")", "]").replace("/", ".")
+    )
+    coordinate_partial, coordinate_unit = get_length_of_partial_field(
+        ids, ids_path_for_eval
+    )
     data = np.array([]).reshape(
         0,
     )
     array_data = []
     start = slice_object.start if slice_object.start is not None else 0
-    stop = slice_object.stop if slice_object.stop is not None else len(coordinate_partial)
+    stop = (
+        slice_object.stop if slice_object.stop is not None else len(coordinate_partial)
+    )
     step = slice_object.step if slice_object.step is not None else 1
     data_flag = True
     data_unit = ""
@@ -153,7 +159,11 @@ def partial_get(ids, ids_path, custom_coordinate=None):
             return data, coordinate, data_unit, coordinate_unit
         if isinstance(
             _inner_data,
-            (imas.ids_structure.IDSStructure, imas.ids_struct_array.IDSStructArray, imas.ids_primitive.IDSNumericArray),
+            (
+                imas.ids_structure.IDSStructure,
+                imas.ids_struct_array.IDSStructArray,
+                imas.ids_primitive.IDSNumericArray,
+            ),
         ):
             array_data.append(_inner_data)
         elif isinstance(_inner_data, imas.ids_primitive.IDSString0D):
@@ -234,7 +244,9 @@ def get_available_ids_and_times(db_entry_object) -> list:
         for occurrence in occurrence_list:
             time_array = None
             try:
-                ids_object = db_entry_object.get(_ids_name, occurrence=occurrence, lazy=True, autoconvert=False)
+                ids_object = db_entry_object.get(
+                    _ids_name, occurrence=occurrence, lazy=True, autoconvert=False
+                )
                 homogeneous_time = ids_object.ids_properties.homogeneous_time
                 if homogeneous_time == imas.ids_defs.IDS_TIME_MODE_HETEROGENEOUS:
                     time_array = [np.NaN]

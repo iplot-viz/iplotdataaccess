@@ -630,10 +630,17 @@ class TestIMASAccess(unittest.TestCase):
         varname3 = "magnetics/flux_loop[:]/flux/data"
         pulse3 = "105027/2"
 
+        varname4 = "magnetics/flux_loop[5:10]/flux/data"
+        pulse4 = "105027/2"
+
         print(f"VARIABLE: {varname1}")
         dobj1 = self.da.get_data(self.ds, varname=varname1, pulse=pulse1, nbp=-1)
+        print(f"VARIABLE: {varname2}")
         dobj2 = self.da.get_data(self.ds, varname=varname2, pulse=pulse2, nbp=-1)
+        print(f"VARIABLE: {varname3}")
         dobj3 = self.da.get_data(self.ds, varname=varname3, pulse=pulse3, nbp=-1)
+        print(f"VARIABLE: {varname4}")
+        dobj4 = self.da.get_data(self.ds, varname=varname4, pulse=pulse4, nbp=-1)
 
         self._validate_data_object(
             dobj1,
@@ -674,6 +681,19 @@ class TestIMASAccess(unittest.TestCase):
             varname=varname3,
         )
 
+        self._validate_data_object(
+            dobj4,
+            expected_x_shape=(5,),
+            expected_y_shape=(5, 614),
+            expected_x_unit="",
+            expected_y_unit="Wb",
+            expected_x_label="",
+            expected_y_label="flux_loop[5:10]/flux/data",
+            expected_x_values=[5, 9],
+            expected_y_values=[58.86716011367322, 0.3972396311867252],
+            varname=varname3,
+        )
+
         print("✓ All time slice test passed")
 
 
@@ -694,7 +714,7 @@ if __name__ == "__main__":
         stream=None,
         descriptions=True,
         failfast=False,
-        buffer=False,  
+        buffer=False,
     )
     result = runner.run(suite())
 
