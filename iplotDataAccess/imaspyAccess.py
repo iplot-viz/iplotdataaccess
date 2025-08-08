@@ -198,10 +198,10 @@ class IMASPYDataAccess(DataSource):
                 x_dict["unit"] = xunit
                 if isinstance(xdata, imas.ids_primitive.IDSNumericArray):
                     x_dict["name"] = xdata.metadata.name
-                    x_dict["values"] = xdata.value[slice_object]
+                    x_dict["values"] = xdata.value
                 else:
                     x_dict["name"] = xlabel
-                    x_dict["values"] = xdata[slice_object]
+                    x_dict["values"] = xdata
 
                 y_dict["object"] = ydata
                 y_dict["values"] = ydata
@@ -236,24 +236,24 @@ class IMASPYDataAccess(DataSource):
                         xdata = coordinate
                     elif isinstance(coordinate, int):
                         _coordinate = node.coordinates[coordinate]
-                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                        if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive,imas.ids_primitive.IDSNumericArray)):
                             if _coordinate.has_value is True:
                                 coordinate = _coordinate
                     elif coordinate and isinstance(coordinate, str):
                         _coordinate = ids[coordinate]
-                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                        if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                             if _coordinate.has_value is True:
                                 coordinate = _coordinate
                     else:
                         for _coordinate in node.coordinates:
-                            if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                            if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                                 if _coordinate.has_value is True:
                                     coordinate = _coordinate
                                     break
                                 else:
                                     continue
 
-                    if isinstance(coordinate, imas.ids_primitive.IDSPrimitive):
+                    if isinstance(coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                         xdata = coordinate.value
                         xunit = coordinate.metadata.units
                         xlabel = f"{ids_name}/{coordinate.metadata.path}"

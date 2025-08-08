@@ -121,27 +121,28 @@ def partial_get(ids, ids_path, custom_coordinate=None):
     step = slice_object.step if slice_object.step is not None else 1
     data_flag = True
     data_unit = ""
-    coordinate = coordinate_partial
+    coordinate = None
     for t in range(start, stop, step):
         try:
             _inner_data = eval("ids." + ids_path_for_eval)
             if data_flag:
                 data_flag = False
-                if isinstance(_inner_data, imas.ids_primitive.IDSPrimitive):
+                if isinstance(_inner_data, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                     data_unit = _inner_data.metadata.units
                     if custom_coordinate and custom_coordinate.sdigit():
                         _coordinate = _inner_data.coordinates[custom_coordinate]
-                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                        if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive), imas.ids_primitive.IDSNumericArray):
                             if _coordinate.has_value is True and coordinate is None:
                                 coordinate = _coordinate
                     elif custom_coordinate and isinstance(custom_coordinate, str):
                         _coordinate = eval("ids." + custom_coordinate)
-                        if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                        if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                             if _coordinate.has_value is True and coordinate is None:
                                 coordinate = _coordinate
                     else:
                         for _coordinate in _inner_data.coordinates:
-                            if isinstance(_coordinate, imas.ids_primitive.IDSPrimitive):
+                            
+                            if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                                 if _coordinate.has_value is True and coordinate is None:
                                     coordinate_unit = _coordinate.metadata.units
                                     coordinate = _coordinate
@@ -179,10 +180,13 @@ def partial_get(ids, ids_path, custom_coordinate=None):
     if len(array_data) == 0:
         data = np.stack(data)
     else:
-        data = np.stack(array_data)
-    # if len(data) != len(coordinate):
-    #     coordinate=None
+        data = np.array(array_data)
 
+    # Transpose data if its first dimension does not match the coordinate's length
+    if coordinate is not None and hasattr(coordinate, "shape") and hasattr(data, "shape"):
+        if len(data.shape) > 1 and len(coordinate.shape) > 0:
+            if data.shape[0] != coordinate.shape[0] and data.shape[1] == coordinate.shape[0]:
+                data = data.T
     return data, coordinate, data_unit, coordinate_unit
 
 
