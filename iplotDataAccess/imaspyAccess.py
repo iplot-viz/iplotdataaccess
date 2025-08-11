@@ -169,7 +169,7 @@ class IMASPYDataAccess(DataSource):
             if time_end is None and _time is not None:
                 time_end = _time[-1]
             ids = self.connection.get_sample(
-                ids_name, time_start, time_end, occurrence=occurrence, autoconvert=False
+                ids_name, time_start, time_end, lazy=True,  occurrence=occurrence, autoconvert=False
             )
         else:
             ids = self.connection.get(

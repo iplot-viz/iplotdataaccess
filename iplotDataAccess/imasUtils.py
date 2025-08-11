@@ -178,13 +178,13 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                 else:
                     data = np.vstack((data, _inner_data))
     if len(array_data) == 0:
-        data = np.stack(data)
+        data = np.stack(data, axis = 0)
     else:
-        data = np.array(array_data)
+        data = np.stack(array_data, axis = 0)
 
     # Transpose data if its first dimension does not match the coordinate's length
     if coordinate is not None and hasattr(coordinate, "shape") and hasattr(data, "shape"):
-        if len(data.shape) > 1 and len(coordinate.shape) > 0:
+        if len(data.shape) == 2 and len(coordinate.shape) == 1:
             if data.shape[0] != coordinate.shape[0] and data.shape[1] == coordinate.shape[0]:
                 data = data.T
     return data, coordinate, data_unit, coordinate_unit
