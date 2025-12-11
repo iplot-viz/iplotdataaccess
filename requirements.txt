@@ -4,4 +4,5 @@ iplotLogging >= 0.2*
 requests >= 2.25.1
 sseclient-py>=1.7
 PyYAML
+pyarrow>=22.0.0
     
