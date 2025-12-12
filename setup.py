@@ -18,7 +18,7 @@ setuptools.setup(
     description="Data access for applications using IDSs or CBS",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://git.iter.org/scm/vis/data-access.git",
+    url="https://github.com/iplot-viz/iplotdataaccess.git",
     project_urls={
         "Bug Tracker": "https://jira.iter.org/issues/?jql=project%20%3D%20IDV%20AND%20component%20%3D%20Data-Access",
     },
@@ -37,6 +37,7 @@ setuptools.setup(
         "sseclient-py >= 1.7",
         "PyYAML",
         "pyarrow >= 22.0.0",
+        "h5py"
     ],
     package_data={
         "iplotDataAccess": ["data_sources.cfg"],
