@@ -14,7 +14,7 @@ maintainers = [
     { name = "Mario Gomez Ballesteros", email = "mgomezb@minsait.com" },
 ]
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 keywords = ["IDS", "CBS", "Interface Data Structures", "Control Breakdown Structure"]
 classifiers = [
@@ -33,6 +33,7 @@ dynamic = ["version"]
 [project.optional-dependencies]
 imaspy = ["PyYAML >= 6.0.1", "pyarrow >= 16.1.0"]
 codacuda = ["h5py >= 3.11.0"]
+test = ["pytest >= 6.0"]
 
 [project.urls]
 Homepage = "https://github.com/iplot-viz/iplotdataaccess"
@@ -45,6 +46,10 @@ include = ["iplotDataAccess*"]
 
 [tool.setuptools.package-data]
 "iplotDataAccess" = ["data_sources.cfg"]
+
+[tool.pytest.ini_options]
+addopts = "-rA -s -v"
+testpaths = "iplotDataAccess"
 
 [tool.versioneer]
 VCS = "git"
