@@ -1,6 +1,51 @@
 [build-system]
-requires = ["setuptools>=42.0", "wheel"]
+requires = ["setuptools>=42.0", "wheel", "versioneer[toml]"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "iplotDataAccess"
+description = "Data access for applications using IDSs or CBS"
+authors = [
+    { name = "Lana Abadie", email = "lana.abadie@iter.org" },
+]
+maintainers = [
+    { name = "Jhon Steeven Cabanilla Alvarado", email = "jscabanilla@minsait.com" },
+    { name = "Pablo Martin Villares", email = "pmartin@minsait.com" },
+    { name = "Mario Gomez Ballesteros", email = "mgomezb@minsait.com" },
+]
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["IDS", "CBS", "Interface Data Structures", "Control Breakdown Structure"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "cachetools >= 4.2.0",
+    "iplotLogging >= 0.2.1",
+    "requests >= 2.25.1",
+    "sseclient-py >= 1.7",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+imaspy = ["PyYAML >= 6.0.1", "pyarrow >= 16.1.0"]
+codacuda = ["h5py >= 3.11.0"]
+
+[project.urls]
+Homepage = "https://github.com/iplot-viz/iplotdataaccess"
+Repository = "https://github.com/iplot-viz/iplotdataaccess.git"
+Issues = "https://github.com/iplot-viz/iplotdataaccess/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["iplotDataAccess*"]
+
+[tool.setuptools.package-data]
+"iplotDataAccess" = ["data_sources.cfg"]
+
 [tool.versioneer]
 VCS = "git"
 style = "pep440"
@@ -8,7 +53,3 @@ versionfile_source = "iplotDataAccess/_version.py"
 versionfile_build = "iplotDataAccess/_version.py"
 tag_prefix = ""
 parentdir_prefix = ""
-
-
-
-
