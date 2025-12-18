@@ -5,7 +5,6 @@ import os
 import tempfile
 import iplotDataAccess
 from iplotDataAccess.dataAccess import DataAccess
-from telnetlib import Telnet
 
 dscfg = """{
     "codacuda": {

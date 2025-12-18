@@ -1,28 +1,13 @@
-import sys, os
-from uda_client_reader.uda_client_reader_python import *
 from uda_client_reader.UdaClientIterator import *
 import numpy as np
-import re
-import matplotlib
-import matplotlib.pyplot as plt
-import datetime as DT
-import time as tm
-import multiprocessing
-import warnings
-import math
-import random as rd
 import csv
 import h5py
-import smtplib
-import time as ti
-import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 from time import gmtime, strftime
 import socket
 ##from influxdb_client import InfluxDBClient
 ##from influxdb_client.client.write_api import SYNCHRONOUS
-from pprint import pprint
 
 
 class Info:
