@@ -59,9 +59,13 @@ class TestRTAccess(unittest.TestCase):
         ##with open('/tmp/mydataconf.cfg') as f:
         ##    print( f.readlines())
 
-        if self.da.load_config() == False:
-            print("Invalid data source")
-            return None
+        try:
+            load = self.da.load_config()
+        except Exception as exc:
+            self.skipTest(f"CODAC UDA data source not available: {exc}")
+
+        if not load:
+            self.skipTest("CODAC UDA data source not available")
 
     def test_Streamer(self) -> None:
         f = open("/tmp/mylog", 'w')

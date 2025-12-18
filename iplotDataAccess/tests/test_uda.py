@@ -39,9 +39,13 @@ class TestUDAAccess(unittest.TestCase):
         ##    print( f.readlines())
 
         print(os.environ.get('PYTHONPATH'))
-        if not self.da.load_config():
-            print("Invalid data source")
-            return None
+        try:
+            load = self.da.load_config()
+        except Exception as exc:
+            self.skipTest(f"CODAC UDA data source not available: {exc}")
+
+        if not load:
+            self.skipTest("CODAC UDA data source not available")
 
     def test_UDAAccessISO(self) -> None:
         dobj = self.da.get_data(self.ds, varname="BUIL-SYSM-COM-4503-BU:SRV6101-NSBPS", tsS="2022-05-04T12:30:00",
