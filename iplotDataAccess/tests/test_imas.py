@@ -9,7 +9,12 @@ import os
 import tempfile
 import numpy as np
 from iplotDataAccess.dataAccess import DataAccess
-import imas
+try:
+    import imas
+    imas_imported = True
+except ImportError:
+    imas_imported = False
+
 
 dscfg = """{
     "imaspy": {
@@ -21,7 +26,7 @@ dscfg = """{
     }
 """
 
-
+@unittest.skipUnless(imas_imported, "IMAS not available for CI tests")
 class TestIMASAccess(unittest.TestCase):
     """Test class for IMAS data access functionality."""
 
@@ -40,17 +45,17 @@ class TestIMASAccess(unittest.TestCase):
         return "N/A"
 
     def _validate_data_object(
-        self,
-        dobj,
-        expected_x_shape=None,
-        expected_y_shape=None,
-        expected_x_unit=None,
-        expected_y_unit=None,
-        expected_x_label=None,
-        expected_y_label=None,
-        expected_x_values=None,
-        expected_y_values=None,
-        varname="",
+            self,
+            dobj,
+            expected_x_shape=None,
+            expected_y_shape=None,
+            expected_x_unit=None,
+            expected_y_unit=None,
+            expected_x_label=None,
+            expected_y_label=None,
+            expected_x_values=None,
+            expected_y_values=None,
+            varname="",
     ):
         """Comprehensive validation of data object properties."""
 
@@ -108,9 +113,9 @@ class TestIMASAccess(unittest.TestCase):
 
         # Validate X data values
         if (
-            expected_x_values is not None
-            and isinstance(dobj.xdata, np.ndarray)
-            and dobj.xdata.size > 0
+                expected_x_values is not None
+                and isinstance(dobj.xdata, np.ndarray)
+                and dobj.xdata.size > 0
         ):
             actual_x_first = self._first(dobj.xdata)
             actual_x_last = self._last(dobj.xdata)
@@ -130,9 +135,9 @@ class TestIMASAccess(unittest.TestCase):
 
         # Validate Y data values
         if (
-            expected_y_values is not None
-            and isinstance(dobj.ydata, np.ndarray)
-            and dobj.ydata.size > 0
+                expected_y_values is not None
+                and isinstance(dobj.ydata, np.ndarray)
+                and dobj.ydata.size > 0
         ):
             actual_y_first = self._first(dobj.ydata)
             actual_y_last = self._last(dobj.ydata)
