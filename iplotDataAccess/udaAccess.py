@@ -217,7 +217,23 @@ class UdaAccess(DataSource):
         else:
             data_obj = self.__fetch_data_x(query)
 
-        if data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
+        if data_obj.errcode == -1 or not uda_p.extSamples:
+            return data_obj
+
+        # For pulse mode with extremities: the server may return a sample beyond the pulse end.
+        # Clamp the data so the last point does not exceed the pulse boundary.
+        if uda_p.tsFormat == "relative":
+            if uda_p.pEnd is not None and uda_p.pStart is not None and data_obj.errcode == 0 and len(data_obj.xdata) > 0:
+                pulse_duration = (uda_p.pEnd - uda_p.pStart) / 1000000000.0
+                effective_end = min(float(uda_p.endT), pulse_duration) if uda_p.endT is not None else pulse_duration
+
+                if data_obj.xdata[-1] > effective_end:
+                    mask = data_obj.xdata <= effective_end
+                    last_y = data_obj.ydata[mask][-1]
+                    data_obj.xdata = np.append(data_obj.xdata[mask], effective_end)
+                    data_obj.ydata = np.append(data_obj.ydata[mask], last_y)
+                    logger.debug("Clamped extremity to pulse end: %.3f s", effective_end)
+
             return data_obj
 
         if os.getenv("MINT_GET_EXTRE", "").lower() == "true":
@@ -505,6 +521,10 @@ class UdaAccess(DataSource):
                 logger.debug(" use cache for pulse=%s", uda_p.pulse)
             if pulse_i is None:
                 return query
+            # Store pulse duration for later clamping of extremities
+            uda_p.pStart = pulse_i.timeFrom
+            uda_p.pEnd = pulse_i.timeTo
+
             # ongoing pulse
             if pulse_i.timeTo >= time.time_ns() and (
                     uda_p.endT is None or pulse_i.timeFrom + int(uda_p.endT * 1000000000) >= time.time_ns()):
