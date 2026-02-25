@@ -80,7 +80,7 @@ class UdaAccess(DataSource):
 
     def connect(self) -> bool:
 
-        logger.debug("Connecting to UDA host  %s and url=%s ", self.host,self.rtu)
+        logger.debug("Connecting to UDA host  %s and url=%s ", self.host, self.rtu)
         self.UCR = uc.UdaClientReaderPython(self.host, self.port)
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
@@ -194,7 +194,7 @@ class UdaAccess(DataSource):
             if self.UCR.isEmptyTimeStamp(pinfo.timeTo):
                 return False
         else:
-            # we allow alatency of 20
+            # we allow a latency of 20
             if uda_p.pEnd is not None and (time.time_ns() - uda_p.pEnd < 20 * 1000000000):
                 return False
         return True
@@ -220,19 +220,19 @@ class UdaAccess(DataSource):
         if data_obj.errcode == -1 or not uda_p.extSamples:
             return data_obj
 
-        # For pulse mode with extremities: the server may return a sample beyond the pulse end.
-        # Clamp the data so the last point does not exceed the pulse boundary.
+        # Ensure the data does not exceed the pulse duration. If the last x value goes beyond the pulse end, clamp it
+        # to the pulse duration and adjust the corresponding y value to preserve visual continuity.
         if uda_p.tsFormat == "relative":
-            if uda_p.pEnd is not None and uda_p.pStart is not None and data_obj.errcode == 0 and len(data_obj.xdata) > 0:
-                pulse_duration = (uda_p.pEnd - uda_p.pStart) / 1000000000.0
-                effective_end = min(float(uda_p.endT), pulse_duration) if uda_p.endT is not None else pulse_duration
+            last_xdata = data_obj.xdata[-1]
+            pulse_duration_s = (uda_p.pEnd - uda_p.pStart) / 1e9
 
-                if data_obj.xdata[-1] > effective_end:
-                    mask = data_obj.xdata <= effective_end
-                    last_y = data_obj.ydata[mask][-1]
-                    data_obj.xdata = np.append(data_obj.xdata[mask], effective_end)
-                    data_obj.ydata = np.append(data_obj.ydata[mask], last_y)
-                    logger.debug("Clamped extremity to pulse end: %.3f s", effective_end)
+            if last_xdata > pulse_duration_s:
+                data_obj.xdata[-1] = pulse_duration_s
+                if len(data_obj.ydata > 1):
+                    data_obj.ydata[-1] = data_obj.ydata[-2]
+
+                logger.debug(
+                    f"Clamped last data point to pulse duration: original_x={last_xdata}, pulse_duration={pulse_duration_s}")
 
             return data_obj
 
@@ -521,6 +521,7 @@ class UdaAccess(DataSource):
                 logger.debug(" use cache for pulse=%s", uda_p.pulse)
             if pulse_i is None:
                 return query
+
             # Store pulse duration for later clamping of extremities
             uda_p.pStart = pulse_i.timeFrom
             uda_p.pEnd = pulse_i.timeTo
@@ -548,6 +549,10 @@ class UdaAccess(DataSource):
                 else:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
+
+            # Set pStart and pEnd for pulse
+            uda_p.pStart = pulse_i.timeFrom
+            uda_p.pEnd = pulse_i.timeTo
 
         if uda_p.decType is not None:
             query = query1 + f",decType={uda_p.decType}"
