@@ -6,6 +6,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from time import gmtime, strftime
 import socket
+
+
 ##from influxdb_client import InfluxDBClient
 ##from influxdb_client.client.write_api import SYNCHRONOUS
 
@@ -81,8 +83,8 @@ def getAndFillData(varn, res, vlist, dataW, conn, chunkS):
 def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, chunkS=50000):
     res = result()
     res.errc = -1
-    res.s1 = conn.UCR.convertTimeISOToNs(startT)
-    res.e1 = conn.UCR.convertTimeISOToNs(endT)
+    res.s1 = startT
+    res.e1 = endT
     res.chunkSize = chunkS
     global currVarname
     global currVarDesc
@@ -123,8 +125,8 @@ def createH5file(h5file, varmap, start, end):
 def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=50000):
     res = result()
     res.errc = -1
-    res.s1 = conn.UCR.convertTimeISOToNs(startT)
-    res.e1 = conn.UCR.convertTimeISOToNs(endT)
+    res.s1 = startT
+    res.e1 = endT
     res.chunkSize = chunkS
 
     global currVarname
@@ -219,11 +221,9 @@ def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputF
         file_format = formatType.strip()
         ###csv variable with description
         if formatType == 'parquet':
-            parquetFile = outputFolder + "/data.parquet"
-            ret = extractAndGenerateParquet(varMap, conn, logfile, startTime, endTime, parquetFile, chunkS)
+            ret = extractAndGenerateParquet(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS)
         else:
-            h5File = outputFolder + "/data.h5"
-            ret = extractAndGenerateH5(varMap, conn, logfile, startTime, endTime, h5File, chunkS)
+            ret = extractAndGenerateH5(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS)
         return True
     except DataExportError as dee:
         print("Failed to export data :" + dee.message)

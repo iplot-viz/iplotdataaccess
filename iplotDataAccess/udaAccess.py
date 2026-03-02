@@ -80,7 +80,7 @@ class UdaAccess(DataSource):
 
     def connect(self) -> bool:
 
-        logger.debug("Connecting to UDA host  %s and url=%s ", self.host,self.rtu)
+        logger.debug("Connecting to UDA host  %s and url=%s ", self.host, self.rtu)
         self.UCR = uc.UdaClientReaderPython(self.host, self.port)
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
@@ -194,7 +194,7 @@ class UdaAccess(DataSource):
             if self.UCR.isEmptyTimeStamp(pinfo.timeTo):
                 return False
         else:
-            # we allow alatency of 20
+            # we allow a latency of 20
             if uda_p.pEnd is not None and (time.time_ns() - uda_p.pEnd < 20 * 1000000000):
                 return False
         return True
@@ -217,7 +217,23 @@ class UdaAccess(DataSource):
         else:
             data_obj = self.__fetch_data_x(query)
 
-        if data_obj.errcode == -1 or uda_p.tsFormat == "relative" or not uda_p.extSamples:
+        if data_obj.errcode == -1 or not uda_p.extSamples:
+            return data_obj
+
+        # Ensure the data does not exceed the pulse duration. If the last x value goes beyond the pulse end, clamp it
+        # to the pulse duration and adjust the corresponding y value to preserve visual continuity.
+        if uda_p.tsFormat == "relative":
+            last_xdata = data_obj.xdata[-1]
+            pulse_duration_s = (uda_p.pEnd - uda_p.pStart) / 1e9
+
+            if last_xdata > pulse_duration_s:
+                data_obj.xdata[-1] = pulse_duration_s
+                if len(data_obj.ydata > 1):
+                    data_obj.ydata[-1] = data_obj.ydata[-2]
+
+                logger.debug(
+                    f"Clamped last data point to pulse duration: original_x={last_xdata}, pulse_duration={pulse_duration_s}")
+
             return data_obj
 
         if os.getenv("MINT_GET_EXTRE", "").lower() == "true":
@@ -505,6 +521,11 @@ class UdaAccess(DataSource):
                 logger.debug(" use cache for pulse=%s", uda_p.pulse)
             if pulse_i is None:
                 return query
+
+            # Store pulse duration for later clamping of extremities
+            uda_p.pStart = pulse_i.timeFrom
+            uda_p.pEnd = pulse_i.timeTo
+
             # ongoing pulse
             if pulse_i.timeTo >= time.time_ns() and (
                     uda_p.endT is None or pulse_i.timeFrom + int(uda_p.endT * 1000000000) >= time.time_ns()):
@@ -528,6 +549,10 @@ class UdaAccess(DataSource):
                 else:
                     query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
+
+            # Set pStart and pEnd for pulse
+            uda_p.pStart = pulse_i.timeFrom
+            uda_p.pEnd = pulse_i.timeTo
 
         if uda_p.decType is not None:
             query = query1 + f",decType={uda_p.decType}"
