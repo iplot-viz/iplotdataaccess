@@ -220,15 +220,21 @@ class UdaAccess(DataSource):
         if data_obj.errcode == -1 or not uda_p.extSamples:
             return data_obj
 
-        # Ensure the data does not exceed the pulse duration. If the last x value goes beyond the pulse end, clamp it
-        # to the pulse duration and adjust the corresponding y value to preserve visual continuity.
+        # Ensure the data does not exceed the pulse duration. Clamp extremity points that fall
+        # outside the pulse boundaries (first point before T=0, last point after pulse end).
         if uda_p.tsFormat == "relative":
-            last_xdata = data_obj.xdata[-1]
             pulse_duration_s = (uda_p.pEnd - uda_p.pStart) / 1e9
 
+            # Clamp first point to T=0 if before pulse start
+            first_xdata = data_obj.xdata[0]
+            if first_xdata < 0:
+                data_obj.xdata[0] = 0
+
+            # Clamp last point to pulse duration if beyond pulse end
+            last_xdata = data_obj.xdata[-1]
             if last_xdata > pulse_duration_s:
                 data_obj.xdata[-1] = pulse_duration_s
-                if len(data_obj.ydata > 1):
+                if len(data_obj.ydata) > 1:
                     data_obj.ydata[-1] = data_obj.ydata[-2]
 
                 logger.debug(
