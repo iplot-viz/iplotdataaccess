@@ -153,6 +153,7 @@ class ChunkProcessingCallback(UdaClientCallback):
         global file_format
         global period_counter
         dtD = np.dtype([('time', 'u8'), ('value', 'f8')])
+        dtF = np.dtype([('time', 'u8'), ('value', 'f4')])
         dtI = np.dtype([('time', 'u8'), ('value', 'i8')])
         currlen = 0
         dset = None
@@ -160,7 +161,6 @@ class ChunkProcessingCallback(UdaClientCallback):
         ytype = reader.getFetchedType(handle)
         timeV = reader.getTimeStampsAsLong(handle)
         currlen = len(timeV)
-        # print(" processing function and varname="+currVarname+" first "+str(firstChunkSample))
 
         if ytype == RAW_TYPE_DOUBLE:
             var_ana = reader.getDataAsDouble(handle)
@@ -168,6 +168,12 @@ class ChunkProcessingCallback(UdaClientCallback):
             data_val = np.zeros(currlen, dtype=dtD)
             data_val['time'] = timeV
             data_val['value'] = var_ana
+        elif ytype == RAW_TYPE_FLOAT:
+            var_dig = reader.getDataAsFloat(handle)
+            var_ana = np.full(currlen, 0, dtype=np.uint16)
+            data_val = np.zeros(currlen, dtype=dtF)
+            data_val['time'] = timeV
+            data_val['value'] = var_dig
         else:
             var_dig = reader.getDataAsLong(handle)
             var_ana = np.full(currlen, 0, dtype=np.float64)
@@ -191,12 +197,9 @@ class ChunkProcessingCallback(UdaClientCallback):
 
                     if file_format.startswith('hdf5'):
                         g.attrs['unit'] = yunits
-                        # print(" time "+str(data_val['time'][0])+ " value "+str(data_val['value'][0]))
                         if ytype == RAW_TYPE_DOUBLE:
-
                             dset = g.create_dataset("data", data=data_val, chunks=True, maxshape=(None,))
                         else:
-
                             dset = g.create_dataset("data", data=data_val, chunks=True, maxshape=(None,))
 
                 else:
