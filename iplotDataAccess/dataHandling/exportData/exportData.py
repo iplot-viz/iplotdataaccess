@@ -197,10 +197,7 @@ class ChunkProcessingCallback(UdaClientCallback):
 
                     if file_format.startswith('hdf5'):
                         g.attrs['unit'] = yunits
-                        if ytype == RAW_TYPE_DOUBLE:
-                            dset = g.create_dataset("data", data=data_val, chunks=True, maxshape=(None,))
-                        else:
-                            dset = g.create_dataset("data", data=data_val, chunks=True, maxshape=(None,))
+                        dset = g.create_dataset("data", data=data_val, chunks=True, maxshape=(None,))
 
                 else:
                     # print("before dset 1")
