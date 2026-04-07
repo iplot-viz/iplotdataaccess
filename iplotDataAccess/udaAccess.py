@@ -77,6 +77,7 @@ class UdaAccess(DataSource):
                                 "could not retrieve data", "Incorrect time"]
         self.access_cache = ct.LRUCache(maxsize=100)
         self.pulses_cache = {}
+        self._last_pulse_by_category = {}
 
     def connect(self) -> bool:
 
@@ -216,6 +217,9 @@ class UdaAccess(DataSource):
             data_obj = self.__fetch_data_with_cache(query)
         else:
             data_obj = self.__fetch_data_x(query)
+
+        # Propagate resolved pulse number (for 0/-1 special values)
+        data_obj.resolved_pulse = uda_p.pulse
 
         if data_obj.errcode == -1 or not uda_p.extSamples:
             return data_obj
@@ -514,9 +518,34 @@ class UdaAccess(DataSource):
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                       f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
-            if uda_p.pulse == "0":
-                uda_p.pulse = self.UCR.getLastPulse()
-                logger.debug("LAST PULSE: %s", uda_p.pulse)
+            # Resolve special pulse numbers (0 = last, -1 = previous)
+            pulse_parts = uda_p.pulse.rsplit("/", 1)
+            pulse_num = pulse_parts[-1] if len(pulse_parts) > 1 else uda_p.pulse
+            pulse_prefix = pulse_parts[0] + "/" if len(pulse_parts) > 1 else ""
+
+            if pulse_num in ("0", "-1"):
+                # Resolve last pulse for this specific category/location (cached)
+                if pulse_prefix and pulse_prefix not in self._last_pulse_by_category:
+                    search_pattern = pulse_prefix + "*"
+                    pulses_df = self.get_pulses_df(pattern=search_pattern)
+                    if not pulses_df.empty:
+                        pulse_nums = [str(row['Pulse']).rsplit("/", 1)[-1] for _, row in pulses_df.iterrows()]
+                        self._last_pulse_by_category[pulse_prefix] = pulse_nums
+
+                if pulse_prefix and pulse_prefix in self._last_pulse_by_category:
+                    pulse_list = self._last_pulse_by_category[pulse_prefix]
+                else:
+                    pulse_list = [str(self.UCR.getLastPulse())]
+
+                if pulse_num == "0":
+                    resolved_num = pulse_list[-1] if pulse_list else "0"
+                    uda_p.pulse = pulse_prefix + resolved_num if pulse_prefix else resolved_num
+                    logger.debug("LAST PULSE (category): %s", uda_p.pulse)
+                else:  # -1
+                    resolved_num = pulse_list[-2] if len(pulse_list) >= 2 else pulse_list[-1]
+                    uda_p.pulse = pulse_prefix + resolved_num if pulse_prefix else resolved_num
+                    logger.debug("PREVIOUS PULSE (category): %s", uda_p.pulse)
+                logger.debug("PREVIOUS PULSE: %s", uda_p.pulse)
             # we need to check if it is an-going pulse to not use the cache...
             if uda_p.pulse not in self.pulses_cache.keys():
                 pulse_i = self.get_pulse_info(uda_p.pulse)
@@ -701,6 +730,7 @@ class UdaAccess(DataSource):
             d_env = self.__fetch_envelope_with_cache(query)
         else:
             d_env = self.__fetch_envelope(query)
+        d_env.resolved_pulse = uda_p.pulse
         logger.debug("getEnveloppe exiting pulse does exist ")
         return d_env
 
