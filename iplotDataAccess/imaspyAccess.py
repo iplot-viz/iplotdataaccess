@@ -58,6 +58,17 @@ class IMASPYDataAccess(DataSource):
         self.connection = None
         self.connected = False
 
+    def is_pulse_run(self, s: str)->bool :
+        """ 
+        Detects int_A/int_B or int_A\int_B.
+        Usefull for detecting pulseID in the form of pulse/run
+        """
+
+        # re pattern: start of string; digit one or more; \ or /; digit one or more; end of string
+        # note: \\ for literal backslash
+        pattern = re.compile(r'^\d+[\\/]\d+$')  
+        return bool(pattern.match(s))
+
     def set_uri(self, config: dict | str):
         if type(config) is dict:
             backend = config.get("backend", "hdf5")
@@ -386,10 +397,10 @@ class IMASPYDataAccess(DataSource):
             self.connect()
         if kwargs.get("pulse"):
             pulse_ident = kwargs.get("pulse")
-            if pulse_ident.startswith("imas:"):
-                self.set_uri(pulse_ident)
-            else:
+            if self.is_pulse_run(pulse_ident): # pass it as a dict for pulse/run identification
                 self.set_uri({"pulseIdent": pulse_ident})
+            else: # anything else is a path or imas URI:
+                self.set_uri(pulse_ident)
             self.connect()
         if self.connection:
             data_obj = self.get_data_object(ids_path, time_start, time_end)
