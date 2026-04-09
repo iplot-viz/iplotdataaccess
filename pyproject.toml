@@ -34,7 +34,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-imaspy = ["PyYAML >= 6.0.1"]
+imaspy = ["PyYAML >= 6.0.1", "imas-python", "keyring"]
 test = ["pytest >= 6.0"]
 
 [project.urls]
