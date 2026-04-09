@@ -77,7 +77,6 @@ class UdaAccess(DataSource):
                                 "could not retrieve data", "Incorrect time"]
         self.access_cache = ct.LRUCache(maxsize=100)
         self.pulses_cache = {}
-        self._last_pulse_by_category = {}
 
     def connect(self) -> bool:
 
@@ -524,16 +523,14 @@ class UdaAccess(DataSource):
             pulse_prefix = pulse_parts[0] + "/" if len(pulse_parts) > 1 else ""
 
             if pulse_num in ("0", "-1"):
-                # Resolve last pulse for this specific category/location (cached)
-                if pulse_prefix and pulse_prefix not in self._last_pulse_by_category:
+                # Resolve last/previous pulse for this specific category/location
+                if pulse_prefix:
                     search_pattern = pulse_prefix + "*"
                     pulses_df = self.get_pulses_df(pattern=search_pattern)
                     if not pulses_df.empty:
-                        pulse_nums = [str(row['Pulse']).rsplit("/", 1)[-1] for _, row in pulses_df.iterrows()]
-                        self._last_pulse_by_category[pulse_prefix] = pulse_nums
-
-                if pulse_prefix and pulse_prefix in self._last_pulse_by_category:
-                    pulse_list = self._last_pulse_by_category[pulse_prefix]
+                        pulse_list = [str(row['Pulse']).rsplit("/", 1)[-1] for _, row in pulses_df.iterrows()]
+                    else:
+                        pulse_list = [str(self.UCR.getLastPulse())]
                 else:
                     pulse_list = [str(self.UCR.getLastPulse())]
 
@@ -545,7 +542,6 @@ class UdaAccess(DataSource):
                     resolved_num = pulse_list[-2] if len(pulse_list) >= 2 else pulse_list[-1]
                     uda_p.pulse = pulse_prefix + resolved_num if pulse_prefix else resolved_num
                     logger.debug("PREVIOUS PULSE (category): %s", uda_p.pulse)
-                logger.debug("PREVIOUS PULSE: %s", uda_p.pulse)
             # we need to check if it is an-going pulse to not use the cache...
             if uda_p.pulse not in self.pulses_cache.keys():
                 pulse_i = self.get_pulse_info(uda_p.pulse)
