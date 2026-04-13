@@ -57,6 +57,7 @@ class DataCore:
         self.drank = ""
         self.errcode = 0
         self.errdesc = ""
+        self.resolved_pulse = None
 
     def set_err(self, errc, errd):
         self.errcode = errc
