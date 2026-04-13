@@ -217,8 +217,9 @@ class UdaAccess(DataSource):
         else:
             data_obj = self.__fetch_data_x(query)
 
-        # Propagate resolved pulse number (for 0/-1 special values)
-        data_obj.resolved_pulse = uda_p.pulse
+        # Propagate resolved pulse number only when 0/-1
+        if getattr(uda_p, '_pulse_resolved', False):
+            data_obj.resolved_pulse = uda_p.pulse
 
         if data_obj.errcode == -1 or not uda_p.extSamples:
             return data_obj
@@ -523,6 +524,7 @@ class UdaAccess(DataSource):
             pulse_prefix = pulse_parts[0] + "/" if len(pulse_parts) > 1 else ""
 
             if pulse_num in ("0", "-1"):
+                uda_p._pulse_resolved = True
                 # Resolve last/previous pulse for this specific category/location
                 if pulse_prefix:
                     search_pattern = pulse_prefix + "*"
@@ -726,7 +728,8 @@ class UdaAccess(DataSource):
             d_env = self.__fetch_envelope_with_cache(query)
         else:
             d_env = self.__fetch_envelope(query)
-        d_env.resolved_pulse = uda_p.pulse
+        if getattr(uda_p, '_pulse_resolved', False):
+            d_env.resolved_pulse = uda_p.pulse
         logger.debug("getEnveloppe exiting pulse does exist ")
         return d_env
 
