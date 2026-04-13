@@ -461,16 +461,19 @@ class UdaAccess(DataSource):
 
         return cbs_dict
 
-    def get_var_list(self, pattern='.*') -> List[str]:
-        var_list = self.UCR.getVariableList(pattern)
+    def get_var_list(self, pattern='.*', field=None) -> List[str]:
+        if field:
+            var_list = self.UCR.getVariableListWithFieldXX(field, pattern)
+        else:
+            var_list = self.UCR.getVariableList(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return []
 
         return var_list
 
-    def get_var_dict(self, pattern='.*', path=None) -> dict:
-        var_list = self.get_var_list(pattern)
+    def get_var_dict(self, pattern='.*', path=None, field=None) -> dict:
+        var_list = self.get_var_list(pattern, field=field)
         if path:
             var_dict = self.parse_vars_to_dict(var_list, path)
         else:
