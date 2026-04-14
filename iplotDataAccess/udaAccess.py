@@ -518,14 +518,19 @@ class UdaAccess(DataSource):
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                       f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
-            # Resolve special pulse numbers (0 = last, -1 = previous)
+            # Resolve special pulse numbers (0 = last, -N = N-th previous)
             pulse_parts = uda_p.pulse.rsplit("/", 1)
             pulse_num = pulse_parts[-1] if len(pulse_parts) > 1 else uda_p.pulse
             pulse_prefix = pulse_parts[0] + "/" if len(pulse_parts) > 1 else ""
 
-            if pulse_num in ("0", "-1"):
+            try:
+                n = int(pulse_num)
+            except ValueError:
+                n = 1  # non-numeric → not a relative pulse
+
+            if n <= 0:
                 uda_p._pulse_resolved = True
-                # Resolve last/previous pulse for this specific category/location
+                # Resolve N-th previous pulse for this specific category/location
                 if pulse_prefix:
                     search_pattern = pulse_prefix + "*"
                     pulses_df = self.get_pulses_df(pattern=search_pattern)
@@ -536,14 +541,14 @@ class UdaAccess(DataSource):
                 else:
                     pulse_list = [str(self.UCR.getLastPulse())]
 
-                if pulse_num == "0":
-                    resolved_num = pulse_list[-1] if pulse_list else "0"
+                idx = n - 1  # 0→-1, -1→-2, -N→-(N+1)
+                if abs(idx) > len(pulse_list):
+                    logger.warning(f"Requested pulse '{pulse_num}' but only {len(pulse_list)} pulse(s) "
+                                   f"available in category '{pulse_prefix or '*'}'")
+                else:
+                    resolved_num = pulse_list[idx]
                     uda_p.pulse = pulse_prefix + resolved_num if pulse_prefix else resolved_num
-                    logger.debug("LAST PULSE (category): %s", uda_p.pulse)
-                else:  # -1
-                    resolved_num = pulse_list[-2] if len(pulse_list) >= 2 else pulse_list[-1]
-                    uda_p.pulse = pulse_prefix + resolved_num if pulse_prefix else resolved_num
-                    logger.debug("PREVIOUS PULSE (category): %s", uda_p.pulse)
+                    logger.debug("RESOLVED PULSE (%s): %s", pulse_num, uda_p.pulse)
             # we need to check if it is an-going pulse to not use the cache...
             if uda_p.pulse not in self.pulses_cache.keys():
                 pulse_i = self.get_pulse_info(uda_p.pulse)
