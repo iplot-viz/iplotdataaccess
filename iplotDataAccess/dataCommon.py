@@ -27,6 +27,7 @@ class DataCore:
         self.drank = ""
         self.errcode = 0
         self.errdesc = None
+        self.resolved_pulse = None
 
     def set_a(self, xtype, ytype, xlabel, ylabel, xunit, yunit, drank):
         if isinstance(xtype, DataType):
@@ -56,6 +57,7 @@ class DataCore:
         self.drank = ""
         self.errcode = 0
         self.errdesc = ""
+        self.resolved_pulse = None
 
     def set_err(self, errc, errd):
         self.errcode = errc
