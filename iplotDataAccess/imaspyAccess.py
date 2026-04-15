@@ -70,7 +70,7 @@ class IMASPYDataAccess(DataSource):
                 user = config.get("user", "public")
                 database = config.get("database", "ITER")
                 version = config.get("version", "3")
-                pulse_ident = config.get("pulseIdent", "134174/117")
+                pulse_ident = config.get("pulseIdent", "")
                 try:
                     ret = pulse_ident.split("/")
                     pulse = int(ret[0])
