@@ -530,25 +530,25 @@ class UdaAccess(DataSource):
 
             if n <= 0:
                 uda_p._pulse_resolved = True
-                # Resolve N-th previous pulse for this specific category/location
-                if pulse_prefix:
-                    search_pattern = pulse_prefix + "*"
-                    pulses_df = self.get_pulses_df(pattern=search_pattern)
-                    if not pulses_df.empty:
-                        pulse_list = [str(row['Pulse']).rsplit("/", 1)[-1] for _, row in pulses_df.iterrows()]
-                    else:
-                        pulse_list = [str(self.UCR.getLastPulse())]
+                # Pulses are sequential: last_pulse + n gives the N-th previous pulse
+                search_pattern = pulse_prefix + "*" if pulse_prefix else ""
+                last_pulse = self.UCR.getLastPulse2(search_pattern, "")
+                if self.UCR.isEmptyPulse2(last_pulse):
+                    logger.warning(f"No pulses found in category '{pulse_prefix or '*'}'")
                 else:
-                    pulse_list = [str(self.UCR.getLastPulse())]
-
-                idx = n - 1  # 0→-1, -1→-2, -N→-(N+1)
-                if abs(idx) > len(pulse_list):
-                    logger.warning(f"Requested pulse '{pulse_num}' but only {len(pulse_list)} pulse(s) "
-                                   f"available in category '{pulse_prefix or '*'}'")
-                else:
-                    resolved_num = pulse_list[idx]
-                    uda_p.pulse = pulse_prefix + resolved_num if pulse_prefix else resolved_num
-                    logger.debug("RESOLVED PULSE (%s): %s", pulse_num, uda_p.pulse)
+                    last_str = str(last_pulse)
+                    last_num_str = last_str.rsplit("/", 1)[-1] if "/" in last_str else last_str
+                    try:
+                        last_num = int(last_num_str)
+                        real_num = last_num + n  # n is 0, -1, -2, ..., -N
+                        if real_num <= 0:
+                            logger.warning(f"Requested pulse '{pulse_num}' is before the earliest "
+                                           f"available pulse in category '{pulse_prefix or '*'}'")
+                        else:
+                            uda_p.pulse = f"{pulse_prefix}{real_num}" if pulse_prefix else str(real_num)
+                            logger.debug("RESOLVED PULSE (%s): %s", pulse_num, uda_p.pulse)
+                    except ValueError:
+                        logger.warning(f"Could not parse last pulse '{last_str}' as integer")
             # we need to check if it is an-going pulse to not use the cache...
             if uda_p.pulse not in self.pulses_cache.keys():
                 pulse_i = self.get_pulse_info(uda_p.pulse)
