@@ -45,8 +45,9 @@ class UdaParams:
         self.pStart = None
         self.pEnd = None
         self.extSamples = None
+        self.retType = None
 
-    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples):
+    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples, ret_type=None):
         self.varname = varname
         self.nbps = nbps
         self.decType = dec_type
@@ -55,6 +56,7 @@ class UdaParams:
         self.pulse = pulse
         self.tsFormat = ts_format
         self.extSamples = ext_samples
+        self.retType = ret_type
 
 
 # class to interface with data source - here UDA
@@ -175,9 +177,10 @@ class UdaAccess(DataSource):
         ts_e = kwargs.get("tsE", "0")
         ts_en = self.convert_to_nanos(ts_e)
         ext_samples = kwargs.get("extremities", False)
+        ret_type = kwargs.get("retType", None)
         ts_format = kwargs.get("tsFormat", "absolute")
         logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
-        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples)
+        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples, ret_type)
         return uda_p
 
     def check_to_add_in_cache(self, uda_p):
@@ -599,6 +602,8 @@ class UdaAccess(DataSource):
             query = query1 + f",decType={uda_p.decType}"
         else:
             query = query1
+        if uda_p.retType is not None:
+            query += f",retType={uda_p.retType}"
         return query
 
     def clear_cache(self):
