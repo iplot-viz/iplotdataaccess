@@ -527,9 +527,34 @@ class IMASPYDataAccess(DataSource):
                     IMASPYDataAccess.pulse_list = pd.DataFrame()
                 logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")
 
-        if IMASPYDataAccess.pulse_list.empty:
+        # Local folder
+        local_df = pd.DataFrame()
+        local_folder = self.config.get("pulse_list_folder", "")
+        if local_folder:
+            from iplotDataAccess.localPulseAccess import LocalPulseScanner
+            try:
+                local_df = LocalPulseScanner(local_folder).fetch_pulses()
+            except ValueError as e:
+                logger.error(f"Invalid pulse_list_folder: {e}")
+
+        # Merge local and simdb
+        parts = []
+        if local_df is not None and not local_df.empty:
+            _local = local_df.copy()
+            _local["source"] = "local"
+            parts.append(_local)
+        if IMASPYDataAccess.pulse_list is not None and not IMASPYDataAccess.pulse_list.empty:
+            _simdb = IMASPYDataAccess.pulse_list.copy()
+            _simdb["source"] = "simdb"
+            parts.append(_simdb)
+        if not parts:
             return EMPTY_DF.copy()
-        pulses_df = IMASPYDataAccess.pulse_list[
-            IMASPYDataAccess.pulse_list["alias"].astype(str).str.startswith(alias_filter)
-        ][SIMDB_COLUMNS].astype(str)
+        combined = pd.concat(parts, ignore_index=True)
+        if alias_filter:
+            alias_col = combined["alias"].astype(str).str.contains(alias_filter, case=False, regex=False)
+            desc_col = combined["description"].astype(str).str.contains(alias_filter, case=False, regex=False)
+            workflow_col = combined["workflow"].astype(str).str.contains(alias_filter, case=False, regex=False)
+            pulses_df = combined[alias_col | desc_col | workflow_col][SIMDB_COLUMNS].astype(str)
+        else:
+            pulses_df = combined[SIMDB_COLUMNS].astype(str)
         return pulses_df.reset_index(drop=True)
