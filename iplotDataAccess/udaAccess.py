@@ -45,8 +45,9 @@ class UdaParams:
         self.pStart = None
         self.pEnd = None
         self.extSamples = None
+        self.retType = None
 
-    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples):
+    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples, ret_type=None):
         self.varname = varname
         self.nbps = nbps
         self.decType = dec_type
@@ -55,6 +56,7 @@ class UdaParams:
         self.pulse = pulse
         self.tsFormat = ts_format
         self.extSamples = ext_samples
+        self.retType = ret_type
 
 
 # class to interface with data source - here UDA
@@ -175,9 +177,10 @@ class UdaAccess(DataSource):
         ts_e = kwargs.get("tsE", "0")
         ts_en = self.convert_to_nanos(ts_e)
         ext_samples = kwargs.get("extremities", False)
+        ret_type = kwargs.get("retType", None)
         ts_format = kwargs.get("tsFormat", "absolute")
         logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
-        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples)
+        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples, ret_type)
         return uda_p
 
     def check_to_add_in_cache(self, uda_p):
@@ -216,6 +219,10 @@ class UdaAccess(DataSource):
             data_obj = self.__fetch_data_with_cache(query)
         else:
             data_obj = self.__fetch_data_x(query)
+
+        # Propagate resolved pulse number only when 0/-1
+        if getattr(uda_p, '_pulse_resolved', False):
+            data_obj.resolved_pulse = uda_p.pulse
 
         if data_obj.errcode == -1 or not uda_p.extSamples:
             return data_obj
@@ -461,16 +468,19 @@ class UdaAccess(DataSource):
 
         return cbs_dict
 
-    def get_var_list(self, pattern='.*') -> List[str]:
-        var_list = self.UCR.getVariableList(pattern)
+    def get_var_list(self, pattern='.*', field=None) -> List[str]:
+        if field:
+            var_list = self.UCR.getVariableListWithFieldXX(field, pattern)
+        else:
+            var_list = self.UCR.getVariableList(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return []
 
         return var_list
 
-    def get_var_dict(self, pattern='.*', path=None) -> dict:
-        var_list = self.get_var_list(pattern)
+    def get_var_dict(self, pattern='.*', path=None, field=None) -> dict:
+        var_list = self.get_var_list(pattern, field=field)
         if path:
             var_dict = self.parse_vars_to_dict(var_list, path)
         else:
@@ -514,9 +524,37 @@ class UdaAccess(DataSource):
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                       f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
-            if uda_p.pulse == "0":
-                uda_p.pulse = self.UCR.getLastPulse()
-                logger.debug("LAST PULSE: %s", uda_p.pulse)
+            # Resolve special pulse numbers (0 = last, -N = N-th previous)
+            pulse_parts = uda_p.pulse.rsplit("/", 1)
+            pulse_num = pulse_parts[-1] if len(pulse_parts) > 1 else uda_p.pulse
+            pulse_prefix = pulse_parts[0] + "/" if len(pulse_parts) > 1 else ""
+
+            try:
+                n = int(pulse_num)
+            except ValueError:
+                n = 1  # non-numeric → not a relative pulse
+
+            if n <= 0:
+                uda_p._pulse_resolved = True
+                # Pulses are sequential: last_pulse + n gives the N-th previous pulse
+                search_pattern = pulse_prefix + "*" if pulse_prefix else ""
+                last_pulse = self.UCR.getLastPulse2(search_pattern, "")
+                if self.UCR.isEmptyPulse2(last_pulse):
+                    logger.warning(f"No pulses found in category '{pulse_prefix or '*'}'")
+                else:
+                    last_str = str(last_pulse)
+                    last_num_str = last_str.rsplit("/", 1)[-1] if "/" in last_str else last_str
+                    try:
+                        last_num = int(last_num_str)
+                        real_num = last_num + n  # n is 0, -1, -2, ..., -N
+                        if real_num <= 0:
+                            logger.warning(f"Requested pulse '{pulse_num}' is before the earliest "
+                                           f"available pulse in category '{pulse_prefix or '*'}'")
+                        else:
+                            uda_p.pulse = f"{pulse_prefix}{real_num}" if pulse_prefix else str(real_num)
+                            logger.debug("RESOLVED PULSE (%s): %s", pulse_num, uda_p.pulse)
+                    except ValueError:
+                        logger.warning(f"Could not parse last pulse '{last_str}' as integer")
             # we need to check if it is an-going pulse to not use the cache...
             if uda_p.pulse not in self.pulses_cache.keys():
                 pulse_i = self.get_pulse_info(uda_p.pulse)
@@ -564,6 +602,8 @@ class UdaAccess(DataSource):
             query = query1 + f",decType={uda_p.decType}"
         else:
             query = query1
+        if uda_p.retType is not None:
+            query += f",retType={uda_p.retType}"
         return query
 
     def clear_cache(self):
@@ -701,6 +741,8 @@ class UdaAccess(DataSource):
             d_env = self.__fetch_envelope_with_cache(query)
         else:
             d_env = self.__fetch_envelope(query)
+        if getattr(uda_p, '_pulse_resolved', False):
+            d_env.resolved_pulse = uda_p.pulse
         logger.debug("getEnveloppe exiting pulse does exist ")
         return d_env
 
