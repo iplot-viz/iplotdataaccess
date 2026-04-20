@@ -49,11 +49,11 @@ More info: https://pypi.org/project/imas-python/
 
 class IMASPYDataAccess(DataSource):
     source_type = "IMASPY"
+    pulse_list = None  # shared pulse list cache across all instances
 
     def __init__(self, name: str, config: dict):
         super().__init__(name=name, config=config)
         self.uri = ""
-        self.pulse_list = None
         self.config = config
         self.set_uri(config)
         self.connection = None
@@ -71,6 +71,11 @@ class IMASPYDataAccess(DataSource):
                 database = config.get("database", "ITER")
                 version = config.get("version", "3")
                 pulse_ident = config.get("pulseIdent", "")
+
+                if not pulse_ident:
+                    self.errcode = -1
+                    self.errdesc = "Received an empty pulse identifier"
+                    return
                 try:
                     ret = pulse_ident.split("/")
                     pulse = int(ret[0])
@@ -492,19 +497,39 @@ class IMASPYDataAccess(DataSource):
             logger.info("Pulse table population is disabled in config")
             return EMPTY_DF.copy()
         alias_filter = str(kwargs.get("pulse", ""))
-        if self.pulse_list is None:
+        if IMASPYDataAccess.pulse_list is None:
             import time
-            start = time.perf_counter()
-            logger.info("Fetching pulse list from SIMDB...")
-            df = SimDBClient(self.config).fetch_pulses()
-            if not df.empty:
-                self.pulse_list = df.sort_values(by=["alias"])
-            else:
-                self.pulse_list = pd.DataFrame()
-            logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")
-        if self.pulse_list.empty:
+            import pickle
+            from pathlib import Path
+            from datetime import datetime, timedelta
+
+            cache_dir = os.environ.get("IPLOT_DUMP_PATH", str(Path.home() / ".local" / "1Dtool" / "cache"))
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_file = os.path.join(cache_dir, "pulses_df.pkl")
+            cache_ttl = timedelta(days=7)
+
+            if os.path.exists(cache_file):
+                mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
+                if (datetime.now() - mtime) < cache_ttl:
+                    logger.info("Loading pulse list from disk cache...")
+                    with open(cache_file, "rb") as f:
+                        IMASPYDataAccess.pulse_list = pickle.load(f)
+
+            if IMASPYDataAccess.pulse_list is None:
+                start = time.perf_counter()
+                logger.info("Fetching pulse list from SIMDB...")
+                df = SimDBClient(self.config).fetch_pulses()
+                if not df.empty:
+                    IMASPYDataAccess.pulse_list = df.sort_values(by=["alias"])
+                    with open(cache_file, "wb") as f:
+                        pickle.dump(IMASPYDataAccess.pulse_list, f)
+                else:
+                    IMASPYDataAccess.pulse_list = pd.DataFrame()
+                logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")
+
+        if IMASPYDataAccess.pulse_list.empty:
             return EMPTY_DF.copy()
-        pulses_df = self.pulse_list[
-            self.pulse_list["alias"].astype(str).str.startswith(alias_filter)
+        pulses_df = IMASPYDataAccess.pulse_list[
+            IMASPYDataAccess.pulse_list["alias"].astype(str).str.startswith(alias_filter)
         ][SIMDB_COLUMNS].astype(str)
         return pulses_df.reset_index(drop=True)
