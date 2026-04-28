@@ -126,14 +126,14 @@ class NestedDatatype:
             out[f.name] = f.to_json()
         return out
 
-    def to_json(self):
-        out = {"data_types": {}}
-        for d in self.data_types:
-            out['data_types'][d.name] = d.to_json()
-
-        out['fields'] = self.fields_to_json()
-
-        return out
+    # def to_json(self):
+    #     out = {"data_types": {}}
+    #     for d in self.data_types:
+    #         out['data_types'][d.name] = d.to_json()
+    #
+    #     out['fields'] = self.fields_to_json()
+    #
+    #     return out
 
 
 if __name__ == "__main__":
@@ -159,5 +159,5 @@ if __name__ == "__main__":
     dt = NestedDatatype("test")
     dt.load_uda_json(js_nested)
     fdt = dt.flat_datatype("test2")
-    json_fdt = fdt.to_json()
-    print(json_fdt)
+    # json_fdt = fdt.to_json()
+    # print(json_fdt)
