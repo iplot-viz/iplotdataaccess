@@ -521,8 +521,12 @@ class IMASPYDataAccess(DataSource):
                 df = SimDBClient(self.config).fetch_pulses()
                 if not df.empty:
                     IMASPYDataAccess.pulse_list = df.sort_values(by=["alias"])
+                    # strip local entries before writing to disk
+                    df_to_cache = IMASPYDataAccess.pulse_list
+                    if "source" in df_to_cache.columns:
+                        df_to_cache = df_to_cache[df_to_cache["source"].astype(str).str.lower() != "local"].reset_index(drop=True)
                     with open(cache_file, "wb") as f:
-                        pickle.dump(IMASPYDataAccess.pulse_list, f)
+                        pickle.dump(df_to_cache, f)
                 else:
                     IMASPYDataAccess.pulse_list = pd.DataFrame()
                 logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")

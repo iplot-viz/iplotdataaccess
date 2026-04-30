@@ -9,7 +9,7 @@ from iplotLogging import setupLogger
 
 logger = setupLogger.get_logger(__name__)
 
-SIMDB_COLUMNS = ["uuid", "dashboard_link", "alias", "ip", "b0", "workflow", "date", "imas_uri", "description", "source"]
+SIMDB_COLUMNS = ["alias", "ip", "b0", "workflow", "date", "description", "uuid", "dashboard_link", "imas_uri", "source"]
 EMPTY_DF = pd.DataFrame(columns=SIMDB_COLUMNS)
 
 _thread_local = threading.local()
