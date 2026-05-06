@@ -224,14 +224,12 @@ def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputF
             ret = extractAndGenerateParquet(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS)
         else:
             ret = extractAndGenerateH5(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS)
-        return True
+        return True, ""
     except DataExportError as dee:
-        print("Failed to export data :" + dee.message)
-        return False
+        return False, dee.message
 
     except Exception as exc:
-        print("Failed to export data :" + repr(exc))
-        return False
+        return False, repr(exc)
 
 
 def readcsvFile(pathtocsv, logfile):
