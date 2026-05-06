@@ -174,6 +174,23 @@ class DataAccess:
 
         return None
 
+    def get_archive_window(self, data_s_name, **kwargs):
+        if data_s_name is not None and data_s_name in self.ds_list.keys():
+            if self.ds_list[data_s_name] is None:
+                dobj = DataObj()
+                dobj.set_empty(f"Invalid data source pointer for ds name {data_s_name}")
+                return dobj
+            return self.ds_list[data_s_name].get_archive_window(**kwargs)
+
+        if self.default_ds is not None:
+            logger.info("default source used")
+            return self.default_ds.get_archive_window(**kwargs)
+
+        logger.warning(f"Invalid data source found {data_s_name}")
+        dobj = DataObj()
+        dobj.set_empty(f"Invalid data source name {data_s_name}")
+        return dobj
+
     def get_connected_data_source_names(self) -> List[str]:
         data_sources = [self.get_default_ds_name()]
         for ds_name, ds in self.ds_list.items():

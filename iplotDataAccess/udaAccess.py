@@ -29,6 +29,12 @@ from iplotDataAccess.realTimeStreamer import RTStreamer
 logger = setupLog.get_logger(__name__)
 
 
+# Above MAX_RAW_POINTS_PER_SIGNAL the layer falls back to an envelope of
+# ENVELOPE_TARGET_POINTS buckets.
+MAX_RAW_POINTS_PER_SIGNAL = 100_000
+ENVELOPE_TARGET_POINTS = 1920
+
+
 class RTHException(Exception):
     pass
 
@@ -723,6 +729,21 @@ class UdaAccess(DataSource):
         self.UCR.releaseData(handle)
         d_env.set_err(0, "OK")
         return d_env
+
+    def get_archive_window(self, **kwargs):
+        """Return raw ``DataObj`` up to MAX_RAW_POINTS_PER_SIGNAL, or a
+        ``DataEnvelope`` of ENVELOPE_TARGET_POINTS buckets when UDA reports the
+        request exceeds its limit."""
+        kwargs.setdefault('nbp', MAX_RAW_POINTS_PER_SIGNAL)
+        dobj = self.get_data(**kwargs)
+
+        too_many = ('Number of samples in reply exceeds available limit. '
+                    'Reduce request interval, use decimation or read data by chunks.')
+        if dobj.errcode != 0 and dobj.errdesc == too_many:
+            kwargs['nbp'] = ENVELOPE_TARGET_POINTS
+            return self.get_envelope(**kwargs)
+
+        return dobj
 
     def get_envelope(self, **kwargs):
         kwargs['decType'] = "env"

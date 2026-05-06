@@ -60,6 +60,11 @@ class DataSource(ABC):
     def get_envelope(self, **kwargs) -> DataEnvelope:
         pass
 
+    def get_archive_window(self, **kwargs):
+        """Return archive data for a time window. Subclasses may override to
+        apply caps or switch to envelope mode."""
+        return self.get_data(**kwargs)
+
     @abstractmethod
     def search_pulses_df(self, text: str) -> DataFrame:
         pass
