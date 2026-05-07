@@ -2,7 +2,7 @@
 
 import pytest
 
-uc = pytest.importorskip("uda_client_reader")  # Module top-level imports it.
+pytest.importorskip("uda_client_reader.uda_client_reader_python")
 
 from iplotDataAccess.nestedDatatype import (
     NestedDatatype,

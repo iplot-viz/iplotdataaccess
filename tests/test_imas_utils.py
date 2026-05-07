@@ -1,9 +1,12 @@
 # Description: Unit tests for the pure string/parse helpers in imasUtils.
 
+import importlib.util
+
 import pytest
 
-# Pure helpers still require the imas module to import the file (top-level imports).
-pytest.importorskip("imas", reason="imas/imaspy package required")
+# imasUtils tries imaspy first, falls back to imas — skip only if neither is available.
+if importlib.util.find_spec("imaspy") is None and importlib.util.find_spec("imas") is None:
+    pytest.skip("imas/imaspy package required", allow_module_level=True)
 
 from iplotDataAccess.imasUtils import (
     parse_idspath,

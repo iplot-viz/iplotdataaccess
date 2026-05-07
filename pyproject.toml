@@ -56,7 +56,6 @@ testpaths = ["tests"]
 [tool.coverage.run]
 omit = [
     "iplotDataAccess/_version.py",
-    "iplotDataAccess/tests/*",
     "iplotDataAccess/dataHandling/exportData/*",
 ]
 
