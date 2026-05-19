@@ -17,8 +17,8 @@ class CsvAccess(DataSource):
         super().__init__(name, config)
 
         self.folder_path = config.get("path", "")  # Store the folder path for accessing CSV files
-        self.def_pulse_location = os.path.basename(self.folder_path)
-        self.pulse_location="ITER"
+        self.def_pulse_location = "ITER"
+        self.pulse_location = config.get("pulse_location", self.def_pulse_location) 
 
     def connect(self) -> bool:
         self.connected = os.path.isdir(self.folder_path)
