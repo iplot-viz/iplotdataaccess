@@ -301,23 +301,28 @@ class UdaAccess(DataSource):
         else:
             x_data = data_obj.xdata
             y_data = data_obj.ydata
+            # startT/endT are kept as strings by convert_to_nanos so they can be
+            # interpolated into UDA queries; cast to int for numeric comparison
+            # against the uint64 xdata array.
+            start_t = int(uda_p.startT)
+            end_t = int(uda_p.endT)
 
-            if uda_p.startT not in x_data:
-                x_idx_start = sum(x_data < uda_p.startT) - 1
+            if start_t not in x_data:
+                x_idx_start = sum(x_data < start_t) - 1
                 if x_idx_start != -1:
                     y_value = y_data[x_idx_start]
                     x_data = x_data[x_idx_start + 1:]
                     y_data = y_data[x_idx_start + 1:]
-                    x_data = np.insert(x_data, 0, uda_p.startT)
+                    x_data = np.insert(x_data, 0, start_t)
                     y_data = np.insert(y_data, 0, y_value)
 
-            if uda_p.endT not in data_obj.xdata:
-                x_idx_end = sum(x_data < uda_p.endT) - 1
+            if end_t not in data_obj.xdata:
+                x_idx_end = sum(x_data < end_t) - 1
                 if x_idx_end != -1:
                     y_value = y_data[x_idx_end]
                     x_data = x_data[:x_idx_end + 1]
                     y_data = y_data[:x_idx_end + 1]
-                    x_data = np.append(x_data, uda_p.endT)
+                    x_data = np.append(x_data, end_t)
                     y_data = np.append(y_data, y_value)
 
             data_obj.xdata = x_data
