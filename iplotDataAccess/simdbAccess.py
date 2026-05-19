@@ -18,13 +18,10 @@ _thread_local = threading.local()
 def _get_session(auth: tuple):
     """Return a per-thread requests.Session, creating/reconfiguring as needed."""
     import requests
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     session = getattr(_thread_local, "session", None)
     if session is None or getattr(_thread_local, "session_auth", None) != auth:
         session = requests.Session()
         session.auth = auth
-        session.verify = False
         session.headers.update({"User-Agent": "it_script_basic", "Accept": "application/json"})
         _thread_local.session = session
         _thread_local.session_auth = auth
@@ -33,8 +30,6 @@ def _get_session(auth: tuple):
 
 def fetch_simulation_metadata(metadata_url_template: str, uuid, auth: tuple) -> dict:
     """Fetch metadata for a single simulation and return a flat {element: value} dict."""
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     try:
         uuid_str = uuid.get("hex", "") if isinstance(uuid, dict) else str(uuid)
         url = metadata_url_template.format(uuid=uuid_str)
@@ -156,19 +151,15 @@ class SimDBClient:
     # HTTP helpers
     def _do_get(self, url: str, auth: tuple, page: int | None = None):
         import requests
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         headers = {"User-Agent": "it_script_basic", "Accept": "application/json"}
         if page is not None:
             headers["simdb-page"] = str(page)
-        return requests.get(url, auth=auth, headers=headers, timeout=60, verify=False)
+        return requests.get(url, auth=auth, headers=headers, timeout=60)
 
     # Main fetch
     def fetch_pulses(self) -> pd.DataFrame:
         """Fetch and return the full simulation list as a DataFrame."""
-        import urllib3
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         simdb_url = self.config.get("simdb_url", "https://simdb.iter.org/scenarios/api/v1.2/simulations")
         simdb_metadata_url = self.config.get(
