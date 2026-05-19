@@ -101,31 +101,52 @@ class SimDBClient:
         # 2. Prompt user
         if not password:
             try:
-                from PySide6.QtWidgets import QInputDialog, QLineEdit, QApplication
+                from PySide6.QtWidgets import (
+                    QApplication, QDialog, QDialogButtonBox, QFormLayout,
+                    QLabel, QLineEdit, QVBoxLayout,
+                )
                 from PySide6.QtCore import Qt
                 app = QApplication.instance()
                 if app is not None:
-                    username, ok = QInputDialog.getText(
-                        None, "SIMDB Login", "Username:", text=username,
-                        flags=Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint,
+                    dialog = QDialog()
+                    dialog.setWindowTitle("SIMDB Login")
+                    dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
+
+                    user_edit = QLineEdit(username)
+                    pass_edit = QLineEdit()
+                    pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
+
+                    buttons = QDialogButtonBox(
+                        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
                     )
-                    if not ok or not username:
-                        logger.warning("SIMDB login cancelled by user")
+                    buttons.accepted.connect(dialog.accept)
+                    buttons.rejected.connect(dialog.reject)
+
+                    form = QFormLayout()
+                    form.addRow("Username:", user_edit)
+                    form.addRow("Password:", pass_edit)
+
+                    layout = QVBoxLayout()
+                    layout.addWidget(QLabel("Enter ITER credentials:"))
+                    layout.addLayout(form)
+                    layout.addWidget(buttons)
+                    dialog.setLayout(layout)
+
+                    if dialog.exec() != QDialog.DialogCode.Accepted:
+                        logger.warning("ITER login cancelled by user")
                         return None
-                    password, ok = QInputDialog.getText(
-                        None, "SIMDB Login", f"Password for {username}:",
-                        QLineEdit.EchoMode.Password,
-                        flags=Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint,
-                    )
-                    if not ok or not password:
-                        logger.warning("SIMDB login cancelled by user")
+
+                    username = user_edit.text().strip()
+                    password = pass_edit.text()
+                    if not username or not password:
+                        logger.warning("ITER login cancelled by user")
                         return None
                 else:
                     import getpass as _gp
-                    entered = input(f"SIMDB Username [{username}]: ").strip()
+                    entered = input(f"ITER Username [{username}]: ").strip()
                     if entered:
                         username = entered
-                    password = _gp.getpass(f"SIMDB Password for {username}: ")
+                    password = _gp.getpass(f"ITER Password for {username}: ")
             except Exception as e:
                 logger.warning(f"Could not prompt for credentials: {e}")
                 return None
