@@ -2,6 +2,7 @@
 
 import getpass
 import threading
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -62,7 +63,7 @@ def fetch_simulation_metadata(metadata_url_template: str, uuid, auth: tuple) -> 
         return {}
 
 
-def _decode_array(raw) -> np.ndarray | None:
+def _decode_array(raw) -> Optional[np.ndarray]:
     """Decode a SIMDB serialised numpy array value."""
     if isinstance(raw, dict) and raw.get("_type") in ("numpy.ndarray", "numpy.float64", "numpy.int64"):
         import base64
@@ -81,7 +82,7 @@ class SimDBClient:
         self.config = config
 
     # Credential helpers
-    def _resolve_credentials(self) -> tuple[str, str] | None:
+    def _resolve_credentials(self) -> Optional[Tuple[str, str]]:
         """Return (username, password) or None if the user cancels."""
         username = self.config.get("simdb_user", getpass.getuser()) or getpass.getuser()
         password = self.config.get("simdb_password", "")
@@ -149,7 +150,7 @@ class SimDBClient:
             pass
 
     # HTTP helpers
-    def _do_get(self, url: str, auth: tuple, page: int | None = None):
+    def _do_get(self, url: str, auth: tuple, page: Optional[int] = None):
         import requests
         headers = {"User-Agent": "it_script_basic", "Accept": "application/json"}
         if page is not None:
@@ -177,7 +178,13 @@ class SimDBClient:
         try:
             response = self._do_get(simdb_url, auth)
         except Exception as e:
-            logger.exception(f"SIMDB connection error: {e}")
+            if "SSL" in type(e).__name__ or "CERTIFICATE" in str(e).upper():
+                logger.error(
+                    "SIMDB TLS certificate verification failed. "
+                    "set the REQUESTS_CA_BUNDLE environment variable to the ITER CA bundle path\n"
+                )
+            else:
+                logger.exception(f"SIMDB connection error: {e}")
             return EMPTY_DF.copy()
 
         if response.status_code in (401, 403):
@@ -220,7 +227,7 @@ class SimDBClient:
 
         # Metadata in parallel
         uuid_list = [item.get("uuid", "") for item in items]
-        meta_results: dict[int, dict] = {}
+        meta_results: dict = {}
         logger.info(f"Fetching metadata for {len(uuid_list)} simulations...")
 
         with ThreadPoolExecutor(max_workers=5) as executor:

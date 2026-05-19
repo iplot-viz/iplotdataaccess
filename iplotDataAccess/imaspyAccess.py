@@ -7,6 +7,7 @@ except ImportError:
 import os
 import re
 from functools import lru_cache
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -59,7 +60,7 @@ class IMASPYDataAccess(DataSource):
         self.connection = None
         self.connected = False
 
-    def set_uri(self, config: dict | str):
+    def set_uri(self, config: Union[dict, str]):
         if type(config) is dict:
             # IMAS databases
             # For public databases, the data is in the $IMAS_HOME/public/imasdb/<database>/<version>/<pulse>/<run>/ folder.
@@ -499,21 +500,22 @@ class IMASPYDataAccess(DataSource):
         alias_filter = str(kwargs.get("pulse", ""))
         if IMASPYDataAccess.pulse_list is None:
             import time
-            import pickle
             from pathlib import Path
             from datetime import datetime, timedelta
 
             cache_dir = os.environ.get("IPLOT_DUMP_PATH", str(Path.home() / ".local" / "1Dtool" / "cache"))
             os.makedirs(cache_dir, exist_ok=True)
-            cache_file = os.path.join(cache_dir, "pulses_df.pkl")
+            cache_file = os.path.join(cache_dir, "pulses_df.parquet")
             cache_ttl = timedelta(days=7)
 
             if os.path.exists(cache_file):
                 mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
                 if (datetime.now() - mtime) < cache_ttl:
                     logger.info("Loading pulse list from disk cache...")
-                    with open(cache_file, "rb") as f:
-                        IMASPYDataAccess.pulse_list = pickle.load(f)
+                    try:
+                        IMASPYDataAccess.pulse_list = pd.read_parquet(cache_file)
+                    except Exception as e:
+                        logger.warning(f"Failed to read parquet cache, will re-fetch: {e}")
 
             if IMASPYDataAccess.pulse_list is None:
                 start = time.perf_counter()
@@ -525,8 +527,10 @@ class IMASPYDataAccess(DataSource):
                     df_to_cache = IMASPYDataAccess.pulse_list
                     if "source" in df_to_cache.columns:
                         df_to_cache = df_to_cache[df_to_cache["source"].astype(str).str.lower() != "local"].reset_index(drop=True)
-                    with open(cache_file, "wb") as f:
-                        pickle.dump(df_to_cache, f)
+                    try:
+                        df_to_cache.to_parquet(cache_file, index=False)
+                    except Exception as e:
+                        logger.warning(f"Failed to write parquet cache: {e}")
                 else:
                     IMASPYDataAccess.pulse_list = pd.DataFrame()
                 logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")

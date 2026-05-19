@@ -2,6 +2,7 @@
 
 
 import os
+from typing import Dict
 
 import pandas as pd
 from iplotLogging import setupLogger
@@ -49,7 +50,7 @@ class LocalPulseScanner:
             logger.warning(f"Local pulse folder does not exist: {self.folder}")
             return EMPTY_DF.copy()
 
-        found: dict[str, str] = {}
+        found: Dict[str, str] = {}
 
         for root, _dirs, files in os.walk(self.folder):
             dir_path = os.path.abspath(root)
