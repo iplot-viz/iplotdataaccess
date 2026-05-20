@@ -17,7 +17,8 @@ class CsvAccess(DataSource):
         super().__init__(name, config)
 
         self.folder_path = config.get("path", "")  # Store the folder path for accessing CSV files
-        self.def_pulse_location = self.folder_path.split('/')[-1]
+        self.def_pulse_location = "ITER"
+        self.pulse_location = config.get("pulse_location", self.def_pulse_location) 
 
     def connect(self) -> bool:
         self.connected = os.path.isdir(self.folder_path)
@@ -73,12 +74,12 @@ class CsvAccess(DataSource):
 
         # Walk through all files and folders in the directory
         for folder, _, files in os.walk(self.folder_path):
-            relative_folder = os.path.relpath(folder, self.folder_path).replace(os.sep, "/")
+            relative_folder =  os.path.basename(os.path.normpath(folder))
             # For each file, create a key with the folder and cleaned file name
             for file in files:
                 if not file.endswith(".csv"):
                     continue
-                value = f"{self.def_pulse_location}:{relative_folder}/{file.replace('.csv', '').replace('data_', '')};{pstatus}"
+                value = f"{self.pulse_location}:{relative_folder}/{file.replace('.csv', '').replace('data_', '')};{pstatus}"
                 logger.debug(" found value and file %s %s", value, file)
                 if re.match(pattern, value):
                     all_pulses.append(value)
@@ -181,7 +182,7 @@ class CsvAccess(DataSource):
         # Replace slashes with the OS-specific separator
         folders = folders.replace("/", os.sep)
         # Join all parts
-        result = f"{self.folder_path}{os.sep}{f1}{os.sep}data_{f2}.csv"
+        result = os.path.join(self.folder_path, f1, f"data_{f2}.csv")
         return result  # Return the constructed file path
 
     def clear_cache(self):

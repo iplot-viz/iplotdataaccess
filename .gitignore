@@ -49,3 +49,10 @@ venv.bak/
 
 # Cython debug symbols
 cython_debug/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
