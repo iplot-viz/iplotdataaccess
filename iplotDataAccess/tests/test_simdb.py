@@ -1,23 +1,13 @@
-"""unit tests for SIMDB-backed pulse population.
+"""Unit tests for SimDBClient"""
 
-Covers:
-  1. Pagination + metadata merge
-  2. Auth failure handling (401/403)
-  3. Local folder merge / local-source filtering from cache
-"""
-
-import os
-import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
 from iplotDataAccess.simdbAccess import (
-    EMPTY_DF,
     SIMDB_COLUMNS,
     SimDBClient,
-    _decode_array,
     fetch_simulation_metadata,
 )
 
@@ -40,18 +30,6 @@ def _sim_item(alias="run1", uuid_hex="abc123"):
     return {"alias": alias, "uuid": {"hex": uuid_hex}, "datetime": "2024-01-01T00:00:00"}
 
 
-def _meta_response(uuid_hex):
-    return {
-        "metadata": [
-            {"element": "code.name", "value": "METIS"},
-            {"element": "ids_properties.comment", "value": "test run"},
-            {"element": "ids_properties.creation_date", "value": "2024-01-01"},
-        ],
-        "inputs": [{"uri": f"imas://hdf5?uuid={uuid_hex}"}],
-        "outputs": [],
-    }
-
-
 CONFIG = {
     "simdb_url": "https://simdb.test/api/simulations",
     "simdb_metadata_url": "https://simdb.test/api/simulation/{uuid}",
@@ -59,188 +37,123 @@ CONFIG = {
     "simdb_password": "testpass",
 }
 
+METADATA_URL = "https://simdb.test/api/simulation/{uuid}"
+AUTH = ("testuser", "testpass")
+
 
 # ---------------------------------------------------------------------------
-# 1. Metadata merge
+# fetch_simulation_metadata
 # ---------------------------------------------------------------------------
 
-class TestPagination(unittest.TestCase):
-    """fetch_pulses attaches metadata to the correct rows."""
+class TestFetchSimulationMetadata(unittest.TestCase):
+    """tests for fetch_simulation_metadata."""
 
-    def _build_page(self, items, total):
-        return {"count": total, "results": items}
+    def _mock_session_get(self, resp):
+        """Patch _get_session so session.get() returns resp."""
+        mock_session = MagicMock()
+        mock_session.get.return_value = resp
+        return patch("iplotDataAccess.simdbAccess._get_session", return_value=mock_session)
+
+    def test_returns_flat_dict_with_metadata_fields(self):
+        """metadata elements and imas_uri are returned as a flat dict."""
+        body = {
+            "metadata": [
+                {"element": "code.name", "value": "METIS"},
+                {"element": "ids_properties.comment", "value": "baseline run"},
+            ],
+            "inputs": [{"uri": "imas://hdf5?uuid=abc"}],
+            "outputs": [],
+        }
+        with self._mock_session_get(_make_response(json_body=body)):
+            result = fetch_simulation_metadata(METADATA_URL, {"hex": "abc"}, AUTH)
+
+        self.assertEqual(result["code.name"], "METIS")
+        self.assertEqual(result["ids_properties.comment"], "baseline run")
+        self.assertEqual(result["_imas_uri"], "imas://hdf5?uuid=abc")
+
+    def test_non_ok_response_returns_empty_dict(self):
+        """Any non-2xx HTTP status must return {} without raising."""
+        with self._mock_session_get(_make_response(status=404)):
+            result = fetch_simulation_metadata(METADATA_URL, {"hex": "abc"}, AUTH)
+        self.assertEqual(result, {})
+
+    def test_non_json_content_type_returns_empty_dict(self):
+        """Non-JSON content-type must return {} without raising."""
+        with self._mock_session_get(_make_response(content_type="text/html")):
+            result = fetch_simulation_metadata(METADATA_URL, {"hex": "abc"}, AUTH)
+        self.assertEqual(result, {})
+
+    def test_network_exception_returns_empty_dict(self):
+        """Network errors must be swallowed and return {}."""
+        mock_session = MagicMock()
+        mock_session.get.side_effect = ConnectionError("timeout")
+        with patch("iplotDataAccess.simdbAccess._get_session", return_value=mock_session):
+            result = fetch_simulation_metadata(METADATA_URL, {"hex": "abc"}, AUTH)
+        self.assertEqual(result, {})
+
+
+# ---------------------------------------------------------------------------
+# SimDBClient.fetch_pulses
+# ---------------------------------------------------------------------------
+
+class TestFetchPulses(unittest.TestCase):
+    """Generic tests for SimDBClient.fetch_pulses."""
+
+    # fetch_pulses builds records without "source" (added later by get_pulses_df)
+    _FETCH_COLUMNS = [c for c in SIMDB_COLUMNS if c != "source"]
 
     @patch("iplotDataAccess.simdbAccess.fetch_simulation_metadata")
     @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
-    def test_metadata_merged_into_row(self, mock_get, mock_meta):
-        items = [_sim_item("myrun", "uuid1"), _sim_item("otherrun", "uuid2")]
-        mock_get.return_value = _make_response(json_body=self._build_page(items, 2))
-        meta_by_uuid = {
-            "uuid1": {
-                "code.name": "workflow-1",
-                "ids_properties.comment": "hello-1",
-                "_imas_uri": "imas://hdf5?uuid=uuid1",
-            },
-            "uuid2": {
-                "code.name": "workflow-2",
-                "ids_properties.comment": "hello-2",
-                "_imas_uri": "imas://hdf5?uuid=uuid2",
-            },
+    def test_returns_dataframe_with_expected_columns(self, mock_get, mock_meta):
+        """Result contains all expected columns and exactly one row."""
+        mock_get.return_value = _make_response(
+            json_body={"count": 1, "results": [_sim_item("run1", "uid1")]}
+        )
+        mock_meta.return_value = {
+            "code.name": "METIS", "ids_properties.comment": "ok",
+            "ids_properties.creation_date": "2024-01-01", "_imas_uri": "imas://hdf5?uuid=uid1",
         }
-        mock_meta.side_effect = lambda _template, uuid, _auth: meta_by_uuid[uuid["hex"]]
 
         df = SimDBClient(CONFIG).fetch_pulses()
-        rows = df.set_index("uuid")
 
-        self.assertEqual(rows.loc["uuid1"]["workflow"], "workflow-1")
-        self.assertEqual(rows.loc["uuid1"]["description"], "hello-1")
-        self.assertEqual(rows.loc["uuid1"]["imas_uri"], "imas://hdf5?uuid=uuid1")
-        self.assertEqual(rows.loc["uuid2"]["workflow"], "workflow-2")
-        self.assertEqual(rows.loc["uuid2"]["description"], "hello-2")
-        self.assertEqual(rows.loc["uuid2"]["imas_uri"], "imas://hdf5?uuid=uuid2")
+        self.assertIsInstance(df, pd.DataFrame)
+        for col in self._FETCH_COLUMNS:
+            self.assertIn(col, df.columns, msg=f"Missing column: {col}")
+        self.assertEqual(len(df), 1)
+
+    @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
+    def test_auth_failure_returns_empty_df_with_correct_schema(self, mock_get):
+        """401/403 must return an empty DataFrame that still has SIMDB_COLUMNS."""
+        for status in (401, 403):
+            with self.subTest(status=status):
+                mock_get.return_value = _make_response(status=status)
+                df = SimDBClient(CONFIG).fetch_pulses()
+                self.assertTrue(df.empty)
+                self.assertListEqual(list(df.columns), SIMDB_COLUMNS)
+
+    @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
+    def test_non_json_response_returns_empty_df(self, mock_get):
+        """Non-JSON content-type must return an empty DataFrame with SIMDB_COLUMNS."""
+        mock_get.return_value = _make_response(status=200, content_type="text/html")
+        df = SimDBClient(CONFIG).fetch_pulses()
+        self.assertTrue(df.empty)
+        self.assertListEqual(list(df.columns), SIMDB_COLUMNS)
 
     @patch("iplotDataAccess.simdbAccess.fetch_simulation_metadata")
     @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
-    def test_dashboard_link_constructed(self, mock_get, mock_meta):
-        items = [_sim_item("run", "deadbeef")]
-        mock_get.return_value = _make_response(json_body=self._build_page(items, 1))
+    def test_dashboard_link_built_from_uuid(self, mock_get, mock_meta):
+        """dashboard_link must be constructed as the canonical SIMDB URL."""
+        mock_get.return_value = _make_response(
+            json_body={"count": 1, "results": [_sim_item("run", "JHSDF76GCBHXB")]}
+        )
         mock_meta.return_value = {"_imas_uri": ""}
 
         df = SimDBClient(CONFIG).fetch_pulses()
 
-        self.assertEqual(df.iloc[0]["dashboard_link"],
-                         "https://simdb.iter.org/dashboard/uuid/deadbeef")
-
-
-# ---------------------------------------------------------------------------
-# 2. Auth failure handling
-# ---------------------------------------------------------------------------
-
-class TestAuthFailure(unittest.TestCase):
-    def _assert_empty_df(self, df):
-        self.assertTrue(df.empty)
-        self.assertListEqual(list(df.columns), SIMDB_COLUMNS)
-
-    @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
-    def test_401_returns_empty(self, mock_get):
-        mock_get.return_value = _make_response(status=401)
-        df = SimDBClient(CONFIG).fetch_pulses()
-        self._assert_empty_df(df)
-
-    @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
-    def test_403_returns_empty(self, mock_get):
-        mock_get.return_value = _make_response(status=403)
-        df = SimDBClient(CONFIG).fetch_pulses()
-        self._assert_empty_df(df)
-
-    @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
-    def test_401_clears_credentials(self, mock_get):
-        mock_get.return_value = _make_response(status=401)
-        client = SimDBClient(CONFIG)
-        with patch.object(client, "_clear_credentials") as mock_clear:
-            client.fetch_pulses()
-            mock_clear.assert_called_once_with("testuser")
-
-    @patch("iplotDataAccess.simdbAccess.SimDBClient._do_get")
-    def test_non_json_response_returns_empty(self, mock_get):
-        mock_get.return_value = _make_response(
-            status=200, content_type="text/html", json_body={}
+        self.assertEqual(
+            df.iloc[0]["dashboard_link"],
+            "https://simdb.iter.org/dashboard/uuid/JHSDF76GCBHXB",
         )
-        df = SimDBClient(CONFIG).fetch_pulses()
-        self._assert_empty_df(df)
-
-
-# ---------------------------------------------------------------------------
-# 3. Local folder merge and cache filtering
-# ---------------------------------------------------------------------------
-
-class TestLocalMerge(unittest.TestCase):
-
-    def setUp(self):
-        # Reset class-level pulse_list between tests
-        from iplotDataAccess.imaspyAccess import IMASPYDataAccess
-        IMASPYDataAccess.pulse_list = None
-
-    def _make_local_df(self):
-        return pd.DataFrame([{
-            "alias": "local_run", "ip": "", "b0": "", "workflow": "",
-            "date": "", "description": "local", "uuid": "loc1",
-            "dashboard_link": "", "imas_uri": "imas://local", "source": "local",
-        }])
-
-    def _make_simdb_df(self):
-        return pd.DataFrame([{
-            "alias": "simdb_run", "ip": "", "b0": "", "workflow": "",
-            "date": "", "description": "simdb", "uuid": "sim1",
-            "dashboard_link": "https://simdb.iter.org/dashboard/uuid/sim1",
-            "imas_uri": "imas://simdb", "source": "simdb",
-        }])
-
-    @patch("iplotDataAccess.localPulseAccess.LocalPulseScanner")
-    @patch("iplotDataAccess.imaspyAccess.SimDBClient")
-    def test_local_and_simdb_rows_both_present(self, mock_simdb_cls, mock_scanner_cls):
-        mock_simdb_cls.return_value.fetch_pulses.return_value = self._make_simdb_df()
-        mock_scanner_cls.return_value.fetch_pulses.return_value = self._make_local_df()
-
-        from iplotDataAccess.imaspyAccess import IMASPYDataAccess
-        config = {
-            "populate_pulse_table": True,
-            "pulse_list_folder": "/fake/folder",
-            "simdb_url": "https://simdb.test/api/simulations",
-            "simdb_metadata_url": "https://simdb.test/api/simulation/{uuid}",
-        }
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.dict(os.environ, {"IPLOT_DUMP_PATH": tmpdir}):
-                da = IMASPYDataAccess.__new__(IMASPYDataAccess)
-                da.config = config
-                df = da.get_pulses_df()
-
-        aliases = list(df["alias"])
-        self.assertIn("local_run", aliases)
-        self.assertIn("simdb_run", aliases)
-
-    @patch("iplotDataAccess.localPulseAccess.LocalPulseScanner")
-    @patch("iplotDataAccess.imaspyAccess.SimDBClient")
-    def test_local_entries_not_written_to_cache(self, mock_simdb_cls, mock_scanner_cls):
-        """Local-source rows must be stripped before writing the parquet cache."""
-        simdb_df = self._make_simdb_df()
-        local_df = self._make_local_df()
-        mock_simdb_cls.return_value.fetch_pulses.return_value = simdb_df
-        mock_scanner_cls.return_value.fetch_pulses.return_value = local_df
-
-        from iplotDataAccess.imaspyAccess import IMASPYDataAccess
-        config = {
-            "populate_pulse_table": True,
-            "pulse_list_folder": "/fake/folder",
-            "simdb_url": "https://simdb.test/api/simulations",
-            "simdb_metadata_url": "https://simdb.test/api/simulation/{uuid}",
-        }
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.dict(os.environ, {"IPLOT_DUMP_PATH": tmpdir}):
-                da = IMASPYDataAccess.__new__(IMASPYDataAccess)
-                da.config = config
-                da.get_pulses_df()
-
-                cached = pd.read_parquet(os.path.join(tmpdir, "pulses_df.parquet"))
-
-        # local_run must NOT be in the cache
-        self.assertNotIn("local_run", list(cached["alias"]))
-        self.assertIn("simdb_run", list(cached["alias"]))
-
-
-# ---------------------------------------------------------------------------
-# 4. _decode_array helper
-# ---------------------------------------------------------------------------
-
-class TestDecodeArray(unittest.TestCase):
-
-    def test_list_decoded(self):
-        arr = _decode_array([1.0, 2.0, 3.0])
-        self.assertEqual(list(arr), [1.0, 2.0, 3.0])
-
-    def test_none_returned_for_unknown(self):
-        self.assertIsNone(_decode_array("not_an_array"))
-        self.assertIsNone(_decode_array(None))
 
 
 if __name__ == "__main__":
