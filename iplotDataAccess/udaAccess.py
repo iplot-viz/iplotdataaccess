@@ -9,6 +9,15 @@ from cachetools import cachedmethod
 
 # import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
+# Optional: pulse-creation API ships in a separate package that may not be
+# installed in every environment. Missing import disables the feature
+# cleanly via UdaAccess.is_write_capable() — no warnings.
+try:
+    from uda_client_writer import uda_client_writer_python as ucw
+    _UDA_WRITER_AVAILABLE = True
+except ImportError:
+    ucw = None
+    _UDA_WRITER_AVAILABLE = False
 import iplotLogging.setupLogger as setupLog
 import dateutil.parser as dp
 from datetime import timezone
@@ -74,6 +83,8 @@ class UdaAccess(DataSource):
         self.errcode = 0
         self.errdesc = ""
         self.UCR = None
+        self.UCW = None
+        self._write_capable = False
         self.connected = False
         self.__NO_DATA_FOUND = ["Requested data cannot be located", "data cannot be retrieved",
                                 "could not retrieve data", "Incorrect time"]
@@ -87,6 +98,18 @@ class UdaAccess(DataSource):
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
         self.errcode = self.UCR.getErrorCode()
+
+        # Try the writer client too. Failure here must never block reading;
+        # it only disables the optional pulse-creation feature.
+        if _UDA_WRITER_AVAILABLE and self.connected:
+            try:
+                self.UCW = ucw.UdaClientWriterUser(self.host, self.port)
+                self._write_capable = True
+            except Exception as exc:
+                logger.warning("UDA writer client unavailable on %s:%s -> %s",
+                               self.host, self.port, exc)
+                self.UCW = None
+                self._write_capable = False
 
         self.set_rt_handler()
 
@@ -609,6 +632,38 @@ class UdaAccess(DataSource):
     def clear_cache(self):
         self.access_cache.clear()
         self.pulses_cache.clear()
+
+    # --- Pulse creation (optional, feature-gated on uda_client_writer) ---
+
+    def is_write_capable(self) -> bool:
+        return self._write_capable and self.UCW is not None
+
+    def get_pulse_categories(self) -> List[str]:
+        # TODO: replace with self.UCW.get_pulse_categories() when the
+        # uda_client_writer binding lands. Confirm with Doris whether
+        # the binding returns full scopes ("ITER:local") or short names
+        # ("local"); prefix here if needed.
+        return ["ITER:local", "ITER:test", "ITER:experiment"]
+
+    def add_pulse_info(self, scope: str, ts_start_ns: int, ts_end_ns: int,
+                       status: str, description: str) -> dict:
+        """Create a new pulse via UDA. Returns {ok: bool, error?: str, raw?: any}.
+
+        Timestamps must be in nanoseconds since the Unix epoch. The pulse
+        number is auto-assigned by the server.
+        """
+        if not self.is_write_capable():
+            return {"ok": False, "error": "uda_client_writer is not installed "
+                                          "on this host; pulse creation is disabled."}
+        if len(description) > 200:
+            return {"ok": False, "error": "description exceeds 200 characters"}
+        try:
+            raw = self.UCW.addPulseInfo(scope, str(ts_start_ns), str(ts_end_ns),
+                                        status, description)
+            return {"ok": True, "raw": raw}
+        except Exception as exc:
+            logger.exception("addPulseInfo failed on %s:%s", self.host, self.port)
+            return {"ok": False, "error": str(exc)}
 
     @cachedmethod(operator.attrgetter('access_cache'))
     def __fetch_data_with_cache(self, query):
