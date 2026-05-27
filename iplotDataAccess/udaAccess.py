@@ -639,9 +639,8 @@ class UdaAccess(DataSource):
         return self._write_capable and self.UCW is not None
 
     def get_pulse_categories(self) -> List[str]:
-        # Returns the list of "<location>:<category>" scopes accepted by
-        # UCW.addPulseInfo. Empty list if the reader is missing or the
-        # server is unreachable — the dialog handles that gracefully.
+        # Empty list when reader is missing or server unreachable; the
+        # dialog handles that gracefully.
         if self.UCR is None:
             return []
         try:
@@ -654,12 +653,29 @@ class UdaAccess(DataSource):
             return []
         return [str(c) for c in (categories or [])]
 
+    @staticmethod
+    def _is_valid_pulse_id(pulse_id) -> bool:
+        # addPulse returns ":/" (or similar empty marker) on failure.
+        if pulse_id is None:
+            return False
+        s = str(pulse_id).strip()
+        return bool(s) and s != ":/" and ":" in s and "/" in s
+
+    def _inject_pulse(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
+                      status: str, description: str):
+        # UDA pulse timestamps are second-precision; sub-second ns fractions
+        # are dropped by convertTimeNsToISO.
+        ts_start_iso = self.UCR.convertTimeNsToISO(int(ts_start_ns))
+        ts_end_iso = self.UCR.convertTimeNsToISO(int(ts_end_ns))
+        return self.UCW.injectPulse(pulse_id, ts_start_iso, ts_end_iso,
+                                    status, description)
+
     def add_pulse_info(self, scope: str, ts_start_ns: int, ts_end_ns: int,
                        status: str, description: str) -> dict:
-        """Create a new pulse via UDA. Returns {ok: bool, error?: str, raw?: any}.
+        """Create a new pulse and inject its data.
 
-        Timestamps must be in nanoseconds since the Unix epoch. The pulse
-        number is auto-assigned by the server.
+        Returns ``{ok, pulse_id?, raw?, error?}``. Timestamps are in
+        nanoseconds; UDA stores them at second precision.
         """
         if not self.is_write_capable():
             return {"ok": False, "error": "uda_client_writer is not installed "
@@ -667,11 +683,33 @@ class UdaAccess(DataSource):
         if len(description) > 200:
             return {"ok": False, "error": "description exceeds 200 characters"}
         try:
-            raw = self.UCW.addPulseInfo(scope, str(ts_start_ns), str(ts_end_ns),
-                                        status, description)
+            pulse_id = self.UCW.addPulse(scope, description)
+            if not self._is_valid_pulse_id(pulse_id):
+                return {"ok": False,
+                        "error": f"addPulse returned an empty pulse for scope {scope!r}"}
+            raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                     status, description)
+            return {"ok": True, "pulse_id": pulse_id, "raw": raw}
+        except Exception as exc:
+            logger.exception("addPulse/injectPulse failed on %s:%s", self.host, self.port)
+            return {"ok": False, "error": str(exc)}
+
+    def update_pulse_info(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
+                          status: str, description: str) -> dict:
+        """Update an existing pulse via injectPulse. Returns ``{ok, raw?, error?}``."""
+        if not self.is_write_capable():
+            return {"ok": False, "error": "uda_client_writer is not installed "
+                                          "on this host; pulse update is disabled."}
+        if len(description) > 200:
+            return {"ok": False, "error": "description exceeds 200 characters"}
+        if not self._is_valid_pulse_id(pulse_id):
+            return {"ok": False, "error": f"invalid pulse id {pulse_id!r}"}
+        try:
+            raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                     status, description)
             return {"ok": True, "raw": raw}
         except Exception as exc:
-            logger.exception("addPulseInfo failed on %s:%s", self.host, self.port)
+            logger.exception("injectPulse failed on %s:%s", self.host, self.port)
             return {"ok": False, "error": str(exc)}
 
     @cachedmethod(operator.attrgetter('access_cache'))
