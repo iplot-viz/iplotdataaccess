@@ -34,15 +34,39 @@ class IsWriteCapableTests(unittest.TestCase):
 
 
 class GetPulseCategoriesTests(unittest.TestCase):
-    def test_returns_nonempty_list(self):
+    def test_returns_categories_from_reader(self):
         ds = _make_uda(write_capable=True)
-        categories = ds.get_pulse_categories()
-        self.assertIsInstance(categories, list)
-        self.assertTrue(categories,
-                        "placeholder list must not be empty — the dialog "
-                        "needs something to populate the dropdown with")
-        for item in categories:
-            self.assertIsInstance(item, str)
+        ds.UCR = MagicMock()
+        ds.UCR.getPulseCategories.return_value = ["ITER:local", "ITER:test"]
+        ds.UCR.getErrorCode.return_value = 0
+        self.assertEqual(ds.get_pulse_categories(), ["ITER:local", "ITER:test"])
+
+    def test_returns_empty_when_reader_missing(self):
+        ds = _make_uda(write_capable=True)
+        ds.UCR = None
+        self.assertEqual(ds.get_pulse_categories(), [])
+
+    def test_returns_empty_when_reader_reports_error(self):
+        ds = _make_uda(write_capable=True)
+        ds.UCR = MagicMock()
+        ds.UCR.getPulseCategories.return_value = None
+        ds.UCR.getErrorCode.return_value = 5
+        ds.UCR.getErrorMsg.return_value = "boom"
+        self.assertEqual(ds.get_pulse_categories(), [])
+
+    def test_returns_empty_when_reader_raises(self):
+        ds = _make_uda(write_capable=True)
+        ds.UCR = MagicMock()
+        ds.UCR.getPulseCategories.side_effect = RuntimeError("boom")
+        self.assertEqual(ds.get_pulse_categories(), [])
+
+    def test_coerces_non_string_items(self):
+        ds = _make_uda(write_capable=True)
+        ds.UCR = MagicMock()
+        ds.UCR.getPulseCategories.return_value = ["ITER:local", b"ITER:test"]
+        ds.UCR.getErrorCode.return_value = 0
+        self.assertEqual(ds.get_pulse_categories(),
+                         ["ITER:local", "b'ITER:test'"])
 
 
 class AddPulseInfoTests(unittest.TestCase):

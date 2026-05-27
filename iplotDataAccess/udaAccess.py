@@ -639,11 +639,20 @@ class UdaAccess(DataSource):
         return self._write_capable and self.UCW is not None
 
     def get_pulse_categories(self) -> List[str]:
-        # TODO: replace with self.UCW.get_pulse_categories() when the
-        # uda_client_writer binding lands. Confirm with Doris whether
-        # the binding returns full scopes ("ITER:local") or short names
-        # ("local"); prefix here if needed.
-        return ["ITER:local", "ITER:test", "ITER:experiment"]
+        # Returns the list of "<location>:<category>" scopes accepted by
+        # UCW.addPulseInfo. Empty list if the reader is missing or the
+        # server is unreachable — the dialog handles that gracefully.
+        if self.UCR is None:
+            return []
+        try:
+            categories = self.UCR.getPulseCategories()
+        except Exception:
+            logger.exception("getPulseCategories failed on %s:%s", self.host, self.port)
+            return []
+        if self.UCR.getErrorCode() != 0:
+            logger.warning("getPulseCategories: %s", self.UCR.getErrorMsg())
+            return []
+        return [str(c) for c in (categories or [])]
 
     def add_pulse_info(self, scope: str, ts_start_ns: int, ts_end_ns: int,
                        status: str, description: str) -> dict:
