@@ -1,11 +1,12 @@
 # Description: Unit tests for the static helpers exposed by UdaAccess.
 
+import numpy as np
 import pytest
 
 uc = pytest.importorskip("uda_client_reader.uda_client_reader_python",
                          reason="uda_client_reader package required")
 
-from iplotDataAccess.dataCommon import DataType
+from iplotDataAccess.dataCommon import DataObj, DataType
 from iplotDataAccess.udaAccess import UdaAccess, UdaParams
 
 
@@ -68,3 +69,49 @@ class TestUdaParamsContainer:
         assert p.tsFormat == "absolute"
         assert p.extSamples is False
         assert p.retType == "double"
+
+
+class TestLastValueBefore:
+    """Extremities must hold a flat line over intervals that contain no samples of their own."""
+
+    @staticmethod
+    def _params(start_t, end_t, dec_type=None):
+        p = UdaParams()
+        p.set_params("FD", -1, dec_type, start_t, end_t, None, "absolute", True)
+        return p
+
+    def test_looks_back_to_startt_and_returns_last_sample(self, monkeypatch):
+        access = UdaAccess("test", {})
+        captured = {}
+
+        def fake_fetch(query):
+            captured["query"] = query
+            dobj = DataObj()
+            dobj.xdata = np.array([500.0])
+            dobj.ydata = np.array([1.0])
+            dobj.set_err(0, "OK")
+            return dobj
+
+        monkeypatch.setattr(access, "_UdaAccess__fetch_data_x", fake_fetch)
+        query = "variable=FD,tsFormat=absolute,decSamples=-1,startTime=6000,endTime=7000,extSamples=True"
+        held = access._UdaAccess__last_value_before(query, self._params(6000, 7000))
+
+        assert held == 1.0
+        # The look-back window is [archive start, startT] asking for a single closing sample.
+        assert "startTime=0," in captured["query"]
+        assert "endTime=6000" in captured["query"]
+        assert "decSamples=1," in captured["query"]
+        assert "decType=last" in captured["query"]
+        assert "extSamples" not in captured["query"]
+
+    def test_returns_none_when_no_earlier_sample(self, monkeypatch):
+        access = UdaAccess("test", {})
+
+        def fake_fetch(_query):
+            dobj = DataObj()
+            dobj.set_err(-3, "no data")
+            return dobj
+
+        monkeypatch.setattr(access, "_UdaAccess__fetch_data_x", fake_fetch)
+        query = "variable=FD,tsFormat=absolute,decSamples=-1,startTime=100,endTime=200,extSamples=True"
+        assert access._UdaAccess__last_value_before(query, self._params(100, 200)) is None
