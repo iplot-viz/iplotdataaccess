@@ -87,6 +87,24 @@ class TestUDAAccess(unittest.TestCase):
         self.assertEqual(dobj.xunit, "s")
 
 
+class TestUDAConfigParsing(unittest.TestCase):
+    # Construction only reads the config, so these run without a live UDA server.
+    def _make(self, config):
+        try:
+            from iplotDataAccess.udaAccess import UdaAccess
+        except ImportError as exc:
+            self.skipTest(f"uda_client_reader not available: {exc}")
+        return UdaAccess("codacuda", config)
+
+    def test_uda_for_export_present(self) -> None:
+        ds = self._make({"host": "srv1", "port": 3090, "uda_for_export": "srv2"})
+        self.assertEqual(ds.uda_for_export, "srv2")
+
+    def test_uda_for_export_defaults_to_none(self) -> None:
+        ds = self._make({"host": "srv1", "port": 3090})
+        self.assertIsNone(ds.uda_for_export)
+
+
 if __name__ == "__main__":
     unittest.main()
     os.remove("/tmp/mydataconf.cfg")
