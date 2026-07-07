@@ -80,7 +80,8 @@ def getAndFillData(varn, res, vlist, dataW, conn, chunkS):
     UdaClientIterator.readDataChunk(conn.UCR, CallbackFct, query, chunkS)
 
 
-def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, chunkS=50000):
+def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, chunkS=50000,
+                              progressCallback=None):
     res = result()
     res.errc = -1
     res.s1 = startT
@@ -93,6 +94,8 @@ def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, 
     dataWriter = createParquetFile(parquetFile)
 
     for varn in varMap:
+        if progressCallback is not None:
+            progressCallback(varn)
         currVarname = varn
         currVarDesc = varMap[varn]
         getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
@@ -122,7 +125,8 @@ def createH5file(h5file, varmap, start, end):
     return h5f
 
 
-def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=50000):
+def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=50000,
+                         progressCallback=None):
     res = result()
     res.errc = -1
     res.s1 = startT
@@ -137,6 +141,8 @@ def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=500
     dataWriter = createH5file(h5File, varMap, res.s1, res.e1)
 
     for varn in varMap:
+        if progressCallback is not None:
+            progressCallback(varn)
         currVarname = varn
         currVarDesc = varMap[varn]
         period_counter = 0
@@ -214,16 +220,20 @@ class ChunkProcessingCallback(UdaClientCallback):
         return 0
 
 
-def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputFolder, chunkS=100000):
+def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputFolder, chunkS=100000,
+                 progressCallback=None):
+    """`progressCallback`, if given, is invoked with the variable name as each variable starts exporting."""
     global file_format
     try:
         varMap = readcsvFile(csvfile, logfile)
         file_format = formatType.strip()
         ###csv variable with description
         if formatType == 'parquet':
-            ret = extractAndGenerateParquet(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS)
+            ret = extractAndGenerateParquet(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS,
+                                            progressCallback)
         else:
-            ret = extractAndGenerateH5(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS)
+            ret = extractAndGenerateH5(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS,
+                                       progressCallback)
         return True, ""
     except DataExportError as dee:
         return False, dee.message
