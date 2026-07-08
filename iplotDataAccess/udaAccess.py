@@ -746,7 +746,7 @@ class UdaAccess(DataSource):
         # self.dataR.clearData()
         dobj.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
                    self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
-                   self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
+                   self.UCR.getLabelY(handle), "Time", self.UCR.getUnitsY(handle),
                    self.UCR.getRank(handle))
 
         if dobj.ytype == dataCommon.DataType.DA_TYPE_STRING:
