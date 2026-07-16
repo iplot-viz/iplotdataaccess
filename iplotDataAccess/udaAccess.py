@@ -67,6 +67,8 @@ class UdaAccess(DataSource):
         super().__init__(name, config)
         self.host = config.get("host")
         self.port = config.get("port")
+        # Optional alternative UDA server used only when exporting data (shares the same port).
+        self.uda_for_export = config.get("uda_for_export")
 
         self.rtu = config.get("rturl")
         self.rtheaders = config.get("rtheaders")
