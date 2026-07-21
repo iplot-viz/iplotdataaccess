@@ -76,6 +76,8 @@ class UdaAccess(DataSource):
         super().__init__(name, config)
         self.host = config.get("host")
         self.port = config.get("port")
+        # Optional alternative UDA server used only when exporting data (shares the same port).
+        self.uda_for_export = config.get("uda_for_export")
 
         self.rtu = config.get("rturl")
         self.rtheaders = config.get("rtheaders")
@@ -250,6 +252,17 @@ class UdaAccess(DataSource):
         if data_obj.errcode == -1 or not uda_p.extSamples:
             return data_obj
 
+        # UDA reports an interval with no samples as "no data"; with extremities on it must
+        # still render as a flat line held at the last known value. Fetch the preceding sample
+        # and span it across [startT, endT] instead of leaving the plot empty.
+        if data_obj.errcode == -3 and uda_p.startT is not None and uda_p.endT is not None:
+            held = self.__last_value_before(query, uda_p)
+            if held is not None:
+                data_obj.xdata = np.array([uda_p.startT, uda_p.endT])
+                data_obj.ydata = np.array([held, held])
+                data_obj.set_err(0, "OK")
+            return data_obj
+
         # Ensure the data does not exceed the pulse duration. Clamp extremity points that fall
         # outside the pulse boundaries (first point before T=0, last point after pulse end).
         if uda_p.tsFormat == "relative":
@@ -340,6 +353,30 @@ class UdaAccess(DataSource):
             data_obj.xdata = x_data
             data_obj.ydata = y_data
         return data_obj
+
+    def __last_value_before(self, query, uda_p):
+        """Y value of the last archived sample before ``startT`` (None if there is none).
+
+        Lets the extremities option hold a flat line across an interval that has no samples of
+        its own instead of leaving the plot empty.
+        """
+        if uda_p.decType is not None and f"decType={uda_p.decType}" in query:
+            pre_query = query.replace(f"decType={uda_p.decType}", "decType=last")
+        elif "decType=" not in query:
+            pre_query = f"{query},decType=last"
+        else:
+            pre_query = query
+        # Look back from the archive start up to startT, asking for a single last-decimated
+        # sample (cheap regardless of how far back it is); extSamples is dropped so no point
+        # past startT is appended.
+        pre_query = pre_query.replace(f"decSamples={uda_p.nbps}", "decSamples=1")
+        pre_query = pre_query.replace(f"startTime={uda_p.startT}", "startTime=0")
+        pre_query = pre_query.replace(f"endTime={uda_p.endT}", f"endTime={uda_p.startT}")
+        pre_query = pre_query.replace(f",extSamples={uda_p.extSamples}", "")
+        dobj = self.__fetch_data_x(pre_query)
+        if dobj.errcode == 0 and dobj.ydata is not None and len(dobj.ydata) > 0:
+            return dobj.ydata[-1]
+        return None
 
     @staticmethod
     def max_value_index_less_than(arr, num):
