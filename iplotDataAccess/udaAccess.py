@@ -723,10 +723,8 @@ class UdaAccess(DataSource):
         nanoseconds; UDA stores them at second precision.
 
         Without ``pulse_number`` the server numbers the pulse itself
-        (``addPulse``). With it, the pulse is written directly at
-        ``scope/pulse_number`` after checking the id is free; users pick
-        their own numbers (e.g. dates like 20260526), so duplication must
-        be rejected rather than silently overwritten.
+        (``addPulse``); with it the pulse is written at
+        ``scope/pulse_number`` after checking the id is free.
         """
         if not self.is_write_capable():
             return {"ok": False, "error": "uda_client_writer is not installed "
@@ -745,8 +743,7 @@ class UdaAccess(DataSource):
                                      "to number it automatically"}
                 raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
                                          status, description)
-                # injectPulse is only known to write pre-existing pulses, so
-                # re-read to confirm the server really created this one.
+                # Re-read to confirm the server really created the pulse.
                 if not self._pulse_exists(pulse_id):
                     return {"ok": False,
                             "error": f"server did not create pulse {pulse_id}; "
