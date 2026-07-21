@@ -707,12 +707,26 @@ class UdaAccess(DataSource):
         return self.UCW.injectPulse(pulse_id, ts_start_iso, ts_end_iso,
                                     status, description)
 
+    def _pulse_exists(self, pulse_id: str) -> bool:
+        try:
+            return self.get_pulse_info(pulse_id) is not None
+        except Exception:
+            logger.exception("existence check failed for %s", pulse_id)
+            return False
+
     def add_pulse_info(self, scope: str, ts_start_ns: int, ts_end_ns: int,
-                       status: str, description: str) -> dict:
+                       status: str, description: str,
+                       pulse_number=None) -> dict:
         """Create a new pulse and inject its data.
 
         Returns ``{ok, pulse_id?, raw?, error?}``. Timestamps are in
         nanoseconds; UDA stores them at second precision.
+
+        Without ``pulse_number`` the server numbers the pulse itself
+        (``addPulse``). With it, the pulse is written directly at
+        ``scope/pulse_number`` after checking the id is free; users pick
+        their own numbers (e.g. dates like 20260526), so duplication must
+        be rejected rather than silently overwritten.
         """
         if not self.is_write_capable():
             return {"ok": False, "error": "uda_client_writer is not installed "
@@ -720,6 +734,25 @@ class UdaAccess(DataSource):
         if len(description) > 200:
             return {"ok": False, "error": "description exceeds 200 characters"}
         try:
+            if pulse_number is not None:
+                pulse_id = f"{scope}/{pulse_number}"
+                if not self._is_valid_pulse_id(pulse_id):
+                    return {"ok": False, "error": f"invalid pulse id {pulse_id!r}"}
+                if self._pulse_exists(pulse_id):
+                    return {"ok": False,
+                            "error": f"pulse {pulse_id} already exists; "
+                                     "pick another number or leave it empty "
+                                     "to number it automatically"}
+                raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                         status, description)
+                # injectPulse is only known to write pre-existing pulses, so
+                # re-read to confirm the server really created this one.
+                if not self._pulse_exists(pulse_id):
+                    return {"ok": False,
+                            "error": f"server did not create pulse {pulse_id}; "
+                                     "leave the pulse number empty to number "
+                                     "it automatically"}
+                return {"ok": True, "pulse_id": pulse_id, "raw": raw}
             pulse_id = self.UCW.addPulse(scope, description)
             if not self._is_valid_pulse_id(pulse_id):
                 return {"ok": False,

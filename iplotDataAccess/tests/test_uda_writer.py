@@ -156,6 +156,72 @@ class AddPulseInfoTests(unittest.TestCase):
         self.assertIn("server refused", result["error"])
 
 
+class AddPulseInfoExplicitNumberTests(unittest.TestCase):
+    """User-chosen pulse number: written at scope/number via injectPulse,
+    guarded by an existence check before and a creation check after."""
+
+    @staticmethod
+    def _wire_existence(ds, exists_sequence):
+        # get_pulse_info returns None for a missing pulse; drive it directly
+        # so the tests do not depend on the reader's error plumbing.
+        ds.get_pulse_info = MagicMock(
+            side_effect=[(object() if e else None) for e in exists_sequence])
+
+    def test_rejects_duplicate_pulse_number(self):
+        ds = _make_uda(write_capable=True)
+        _wire_reader_iso_converter(ds)
+        self._wire_existence(ds, [True])
+        result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x",
+                                   pulse_number=20260526)
+        self.assertFalse(result["ok"])
+        self.assertIn("already exists", result["error"])
+        ds.UCW.injectPulse.assert_not_called()
+        ds.UCW.addPulse.assert_not_called()
+
+    def test_creates_at_requested_number_and_verifies(self):
+        ds = _make_uda(write_capable=True)
+        _wire_reader_iso_converter(ds)
+        self._wire_existence(ds, [False, True])
+        ds.UCW.injectPulse.return_value = "ok"
+        result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x",
+                                   pulse_number=20260526)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["pulse_id"], "ITER:test/20260526")
+        ds.UCW.addPulse.assert_not_called()
+        ds.UCW.injectPulse.assert_called_once_with(
+            "ITER:test/20260526", "ISO(1)", "ISO(2)", "completed", "x")
+
+    def test_reports_error_when_server_did_not_create_the_pulse(self):
+        ds = _make_uda(write_capable=True)
+        _wire_reader_iso_converter(ds)
+        self._wire_existence(ds, [False, False])
+        ds.UCW.injectPulse.return_value = "ok"
+        result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x",
+                                   pulse_number=20260526)
+        self.assertFalse(result["ok"])
+        self.assertIn("did not create", result["error"])
+
+    def test_rejects_malformed_number(self):
+        ds = _make_uda(write_capable=True)
+        _wire_reader_iso_converter(ds)
+        result = ds.add_pulse_info("ITERtest-no-colon", 1, 2, "completed", "x",
+                                   pulse_number=1)
+        self.assertFalse(result["ok"])
+        self.assertIn("invalid pulse id", result["error"])
+        ds.UCW.injectPulse.assert_not_called()
+
+    def test_without_number_keeps_auto_path(self):
+        ds = _make_uda(write_capable=True)
+        _wire_reader_iso_converter(ds)
+        ds.get_pulse_info = MagicMock()
+        ds.UCW.addPulse.return_value = "ITER:test/7"
+        ds.UCW.injectPulse.return_value = "ok"
+        result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x")
+        self.assertTrue(result["ok"])
+        ds.UCW.addPulse.assert_called_once()
+        ds.get_pulse_info.assert_not_called()
+
+
 class UpdatePulseInfoTests(unittest.TestCase):
     def test_disabled_when_not_write_capable(self):
         ds = _make_uda(write_capable=False)
