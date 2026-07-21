@@ -227,6 +227,12 @@ class RTStreamer:
         except ConnectionError as _:
             self.__status = "ERROR"
             raise RTStreamerException(" connection lost - see log for more details")
+        except Exception:
+            # stop_subscription() closes the response to unblock this loop;
+            # the resulting read error is a normal stop, not a failure.
+            if self.__status != "STOPPING":
+                self.__status = "ERROR"
+                raise
         self.client.close()
         self.response.close()
         if self.vardata is not None:
@@ -279,5 +285,12 @@ class RTStreamer:
         if self.__status == "STARTED":
             self.__status = "STOPPING"
             logger.debug('stopping subscription')
+            # Close the SSE response so the blocking events() loop unblocks
+            # immediately instead of waiting for the next server event.
+            try:
+                if self.response is not None:
+                    self.response.close()
+            except Exception:
+                logger.debug("closing SSE response raised; loop will exit on next event")
         elif self.__status != "STOPPING":
             logger.warning(f'ignored stopping subscription because of status of {self.__status}')
