@@ -93,6 +93,18 @@ class TestSetParams:
         rt._RTStreamer__set_params(["v1"])
         assert rt.params is not None
 
+    def test_set_params_survives_a_unit_lookup_failure(self):
+        class _FlakyUda(_UdaUnitStub):
+            def get_unit(self, varname):
+                if varname == "bad":
+                    raise RuntimeError("no metadata")
+                return super().get_unit(varname)
+
+        rt = RTStreamer(uda_a=_FlakyUda({"good": "V"}))
+        rt._RTStreamer__set_params(["good", "bad"])
+        assert rt._RTStreamer__units.get("good") == "V"
+        assert "bad" not in rt._RTStreamer__units
+
 
 class TestParseDataAndQueues:
 

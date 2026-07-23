@@ -141,8 +141,10 @@ class UdaAccess(DataSource):
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
+            # We are the UDA access: RTStreamer resolves stream units via our
+            # get_unit (daHandler is never assigned).
             self.RTHandler = RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
-                                        uda_a=self.daHandler)
+                                        uda_a=self)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)

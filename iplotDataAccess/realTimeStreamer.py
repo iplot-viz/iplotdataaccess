@@ -85,7 +85,11 @@ class RTStreamer:
                 logger.warning(" no uda data access defined cannot get the units")
                 return
             for s in p1:
-                self.__units[s] = self.udaAccess.get_unit(s)
+                try:
+                    self.__units[s] = self.udaAccess.get_unit(s)
+                except Exception:
+                    # Units are cosmetic; a metadata failure must not block the subscription.
+                    logger.warning(f"Could not fetch unit for {s}")
 
     @staticmethod
     def __convert_type(utype):
