@@ -9,6 +9,15 @@ from cachetools import cachedmethod
 
 # import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
+# Optional: pulse-creation API ships in a separate package that may not be
+# installed in every environment. Missing import disables the feature
+# cleanly via UdaAccess.is_write_capable() — no warnings.
+try:
+    from uda_client_writer import uda_client_writer_python as ucw
+    _UDA_WRITER_AVAILABLE = True
+except ImportError:
+    ucw = None
+    _UDA_WRITER_AVAILABLE = False
 import iplotLogging.setupLogger as setupLog
 import dateutil.parser as dp
 from datetime import timezone
@@ -76,6 +85,8 @@ class UdaAccess(DataSource):
         self.errcode = 0
         self.errdesc = ""
         self.UCR = None
+        self.UCW = None
+        self._write_capable = False
         self.connected = False
         self.__NO_DATA_FOUND = ["Requested data cannot be located", "data cannot be retrieved",
                                 "could not retrieve data", "Incorrect time"]
@@ -89,6 +100,18 @@ class UdaAccess(DataSource):
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
         self.errcode = self.UCR.getErrorCode()
+
+        # Try the writer client too. Failure here must never block reading;
+        # it only disables the optional pulse-creation feature.
+        if _UDA_WRITER_AVAILABLE and self.connected:
+            try:
+                self.UCW = ucw.UdaClientWriterUser(self.host, self.port)
+                self._write_capable = True
+            except Exception as exc:
+                logger.warning("UDA writer client unavailable on %s:%s -> %s",
+                               self.host, self.port, exc)
+                self.UCW = None
+                self._write_capable = False
 
         self.set_rt_handler()
 
@@ -646,6 +669,115 @@ class UdaAccess(DataSource):
     def clear_cache(self):
         self.access_cache.clear()
         self.pulses_cache.clear()
+
+    # --- Pulse creation (optional, feature-gated on uda_client_writer) ---
+
+    def is_write_capable(self) -> bool:
+        return self._write_capable and self.UCW is not None
+
+    def get_pulse_categories(self) -> List[str]:
+        # Empty list when reader is missing or server unreachable; the
+        # dialog handles that gracefully.
+        if self.UCR is None:
+            return []
+        try:
+            categories = self.UCR.getPulseCategories()
+        except Exception:
+            logger.exception("getPulseCategories failed on %s:%s", self.host, self.port)
+            return []
+        if self.UCR.getErrorCode() != 0:
+            logger.warning("getPulseCategories: %s", self.UCR.getErrorMsg())
+            return []
+        return [str(c) for c in (categories or [])]
+
+    @staticmethod
+    def _is_valid_pulse_id(pulse_id) -> bool:
+        # addPulse returns ":/" (or similar empty marker) on failure.
+        if pulse_id is None:
+            return False
+        s = str(pulse_id).strip()
+        return bool(s) and s != ":/" and ":" in s and "/" in s
+
+    def _inject_pulse(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
+                      status: str, description: str):
+        # UDA pulse timestamps are second-precision; sub-second ns fractions
+        # are dropped by convertTimeNsToISO.
+        ts_start_iso = self.UCR.convertTimeNsToISO(int(ts_start_ns))
+        ts_end_iso = self.UCR.convertTimeNsToISO(int(ts_end_ns))
+        return self.UCW.injectPulse(pulse_id, ts_start_iso, ts_end_iso,
+                                    status, description)
+
+    def _pulse_exists(self, pulse_id: str) -> bool:
+        try:
+            return self.get_pulse_info(pulse_id) is not None
+        except Exception:
+            logger.exception("existence check failed for %s", pulse_id)
+            return False
+
+    def add_pulse_info(self, scope: str, ts_start_ns: int, ts_end_ns: int,
+                       status: str, description: str,
+                       pulse_number=None) -> dict:
+        """Create a new pulse and inject its data.
+
+        Returns ``{ok, pulse_id?, raw?, error?}``. Timestamps are in
+        nanoseconds; UDA stores them at second precision.
+
+        Without ``pulse_number`` the server numbers the pulse itself
+        (``addPulse``); with it the pulse is written at
+        ``scope/pulse_number`` after checking the id is free.
+        """
+        if not self.is_write_capable():
+            return {"ok": False, "error": "uda_client_writer is not installed "
+                                          "on this host; pulse creation is disabled."}
+        if len(description) > 200:
+            return {"ok": False, "error": "description exceeds 200 characters"}
+        try:
+            if pulse_number is not None:
+                pulse_id = f"{scope}/{pulse_number}"
+                if not self._is_valid_pulse_id(pulse_id):
+                    return {"ok": False, "error": f"invalid pulse id {pulse_id!r}"}
+                if self._pulse_exists(pulse_id):
+                    return {"ok": False,
+                            "error": f"pulse {pulse_id} already exists; "
+                                     "pick another number or leave it empty "
+                                     "to number it automatically"}
+                raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                         status, description)
+                # Re-read to confirm the server really created the pulse.
+                if not self._pulse_exists(pulse_id):
+                    return {"ok": False,
+                            "error": f"server did not create pulse {pulse_id}; "
+                                     "leave the pulse number empty to number "
+                                     "it automatically"}
+                return {"ok": True, "pulse_id": pulse_id, "raw": raw}
+            pulse_id = self.UCW.addPulse(scope, description)
+            if not self._is_valid_pulse_id(pulse_id):
+                return {"ok": False,
+                        "error": f"addPulse returned an empty pulse for scope {scope!r}"}
+            raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                     status, description)
+            return {"ok": True, "pulse_id": pulse_id, "raw": raw}
+        except Exception as exc:
+            logger.exception("addPulse/injectPulse failed on %s:%s", self.host, self.port)
+            return {"ok": False, "error": str(exc)}
+
+    def update_pulse_info(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
+                          status: str, description: str) -> dict:
+        """Update an existing pulse via injectPulse. Returns ``{ok, raw?, error?}``."""
+        if not self.is_write_capable():
+            return {"ok": False, "error": "uda_client_writer is not installed "
+                                          "on this host; pulse update is disabled."}
+        if len(description) > 200:
+            return {"ok": False, "error": "description exceeds 200 characters"}
+        if not self._is_valid_pulse_id(pulse_id):
+            return {"ok": False, "error": f"invalid pulse id {pulse_id!r}"}
+        try:
+            raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                     status, description)
+            return {"ok": True, "raw": raw}
+        except Exception as exc:
+            logger.exception("injectPulse failed on %s:%s", self.host, self.port)
+            return {"ok": False, "error": str(exc)}
 
     @cachedmethod(operator.attrgetter('access_cache'))
     def __fetch_data_with_cache(self, query):
