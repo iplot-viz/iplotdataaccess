@@ -16,11 +16,15 @@ from iplotDataAccess.realTimeStreamer import (
 
 
 class _UdaUnitStub:
-    def __init__(self, units=None):
+    def __init__(self, units=None, enums=None):
         self._units = units or {}
+        self._enums = enums or {}
 
     def get_unit(self, varname):
         return self._units.get(varname, "?")
+
+    def get_var_enum(self, varname, tsmp='-1'):
+        return self._enums.get(varname)
 
 
 class TestEnums:
@@ -143,6 +147,48 @@ class TestParseDataAndQueues:
         rt._RTStreamer__create_queues([0], "D", "first", params=["VAR"])
         rt._RTStreamer__create_queues([0], "D", "second", params=["VAR"])
         assert list(rt.vardata["VAR@0"]) == ["first", "second"]
+
+
+class TestEnumStreaming:
+
+    def _build(self, enums):
+        rt = RTStreamer(uda_a=_UdaUnitStub(units={"FAN": "?"}, enums=enums))
+        rt._RTStreamer__set_params(["FAN"])
+        return rt
+
+    def test_set_params_caches_enum_labels(self):
+        rt = self._build({"FAN": ("OFF", "ON")})
+        assert rt._RTStreamer__enums == {"FAN": ("OFF", "ON")}
+
+    def test_non_enum_string_leaves_cache_empty(self):
+        rt = self._build({})
+        assert rt._RTStreamer__enums == {}
+
+    def test_enum_label_is_mapped_to_index(self):
+        rt = self._build({"FAN": ("OFF", "ON")})
+        rt._RTStreamer__parse_data(
+            "FAN L PS 1 1784903188614 V[2] ON NO_ALARM NO_ALARM", params=["FAN"])
+        d = rt.vardata["FAN@0"][0]
+        assert list(d.ydata) == [1]
+        assert list(d.xdata) == [1784903188614 * 1000000]
+
+    def test_off_label_maps_to_zero(self):
+        rt = self._build({"FAN": ("OFF", "ON")})
+        rt._RTStreamer__parse_data(
+            "FAN L PS 1 1784903188614 V[3] OFF COMM INVALID", params=["FAN"])
+        assert list(rt.vardata["FAN@0"][0].ydata) == [0]
+
+    def test_unknown_enum_label_is_dropped(self):
+        rt = self._build({"FAN": ("OFF", "ON")})
+        rt._RTStreamer__parse_data(
+            "FAN L PS 1 1784903188614 V[7] UNKNOWN NO_ALARM NO_ALARM", params=["FAN"])
+        assert rt.vardata == {}
+
+    def test_string_without_enum_mapping_is_skipped(self):
+        rt = self._build({})
+        rt._RTStreamer__parse_data(
+            "FAN L PS 1 1784903188614 V[5] hello NO_ALARM NO_ALARM", params=["FAN"])
+        assert rt.vardata == {}
 
 
 class TestGetNextData:

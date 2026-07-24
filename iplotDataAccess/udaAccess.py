@@ -405,6 +405,23 @@ class UdaAccess(DataSource):
                 break
         return unitval
 
+    def get_var_enum(self, varname, tsmp='-1'):
+        """Ordered tuple of enumerator labels for ``varname`` (list position is
+        the numeric index), or None when the variable is not enumerated. Lets
+        the streamer map state labels from the feed back to their index."""
+        if varname is None:
+            return None
+        if not self.connected:
+            self.connect()
+        try:
+            labels = self.UCR.getEnumLabels(varname, str(tsmp))
+        except Exception:
+            logger.warning(f"Could not fetch enum labels for {varname}")
+            return None
+        if self.UCR.getErrorCode() != 0 or not labels:
+            return None
+        return tuple(labels)
+
     def get_pulse_info(self, pulse_id="0"):
         logger.debug(f"requires a pulse {pulse_id} and the cache {self.pulses_cache}")
         if pulse_id in self.pulses_cache.keys():

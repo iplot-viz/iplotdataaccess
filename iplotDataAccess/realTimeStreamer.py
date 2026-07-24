@@ -54,6 +54,7 @@ class RTStreamer:
         self.client = None
         self.__status = "INIT"
         self.__units = {}
+        self.__enums = {}
         # self.headers = {'User-Agent': 'it_script_basic'}
         self.headers = headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
         # headers or {'REMOTE_USER': getpass.getuser(), 'User-Agent': 'python_client'}
@@ -90,6 +91,12 @@ class RTStreamer:
                 except Exception:
                     # Units are cosmetic; a metadata failure must not block the subscription.
                     logger.warning(f"Could not fetch unit for {s}")
+                try:
+                    labels = self.udaAccess.get_var_enum(s)
+                    if labels:
+                        self.__enums[s] = labels
+                except Exception:
+                    logger.warning(f"Could not fetch enum labels for {s}")
 
     @staticmethod
     def __convert_type(utype):
@@ -155,7 +162,12 @@ class RTStreamer:
             logger.warning(f"index error for line {line}")
             return
         if ytype == DataType.DA_TYPE_STRING:
-            logger.warning("string not currently supported for streaming, skipping")
+            enum_labels = self.__enums.get(line[ProtoHeader.VARNAME.value])
+            if enum_labels is None:
+                logger.debug("string not currently supported for streaming, skipping")
+                return
+            self.__queue_enum_samples(line, num_samples, enum_labels,
+                                      xlabel, xunit, params=params)
             return
 
         if line[ProtoHeader.VAL_DT.value] == 'PD':
@@ -191,6 +203,38 @@ class RTStreamer:
         d.set_data(ydata, 2)
         # logger.debug("before calling check duplicate")
         vkeys = self.__check_if_duplicate(line[ProtoHeader.VARNAME.value], params=params)
+        self.__create_queues(vkeys, line[ProtoHeader.VAL_DT.value], d, params=params)
+
+    def __queue_enum_samples(self, line, num_samples, labels, xlabel, xunit, params=None):
+        # Enumerated state PVs arrive as "V[<len>] <label>" per sample; the feed
+        # carries only the label, so map it to its enum index (list position).
+        if params is None:
+            params = []
+        varname = line[ProtoHeader.VARNAME.value]
+        xdata = np.zeros(num_samples, dtype='uint64')
+        ydata = np.zeros(num_samples)
+        valid = 0
+        for i in range(num_samples):
+            try:
+                ts = int(line[4 + i])
+                label = line[4 + num_samples + 4 * i + 1]
+            except (IndexError, ValueError):
+                logger.debug(f"enum sample parse skipped for {line}")
+                continue
+            if label not in labels:
+                logger.debug(f"unknown enum label {label} for {varname}")
+                continue
+            xdata[valid] = ts * 1000000
+            ydata[valid] = labels.index(label)
+            valid += 1
+        if valid == 0:
+            return
+        d = DataObj()
+        yunit = self.__units.get(varname)
+        d.set_a(DataType.DA_TYPE_ULONG, DataType.DA_TYPE_LONG, xlabel, "", xunit, yunit, 1)
+        d.set_data(xdata[:valid], 1)
+        d.set_data(ydata[:valid], 2)
+        vkeys = self.__check_if_duplicate(varname, params=params)
         self.__create_queues(vkeys, line[ProtoHeader.VAL_DT.value], d, params=params)
 
     def get_status(self):
