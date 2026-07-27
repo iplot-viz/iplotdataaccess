@@ -62,7 +62,9 @@ class DataSource(ABC):
 
     def get_archive_window(self, **kwargs):
         """Return archive data for a time window. Subclasses may override to
-        apply caps or switch to envelope mode."""
+        apply caps or switch to envelope mode; ``env_nbp`` sizes that envelope
+        fallback and is meaningless to a plain read."""
+        kwargs.pop('env_nbp', None)
         return self.get_data(**kwargs)
 
     @abstractmethod

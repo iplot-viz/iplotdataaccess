@@ -793,15 +793,17 @@ class UdaAccess(DataSource):
 
     def get_archive_window(self, **kwargs):
         """Return raw ``DataObj`` up to MAX_RAW_POINTS_PER_SIGNAL, or a
-        ``DataEnvelope`` of ENVELOPE_TARGET_POINTS buckets when UDA reports the
-        request exceeds its limit."""
+        ``DataEnvelope`` when UDA reports the request exceeds its limit. The
+        fallback envelope keeps ``env_nbp`` buckets when given, so callers with
+        a per-signal point budget are not decimated below it."""
+        env_nbp = kwargs.pop('env_nbp', None)
         kwargs.setdefault('nbp', MAX_RAW_POINTS_PER_SIGNAL)
         dobj = self.get_data(**kwargs)
 
         too_many = ('Number of samples in reply exceeds available limit. '
                     'Reduce request interval, use decimation or read data by chunks.')
         if dobj.errcode != 0 and dobj.errdesc == too_many:
-            kwargs['nbp'] = ENVELOPE_TARGET_POINTS
+            kwargs['nbp'] = env_nbp or ENVELOPE_TARGET_POINTS
             return self.get_envelope(**kwargs)
 
         return dobj
