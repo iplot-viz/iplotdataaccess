@@ -187,7 +187,7 @@ class RTStreamer:
             # '0.000000 NO_ALARM NO_ALARM']
 
             if len(values) < num_samples + 1:
-                logger.warning(f"sline mixing event and data skipping {values}")
+                logger.debug(f"Skipping stream batch that mixes connection events with data: {values}")
             return
         xdata = np.zeros(num_samples, dtype='uint64')
         ydata = np.zeros(num_samples)
