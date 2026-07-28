@@ -38,6 +38,12 @@ from iplotDataAccess.realTimeStreamer import RTStreamer
 logger = setupLog.get_logger(__name__)
 
 
+# Above MAX_RAW_POINTS_PER_SIGNAL the layer falls back to an envelope of
+# ENVELOPE_TARGET_POINTS buckets.
+MAX_RAW_POINTS_PER_SIGNAL = 100_000
+ENVELOPE_TARGET_POINTS = 1920
+
+
 class RTHException(Exception):
     pass
 
@@ -158,8 +164,10 @@ class UdaAccess(DataSource):
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
+            # We are the UDA access: RTStreamer resolves stream units via our
+            # get_unit (daHandler is never assigned).
             self.RTHandler = RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
-                                        uda_a=self.daHandler)
+                                        uda_a=self)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -331,23 +339,28 @@ class UdaAccess(DataSource):
         else:
             x_data = data_obj.xdata
             y_data = data_obj.ydata
+            # startT/endT are kept as strings by convert_to_nanos so they can be
+            # interpolated into UDA queries; cast to int for numeric comparison
+            # against the uint64 xdata array.
+            start_t = int(uda_p.startT)
+            end_t = int(uda_p.endT)
 
-            if uda_p.startT not in x_data:
-                x_idx_start = sum(x_data < uda_p.startT) - 1
+            if start_t not in x_data:
+                x_idx_start = sum(x_data < start_t) - 1
                 if x_idx_start != -1:
                     y_value = y_data[x_idx_start]
                     x_data = x_data[x_idx_start + 1:]
                     y_data = y_data[x_idx_start + 1:]
-                    x_data = np.insert(x_data, 0, uda_p.startT)
+                    x_data = np.insert(x_data, 0, start_t)
                     y_data = np.insert(y_data, 0, y_value)
 
-            if uda_p.endT not in data_obj.xdata:
-                x_idx_end = sum(x_data < uda_p.endT) - 1
+            if end_t not in data_obj.xdata:
+                x_idx_end = sum(x_data < end_t) - 1
                 if x_idx_end != -1:
                     y_value = y_data[x_idx_end]
                     x_data = x_data[:x_idx_end + 1]
                     y_data = y_data[:x_idx_end + 1]
-                    x_data = np.append(x_data, uda_p.endT)
+                    x_data = np.append(x_data, end_t)
                     y_data = np.append(y_data, y_value)
 
             data_obj.xdata = x_data
@@ -414,6 +427,23 @@ class UdaAccess(DataSource):
                 unitval = i.value
                 break
         return unitval
+
+    def get_var_enum(self, varname, tsmp='-1'):
+        """Ordered tuple of enumerator labels for ``varname`` (list position is
+        the numeric index), or None when the variable is not enumerated. Lets
+        the streamer map state labels from the feed back to their index."""
+        if varname is None:
+            return None
+        if not self.connected:
+            self.connect()
+        try:
+            labels = self.UCR.getEnumLabels(varname, str(tsmp))
+        except Exception:
+            logger.warning(f"Could not fetch enum labels for {varname}")
+            return None
+        if self.UCR.getErrorCode() != 0 or not labels:
+            return None
+        return tuple(labels)
 
     def get_pulse_info(self, pulse_id="0"):
         logger.debug(f"requires a pulse {pulse_id} and the cache {self.pulses_cache}")
@@ -892,6 +922,23 @@ class UdaAccess(DataSource):
         self.UCR.releaseData(handle)
         d_env.set_err(0, "OK")
         return d_env
+
+    def get_archive_window(self, **kwargs):
+        """Return raw ``DataObj`` up to MAX_RAW_POINTS_PER_SIGNAL, or a
+        ``DataEnvelope`` when UDA reports the request exceeds its limit. The
+        fallback envelope keeps ``env_nbp`` buckets when given, so callers with
+        a per-signal point budget are not decimated below it."""
+        env_nbp = kwargs.pop('env_nbp', None)
+        kwargs.setdefault('nbp', MAX_RAW_POINTS_PER_SIGNAL)
+        dobj = self.get_data(**kwargs)
+
+        too_many = ('Number of samples in reply exceeds available limit. '
+                    'Reduce request interval, use decimation or read data by chunks.')
+        if dobj.errcode != 0 and dobj.errdesc == too_many:
+            kwargs['nbp'] = env_nbp or ENVELOPE_TARGET_POINTS
+            return self.get_envelope(**kwargs)
+
+        return dobj
 
     def get_envelope(self, **kwargs):
         kwargs['decType'] = "env"
