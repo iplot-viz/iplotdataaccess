@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "cachetools >= 4.2.0",
-    "iplotLogging >= 1.2.0",
+    "iplotLogging >= 1.2.2",
     "requests >= 2.25.1",
     "sseclient-py >= 1.7",
     "pyarrow >= 16.1.0",
