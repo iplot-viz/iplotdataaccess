@@ -731,10 +731,10 @@ class UdaAccess(DataSource):
     def _inject_pulse(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
                       status: str, description: str):
         # UDA pulse timestamps are second-precision; sub-second ns fractions
-        # are dropped by convertTimeNsToISO.
-        ts_start_iso = self.UCR.convertTimeNsToISO(int(ts_start_ns))
-        ts_end_iso = self.UCR.convertTimeNsToISO(int(ts_end_ns))
-        return self.UCW.injectPulse(pulse_id, ts_start_iso, ts_end_iso,
+        # are dropped by convertTimeNsToISO. injectPulse accepts directly the nanoseconds no need to have ISO
+        #ts_start_iso = self.UCR.convertTimeNsToISO(int(ts_start_ns))
+        #ts_end_iso = self.UCR.convertTimeNsToISO(int(ts_end_ns))
+        return self.UCW.injectPulse(pulse_id, str(ts_start_ns), str(ts_end_ns),
                                     status, description)
 
     def _pulse_exists(self, pulse_id: str) -> bool:
