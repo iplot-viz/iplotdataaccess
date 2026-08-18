@@ -11,6 +11,10 @@ import socket
 ##from influxdb_client import InfluxDBClient
 ##from influxdb_client.client.write_api import SYNCHRONOUS
 
+# When set, exported timestamps are float seconds relative to this origin
+# (ns since epoch) instead of absolute nanosecond counts.
+relative_start_ns = None
+
 
 class Info:
     pass
@@ -63,8 +67,9 @@ def connectUDA(udaHost, port=3090):
 
 def createParquetFile(parquetFile):
     parquetContent = pqtCtnt
+    time_type = pa.uint64() if relative_start_ns is None else pa.float64()
     parquetContent.ponvar_schema = pa.schema([
-        ('timestamp', pa.uint64()),
+        ('timestamp', time_type),
         ('varname', pa.string()),
         ('description', pa.string()),
         ('unit', pa.string()),
@@ -158,14 +163,18 @@ class ChunkProcessingCallback(UdaClientCallback):
         global dataWriter
         global file_format
         global period_counter
-        dtD = np.dtype([('time', 'u8'), ('value', 'f8')])
-        dtF = np.dtype([('time', 'u8'), ('value', 'f4')])
-        dtI = np.dtype([('time', 'u8'), ('value', 'i8')])
+        time_type = 'u8' if relative_start_ns is None else 'f8'
+        dtD = np.dtype([('time', time_type), ('value', 'f8')])
+        dtF = np.dtype([('time', time_type), ('value', 'f4')])
+        dtI = np.dtype([('time', time_type), ('value', 'i8')])
         currlen = 0
         dset = None
         yunits = reader.getUnitsY(handle)
         ytype = reader.getFetchedType(handle)
         timeV = reader.getTimeStampsAsLong(handle)
+        if timeV is not None and relative_start_ns is not None:
+            # Subtract in int64 before dividing so no precision is lost.
+            timeV = (np.asarray(timeV, dtype=np.int64) - relative_start_ns) / 1e9
         currlen = len(timeV)
 
         if ytype == RAW_TYPE_DOUBLE:
@@ -221,10 +230,15 @@ class ChunkProcessingCallback(UdaClientCallback):
 
 
 def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputFolder, chunkS=100000,
-                 progressCallback=None):
-    """`progressCallback`, if given, is invoked with the variable name as each variable starts exporting."""
+                 progressCallback=None, relativeTime=False):
+    """`progressCallback`, if given, is invoked with the variable name as each variable starts exporting.
+
+    With `relativeTime`, timestamps are written as float seconds relative to
+    `startTime` instead of absolute nanosecond counts."""
     global file_format
+    global relative_start_ns
     try:
+        relative_start_ns = int(startTime) if relativeTime else None
         varMap = readcsvFile(csvfile, logfile)
         file_format = formatType.strip()
         ###csv variable with description
