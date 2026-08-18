@@ -730,12 +730,11 @@ class UdaAccess(DataSource):
 
     def _inject_pulse(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
                       status: str, description: str):
-        # UDA pulse timestamps are second-precision; sub-second ns fractions
-        # are dropped by convertTimeNsToISO. injectPulse accepts directly the nanoseconds no need to have ISO
-        #ts_start_iso = self.UCR.convertTimeNsToISO(int(ts_start_ns))
-        #ts_end_iso = self.UCR.convertTimeNsToISO(int(ts_end_ns))
-        return self.UCW.injectPulse(pulse_id, str(ts_start_ns), str(ts_end_ns),
-                                    status, description)
+        # injectPulse accepts raw nanosecond strings; converting through
+        # convertTimeNsToISO dropped the sub-second fraction, which made it
+        # impossible to create pulses shorter than one second (#166).
+        return self.UCW.injectPulse(pulse_id, str(int(ts_start_ns)),
+                                    str(int(ts_end_ns)), status, description)
 
     def _pulse_exists(self, pulse_id: str) -> bool:
         try:
@@ -750,7 +749,7 @@ class UdaAccess(DataSource):
         """Create a new pulse and inject its data.
 
         Returns ``{ok, pulse_id?, raw?, error?}``. Timestamps are in
-        nanoseconds; UDA stores them at second precision.
+        nanoseconds.
 
         Without ``pulse_number`` the server numbers the pulse itself
         (``addPulse``); with it the pulse is written at
