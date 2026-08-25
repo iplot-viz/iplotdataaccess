@@ -732,7 +732,7 @@ class UdaAccess(DataSource):
                       status: str, description: str):
         # injectPulse accepts raw nanosecond strings; converting through
         # convertTimeNsToISO dropped the sub-second fraction, which made it
-        # impossible to create pulses shorter than one second (#166).
+        # impossible to create pulses shorter than one second.
         return self.UCW.injectPulse(pulse_id, str(int(ts_start_ns)),
                                     str(int(ts_end_ns)), status, description)
 
