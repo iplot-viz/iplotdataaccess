@@ -101,7 +101,16 @@ def get_length_of_partial_field(ids, ids_path):
         return None
 
 
-def partial_get(ids, ids_path, custom_coordinate=None):
+def _coordinate_values(coordinate):
+    if isinstance(coordinate, np.ndarray):
+        return coordinate
+    if isinstance(coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
+        if coordinate.has_value is True:
+            return coordinate.value
+    return None
+
+
+def partial_get(ids, ids_path, custom_coordinate=None, include_secondary_coordinate=False):
     slice_object = parse_slice_from_string(ids_path)
     ids_path_for_eval = re.sub(r"[\[\(][^()\[\]]*:[^()\[\]]*[\]\)]", "(t)", ids_path)
     ids_path_for_eval = (
@@ -122,6 +131,11 @@ def partial_get(ids, ids_path, custom_coordinate=None):
     data_flag = True
     data_unit = ""
     coordinate = None
+    # The AoS coordinate is independent of the coordinate of each selected field.
+    secondary_coordinate = _coordinate_values(coordinate_partial)
+    if secondary_coordinate is not None:
+        secondary_coordinate = secondary_coordinate[slice_object]
+    secondary_coordinate_unit = coordinate_unit
     for t in range(start, stop, step):
         try:
             _inner_data = eval("ids." + ids_path_for_eval)
@@ -141,7 +155,6 @@ def partial_get(ids, ids_path, custom_coordinate=None):
                                 coordinate = _coordinate
                     else:
                         for _coordinate in _inner_data.coordinates:
-                            
                             if isinstance(_coordinate, (imas.ids_primitive.IDSPrimitive, imas.ids_primitive.IDSNumericArray)):
                                 if _coordinate.has_value is True and coordinate is None:
                                     coordinate_unit = _coordinate.metadata.units
@@ -157,7 +170,10 @@ def partial_get(ids, ids_path, custom_coordinate=None):
             logger.error(
                 f"{ids_path} path/value does not exist, hint: please check length of arrays, detailed error : {e}"
             )
-            return data, coordinate, data_unit, coordinate_unit
+            result = data, coordinate, data_unit, coordinate_unit
+            if include_secondary_coordinate:
+                return result + (secondary_coordinate, secondary_coordinate_unit)
+            return result
         if isinstance(
             _inner_data,
             (
@@ -182,12 +198,10 @@ def partial_get(ids, ids_path, custom_coordinate=None):
     else:
         data = np.stack(array_data, axis = 0)
 
-    # Transpose data if its first dimension does not match the coordinate's length
-    if coordinate is not None and hasattr(coordinate, "shape") and hasattr(data, "shape"):
-        if len(data.shape) == 2 and len(coordinate.shape) == 1:
-            if data.shape[0] != coordinate.shape[0] and data.shape[1] == coordinate.shape[0]:
-                data = data.T
-    return data, coordinate, data_unit, coordinate_unit
+    result = data, coordinate, data_unit, coordinate_unit
+    if include_secondary_coordinate:
+        return result + (secondary_coordinate, secondary_coordinate_unit)
+    return result
 
 
 def parse_string_to_dict(input_string):
