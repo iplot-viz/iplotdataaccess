@@ -128,8 +128,8 @@ class AddPulseInfoTests(unittest.TestCase):
         )
 
     def test_sub_second_pulse_keeps_ns_precision(self):
-        # Regression for #166: the ISO conversion truncated to whole
-        # seconds, collapsing any pulse shorter than one second.
+        # The ISO conversion used to truncate to whole seconds, collapsing
+        # any pulse shorter than one second.
         ds = _make_uda(write_capable=True)
         ds.UCW.addPulse.return_value = "ITER:test/7"
         ds.UCW.injectPulse.return_value = "ok"
