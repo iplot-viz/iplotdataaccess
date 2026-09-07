@@ -18,14 +18,6 @@ def _make_uda(write_capable: bool = True) -> UdaAccess:
     return ds
 
 
-def _wire_reader_iso_converter(ds: UdaAccess) -> None:
-    # add_pulse_info / update_pulse_info call UCR.convertTimeNsToISO. In
-    # tests we stub it deterministically so assertions can match exactly.
-    if ds.UCR is None:
-        ds.UCR = MagicMock()
-    ds.UCR.convertTimeNsToISO.side_effect = lambda ns: f"ISO({ns})"
-
-
 class IsWriteCapableTests(unittest.TestCase):
     def test_false_when_writer_module_missing(self):
         ds = _make_uda(write_capable=False)
@@ -114,16 +106,14 @@ class AddPulseInfoTests(unittest.TestCase):
 
     def test_rejects_when_addPulse_returns_empty_marker(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.addPulse.return_value = ":/"
         result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "t")
         self.assertFalse(result["ok"])
         self.assertIn("empty pulse", result["error"])
         ds.UCW.injectPulse.assert_not_called()
 
-    def test_calls_addPulse_then_injectPulse_with_iso_timestamps(self):
+    def test_calls_addPulse_then_injectPulse_with_ns_timestamps(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.addPulse.return_value = "ITER:test/7"
         ds.UCW.injectPulse.return_value = "ok"
         ds.add_pulse_info("ITER:test", 1_641_760_133_123_456_789,
@@ -131,15 +121,31 @@ class AddPulseInfoTests(unittest.TestCase):
         ds.UCW.addPulse.assert_called_once_with("ITER:test", "first")
         ds.UCW.injectPulse.assert_called_once_with(
             "ITER:test/7",
-            "ISO(1641760133123456789)",
-            "ISO(1641760833123456789)",
+            "1641760133123456789",
+            "1641760833123456789",
             "completed",
             "first",
         )
 
+    def test_sub_second_pulse_keeps_ns_precision(self):
+        # The ISO conversion used to truncate to whole seconds, collapsing
+        # any pulse shorter than one second.
+        ds = _make_uda(write_capable=True)
+        ds.UCW.addPulse.return_value = "ITER:test/7"
+        ds.UCW.injectPulse.return_value = "ok"
+        result = ds.add_pulse_info("ITER:test", 1_641_760_133_100_000_000,
+                                   1_641_760_133_600_000_000, "completed", "short")
+        self.assertTrue(result["ok"])
+        ds.UCW.injectPulse.assert_called_once_with(
+            "ITER:test/7",
+            "1641760133100000000",
+            "1641760133600000000",
+            "completed",
+            "short",
+        )
+
     def test_returns_ok_with_pulse_id_and_raw_on_success(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.addPulse.return_value = "ITER:test/99"
         ds.UCW.injectPulse.return_value = "ok"
         result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x")
@@ -149,7 +155,6 @@ class AddPulseInfoTests(unittest.TestCase):
 
     def test_catches_writer_exception_and_reports_error(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.addPulse.side_effect = RuntimeError("server refused")
         result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x")
         self.assertFalse(result["ok"])
@@ -169,7 +174,6 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
 
     def test_rejects_duplicate_pulse_number(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         self._wire_existence(ds, [True])
         result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x",
                                    pulse_number=20260526)
@@ -180,7 +184,6 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
 
     def test_creates_at_requested_number_and_verifies(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         self._wire_existence(ds, [False, True])
         ds.UCW.injectPulse.return_value = "ok"
         result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x",
@@ -189,11 +192,10 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
         self.assertEqual(result["pulse_id"], "ITER:test/20260526")
         ds.UCW.addPulse.assert_not_called()
         ds.UCW.injectPulse.assert_called_once_with(
-            "ITER:test/20260526", "ISO(1)", "ISO(2)", "completed", "x")
+            "ITER:test/20260526", "1", "2", "completed", "x")
 
     def test_reports_error_when_server_did_not_create_the_pulse(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         self._wire_existence(ds, [False, False])
         ds.UCW.injectPulse.return_value = "ok"
         result = ds.add_pulse_info("ITER:test", 1, 2, "completed", "x",
@@ -203,7 +205,6 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
 
     def test_rejects_malformed_number(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         result = ds.add_pulse_info("ITERtest-no-colon", 1, 2, "completed", "x",
                                    pulse_number=1)
         self.assertFalse(result["ok"])
@@ -212,7 +213,6 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
 
     def test_without_number_keeps_auto_path(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.get_pulse_info = MagicMock()
         ds.UCW.addPulse.return_value = "ITER:test/7"
         ds.UCW.injectPulse.return_value = "ok"
@@ -243,24 +243,22 @@ class UpdatePulseInfoTests(unittest.TestCase):
         self.assertIn("invalid pulse id", result["error"])
         ds.UCW.injectPulse.assert_not_called()
 
-    def test_calls_injectPulse_with_iso_timestamps(self):
+    def test_calls_injectPulse_with_ns_timestamps(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.injectPulse.return_value = "ok"
         ds.update_pulse_info("ITER:test/1", 1_641_760_133_123_456_789,
                              1_641_760_833_123_456_789, "completed", "edit")
         ds.UCW.addPulse.assert_not_called()
         ds.UCW.injectPulse.assert_called_once_with(
             "ITER:test/1",
-            "ISO(1641760133123456789)",
-            "ISO(1641760833123456789)",
+            "1641760133123456789",
+            "1641760833123456789",
             "completed",
             "edit",
         )
 
     def test_returns_ok_with_raw_on_success(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.injectPulse.return_value = "ok"
         result = ds.update_pulse_info("ITER:test/1", 1, 2, "completed", "x")
         self.assertTrue(result["ok"])
@@ -268,7 +266,6 @@ class UpdatePulseInfoTests(unittest.TestCase):
 
     def test_catches_writer_exception_and_reports_error(self):
         ds = _make_uda(write_capable=True)
-        _wire_reader_iso_converter(ds)
         ds.UCW.injectPulse.side_effect = RuntimeError("server refused")
         result = ds.update_pulse_info("ITER:test/1", 1, 2, "completed", "x")
         self.assertFalse(result["ok"])
