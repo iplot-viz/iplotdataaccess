@@ -115,3 +115,87 @@ class TestLastValueBefore:
         monkeypatch.setattr(access, "_UdaAccess__fetch_data_x", fake_fetch)
         query = "variable=FD,tsFormat=absolute,decSamples=-1,startTime=100,endTime=200,extSamples=True"
         assert access._UdaAccess__last_value_before(query, self._params(100, 200)) is None
+
+
+class TestParseVarsToDict:
+
+    def test_without_limit_groups_on_first_dash_only(self):
+        lines = ['x:a-b', 'x:b-c', 'x:a-c', 'x:p.1', 'x:p.2', 'x:q_1', 'x:q_2']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x') == {
+            'x:a': {'x:a-b': '', 'x:a-c': ''},
+            'x:b-c': '',
+            'x:p.1': '', 'x:p.2': '',
+            'x:q_1': '', 'x:q_2': '',
+        }
+
+    def test_node_within_limit_keeps_the_dash_layout(self):
+        lines = ['x:a-b', 'x:b-c', 'x:a-c', 'x:p.1', 'x:p.2']
+        expected = UdaAccess.parse_vars_to_dict(lines, 'x')
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=5) == expected
+
+    def test_large_node_splits_on_dash_dot_and_underscore(self):
+        lines = ['x:a-1', 'x:a-2', 'x:b.1', 'x:b.2', 'x:c_1', 'x:c_2', 'x:d']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=2) == {
+            'x:a': {'x:a-1': '', 'x:a-2': ''},
+            'x:b': {'x:b.1': '', 'x:b.2': ''},
+            'x:c': {'x:c_1': '', 'x:c_2': ''},
+            'x:d': '',
+        }
+
+    def test_folder_above_limit_splits_again_on_its_next_segment(self):
+        lines = ['x:a_b_1', 'x:a_b_2', 'x:a_c.1', 'x:a_c.2', 'x:a_d']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=2) == {
+            'x:a': {
+                'x:a_b': {'x:a_b_1': '', 'x:a_b_2': ''},
+                'x:a_c': {'x:a_c.1': '', 'x:a_c.2': ''},
+                'x:a_d': '',
+            },
+        }
+
+    def test_splitting_stops_when_names_have_no_further_separator(self):
+        lines = ['x:a_1', 'x:a_2', 'x:a_3']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=1) == {
+            'x:a': {'x:a_1': '', 'x:a_2': '', 'x:a_3': ''},
+        }
+
+    def test_first_segment_is_never_empty(self):
+        lines = ['x:-a-1', 'x:-a-2', 'x:-b']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=1) == {
+            'x:-a': {'x:-a-1': '', 'x:-a-2': ''},
+            'x:-b': '',
+        }
+
+    def test_variable_named_like_a_folder_sits_inside_it(self):
+        lines = ['x:a', 'x:a_1', 'x:a_2']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=2) == {
+            'x:a': {'x:a': '', 'x:a_1': '', 'x:a_2': ''},
+        }
+
+    def test_duplicated_names_are_listed_once(self):
+        lines = ['x:a-1', 'x:a-1', 'x:a-2']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x', group_limit=1) == {
+            'x:a': {'x:a-1': '', 'x:a-2': ''},
+        }
+
+
+class TestVariableGroupLimitConfig:
+
+    def _var_dict(self, config, monkeypatch):
+        access = UdaAccess("test", config)
+        monkeypatch.setattr(access, "get_var_list", lambda pattern, field=None: ['x:a.1', 'x:a.2', 'x:b'])
+        return access.get_var_dict(pattern='x:.*', path='x')
+
+    def test_default_limit_is_200(self):
+        assert UdaAccess("test", {}).variable_group_limit == 200
+
+    def test_configured_limit_drives_the_split(self, monkeypatch):
+        assert self._var_dict({"variable_group_limit": 2}, monkeypatch) == {
+            'x:a': {'x:a.1': '', 'x:a.2': ''},
+            'x:b': '',
+        }
+
+    def test_small_node_is_not_split_with_the_default_limit(self, monkeypatch):
+        assert self._var_dict({}, monkeypatch) == {'x:a.1': '', 'x:a.2': '', 'x:b': ''}
+
+    def test_null_limit_keeps_every_node_flat(self, monkeypatch):
+        assert self._var_dict({"variable_group_limit": None}, monkeypatch) == {'x:a.1': '', 'x:a.2': '', 'x:b': ''}
