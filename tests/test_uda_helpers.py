@@ -199,3 +199,28 @@ class TestVariableGroupLimitConfig:
 
     def test_null_limit_keeps_every_node_flat(self, monkeypatch):
         assert self._var_dict({"variable_group_limit": None}, monkeypatch) == {'x:a.1': '', 'x:a.2': '', 'x:b': ''}
+
+
+class TestParseSearchToDict:
+
+    def test_plain_names_are_nested_by_node_segment(self):
+        assert UdaAccess.parse_search_to_dict(['CTRL-CIS-MCTB:ALV_X']) == {
+            'CTRL': {'CIS': {'MCTB': {'CTRL-CIS-MCTB:ALV_X': ''}}},
+        }
+
+    def test_consecutive_separators_do_not_break_the_search(self):
+        """A node such as MAG-PFCS-SYSM-- used to raise IndexError, which the
+        search swallows and leaves the user with an empty tree."""
+        assert UdaAccess.parse_search_to_dict(['MAG-PFCS-SYSM--:CUCUB_Monitor-CUBHLTS']) == {
+            'MAG': {'PFCS': {'SYSM': {
+                'MAG-PFCS-SYSM--:CUCUB_Monitor': {'MAG-PFCS-SYSM--:CUCUB_Monitor-CUBHLTS': ''},
+            }}},
+        }
+
+    def test_empty_segments_never_become_folders(self):
+        out = UdaAccess.parse_search_to_dict(['MAG-PFCS-SYSM--:VAR'])
+        assert '' not in out['MAG']['PFCS']['SYSM']
+
+    def test_one_broken_name_does_not_hide_the_others(self):
+        out = UdaAccess.parse_search_to_dict(['MAG-PFCS-SYSM--:VAR', 'MAG-PFCS-SYSM:OK'])
+        assert set(out['MAG']['PFCS']['SYSM']) == {'MAG-PFCS-SYSM--:VAR', 'MAG-PFCS-SYSM:OK'}

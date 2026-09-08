@@ -981,7 +981,11 @@ class UdaAccess(DataSource):
             for ix in range(len(list_line)):
                 if ix == len(list_line) - 1:
                     cur_dict = cur_dict.setdefault('-'.join(list_line).replace('-:', ':', 1), '')
-                elif list_line[ix][0] == ':':
+                elif not list_line[ix]:
+                    # Consecutive separators (MAG-PFCS-SYSM--:VAR) leave empty
+                    # segments behind; they are part of the name, not folders.
+                    continue
+                elif list_line[ix].startswith(':'):
                     temp = '-'.join(list_line[:ix + 1]).replace('-:', ':')
                     if cur_dict.get(temp, None) != "":
                         cur_dict = cur_dict.setdefault(temp, {})
