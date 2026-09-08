@@ -78,8 +78,6 @@ class UdaParams:
 # class to interface with data source - here UDA
 class UdaAccess(DataSource):
     source_type = "CODAC_UDA"
-    # Variable tree nodes with more variables than this are split into sub-folders.
-    VARIABLE_GROUP_LIMIT = 200
     _GROUP_SEPARATOR = re.compile(r'[-._]')
 
     def __init__(self, name: str, config: dict):
@@ -88,8 +86,9 @@ class UdaAccess(DataSource):
         self.port = config.get("port")
         # Optional alternative UDA server used only when exporting data (shares the same port).
         self.uda_for_export = config.get("uda_for_export")
-        # Optional override of VARIABLE_GROUP_LIMIT; null keeps every node flat.
-        self.variable_group_limit = config.get("variable_group_limit", self.VARIABLE_GROUP_LIMIT)
+        # Split variable tree nodes holding more variables than this into
+        # sub-folders. Unset leaves every node flat, as it has always been.
+        self.variable_group_limit = config.get("variable_group_limit")
 
         self.rtu = config.get("rturl")
         self.rtheaders = config.get("rtheaders")

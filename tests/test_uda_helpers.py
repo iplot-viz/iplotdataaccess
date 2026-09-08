@@ -185,8 +185,8 @@ class TestVariableGroupLimitConfig:
         monkeypatch.setattr(access, "get_var_list", lambda pattern, field=None: ['x:a.1', 'x:a.2', 'x:b'])
         return access.get_var_dict(pattern='x:.*', path='x')
 
-    def test_default_limit_is_200(self):
-        assert UdaAccess("test", {}).variable_group_limit == 200
+    def test_grouping_is_off_when_the_key_is_absent(self):
+        assert UdaAccess("test", {}).variable_group_limit is None
 
     def test_configured_limit_drives_the_split(self, monkeypatch):
         assert self._var_dict({"variable_group_limit": 2}, monkeypatch) == {
@@ -194,7 +194,7 @@ class TestVariableGroupLimitConfig:
             'x:b': '',
         }
 
-    def test_small_node_is_not_split_with_the_default_limit(self, monkeypatch):
+    def test_node_is_left_flat_when_the_key_is_absent(self, monkeypatch):
         assert self._var_dict({}, monkeypatch) == {'x:a.1': '', 'x:a.2': '', 'x:b': ''}
 
     def test_null_limit_keeps_every_node_flat(self, monkeypatch):
