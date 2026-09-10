@@ -29,6 +29,7 @@ import time
 import os
 import math
 import json
+import re
 import collections
 import cachetools as ct
 
@@ -77,6 +78,12 @@ class UdaParams:
 # class to interface with data source - here UDA
 class UdaAccess(DataSource):
     source_type = "CODAC_UDA"
+    # The dot only reaches the tree of the test archives (a single production
+    # variable carries one), so it can join the dash in the default layout
+    # without altering the production tree. The underscore is far more common
+    # there and stays reserved for the configured grouping.
+    _FOLDER_SEPARATOR = re.compile(r'[-.]')
+    _GROUP_SEPARATOR = re.compile(r'[-._]')
 
     def __init__(self, name: str, config: dict):
         super().__init__(name, config)
@@ -84,6 +91,9 @@ class UdaAccess(DataSource):
         self.port = config.get("port")
         # Optional alternative UDA server used only when exporting data (shares the same port).
         self.uda_for_export = config.get("uda_for_export")
+        # Split variable tree nodes holding more variables than this into
+        # sub-folders. Unset leaves every node flat, as it has always been.
+        self.variable_group_limit = config.get("variable_group_limit")
 
         self.rtu = config.get("rturl")
         self.rtheaders = config.get("rtheaders")
@@ -572,7 +582,7 @@ class UdaAccess(DataSource):
     def get_var_dict(self, pattern='.*', path=None, field=None) -> dict:
         var_list = self.get_var_list(pattern, field=field)
         if path:
-            var_dict = self.parse_vars_to_dict(var_list, path)
+            var_dict = self.parse_vars_to_dict(var_list, path, self.variable_group_limit)
         else:
             var_dict = self.parse_search_to_dict(var_list)
 
@@ -990,7 +1000,11 @@ class UdaAccess(DataSource):
             for ix in range(len(list_line)):
                 if ix == len(list_line) - 1:
                     cur_dict = cur_dict.setdefault('-'.join(list_line).replace('-:', ':', 1), '')
-                elif list_line[ix][0] == ':':
+                elif not list_line[ix]:
+                    # Consecutive separators (MAG-PFCS-SYSM--:VAR) leave empty
+                    # segments behind; they are part of the name, not folders.
+                    continue
+                elif list_line[ix].startswith(':'):
                     temp = '-'.join(list_line[:ix + 1]).replace('-:', ':')
                     if cur_dict.get(temp, None) != "":
                         cur_dict = cur_dict.setdefault(temp, {})
@@ -1001,12 +1015,15 @@ class UdaAccess(DataSource):
 
         return result
 
-    @staticmethod
-    def parse_vars_to_dict(lines: List[str], path: str) -> dict:
+    @classmethod
+    def parse_vars_to_dict(cls, lines: List[str], path: str, group_limit: int = None) -> dict:
         """
         Parses a list of lines and organizes them into a dictionary based on a specified pattern.
         :param lines: A list of strings representing lines to be parsed.
         :param path : A string representing the pattern to be used for organizing the lines.
+        :param group_limit: When given and there are more lines than this, the lines are split on every
+                            '-', '.' or '_' instead of the first '-' or '.' only, one name segment per
+                            level, until no folder holds more than group_limit variables.
         :return dict: A dictionary containing the parsed lines organized according to the specified pattern.
 
         Example:
@@ -1019,8 +1036,11 @@ class UdaAccess(DataSource):
             #   'x:b-c': ''
             # }
         """
+        if group_limit is not None and len(lines) > group_limit:
+            return cls._group_by_segment(list(dict.fromkeys(lines)), 0, group_limit)
+
         result = {}
-        folder_names = [line.split(':')[1].split('-')[0] for line in lines]
+        folder_names = [cls._FOLDER_SEPARATOR.split(line.split(':')[1], 1)[0] for line in lines]
         folder_counts = collections.Counter(folder_names)
         for ix, line in enumerate(lines):
             folder = folder_names[ix]
@@ -1031,5 +1051,33 @@ class UdaAccess(DataSource):
                 result[key][line] = ''
             else:
                 result[line] = ''
+
+        return result
+
+    @classmethod
+    def _group_by_segment(cls, lines: List[str], prefix_len: int, group_limit: int) -> dict:
+        """
+        Nests the lines by the name segment that follows their first prefix_len characters.
+        :param lines: Distinct variable names sharing the same prefix.
+        :param prefix_len: Length of the prefix already used as folder key, 0 at the first level.
+        :param group_limit: Folders holding more lines than this are split again on their next segment.
+        :return dict: Folders keyed by the common prefix (ending before the separator) holding their
+                      variables, and the variables whose segment is unique at this level.
+        """
+        folders = collections.defaultdict(list)
+        for line in lines:
+            # A segment never starts before the CBS separator and is never empty.
+            segment_start = max(line.find(':') + 1, prefix_len)
+            match = cls._GROUP_SEPARATOR.search(line, segment_start + 1)
+            folders[line[:match.start()] if match else line].append(line)
+
+        result = {}
+        for prefix, group in folders.items():
+            if len(group) == 1:
+                result[group[0]] = ''
+            elif len(group) > group_limit:
+                result[prefix] = cls._group_by_segment(group, len(prefix) + 1, group_limit)
+            else:
+                result[prefix] = {line: '' for line in group}
 
         return result
