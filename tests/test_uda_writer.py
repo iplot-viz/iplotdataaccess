@@ -8,7 +8,12 @@ gated by `_write_capable`, which we drive directly.
 import unittest
 from unittest.mock import MagicMock
 
-from iplotDataAccess.udaAccess import UdaAccess
+try:
+    from iplotDataAccess.udaAccess import UdaAccess
+    uda_imported = True
+except ImportError:
+    UdaAccess = None
+    uda_imported = False
 
 
 def _make_uda(write_capable: bool = True) -> UdaAccess:
@@ -18,6 +23,7 @@ def _make_uda(write_capable: bool = True) -> UdaAccess:
     return ds
 
 
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class IsWriteCapableTests(unittest.TestCase):
     def test_false_when_writer_module_missing(self):
         ds = _make_uda(write_capable=False)
@@ -33,6 +39,7 @@ class IsWriteCapableTests(unittest.TestCase):
         self.assertTrue(ds.is_write_capable())
 
 
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class GetPulseCategoriesTests(unittest.TestCase):
     def test_returns_categories_from_reader(self):
         ds = _make_uda(write_capable=True)
@@ -69,6 +76,7 @@ class GetPulseCategoriesTests(unittest.TestCase):
                          ["ITER:local", "b'ITER:test'"])
 
 
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class IsValidPulseIdTests(unittest.TestCase):
     def test_rejects_none(self):
         self.assertFalse(UdaAccess._is_valid_pulse_id(None))
@@ -89,6 +97,7 @@ class IsValidPulseIdTests(unittest.TestCase):
         self.assertTrue(UdaAccess._is_valid_pulse_id("  ITER:test/42  "))
 
 
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class AddPulseInfoTests(unittest.TestCase):
     def test_disabled_when_not_write_capable(self):
         ds = _make_uda(write_capable=False)
@@ -118,13 +127,13 @@ class AddPulseInfoTests(unittest.TestCase):
         ds.UCW.injectPulse.return_value = "ok"
         ds.add_pulse_info("ITER:test", 1_641_760_133_123_456_789,
                           1_641_760_833_123_456_789, "completed", "first")
-        ds.UCW.addPulse.assert_called_once_with("ITER:test", "first")
+        ds.UCW.addPulse.assert_called_once_with("ITER:test", '"first"')
         ds.UCW.injectPulse.assert_called_once_with(
             "ITER:test/7",
             "1641760133123456789",
             "1641760833123456789",
             "completed",
-            "first",
+            '"first"',
         )
 
     def test_sub_second_pulse_keeps_ns_precision(self):
@@ -141,7 +150,7 @@ class AddPulseInfoTests(unittest.TestCase):
             "1641760133100000000",
             "1641760133600000000",
             "completed",
-            "short",
+            '"short"',
         )
 
     def test_returns_ok_with_pulse_id_and_raw_on_success(self):
@@ -161,6 +170,7 @@ class AddPulseInfoTests(unittest.TestCase):
         self.assertIn("server refused", result["error"])
 
 
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class AddPulseInfoExplicitNumberTests(unittest.TestCase):
     """User-chosen pulse number: written at scope/number via injectPulse,
     guarded by an existence check before and a creation check after."""
@@ -192,7 +202,7 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
         self.assertEqual(result["pulse_id"], "ITER:test/20260526")
         ds.UCW.addPulse.assert_not_called()
         ds.UCW.injectPulse.assert_called_once_with(
-            "ITER:test/20260526", "1", "2", "completed", "x")
+            "ITER:test/20260526", "1", "2", "completed", '"x"')
 
     def test_reports_error_when_server_did_not_create_the_pulse(self):
         ds = _make_uda(write_capable=True)
@@ -222,6 +232,7 @@ class AddPulseInfoExplicitNumberTests(unittest.TestCase):
         ds.get_pulse_info.assert_not_called()
 
 
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class UpdatePulseInfoTests(unittest.TestCase):
     def test_disabled_when_not_write_capable(self):
         ds = _make_uda(write_capable=False)
@@ -254,7 +265,7 @@ class UpdatePulseInfoTests(unittest.TestCase):
             "1641760133123456789",
             "1641760833123456789",
             "completed",
-            "edit",
+            '"edit"',
         )
 
     def test_returns_ok_with_raw_on_success(self):
@@ -270,6 +281,38 @@ class UpdatePulseInfoTests(unittest.TestCase):
         result = ds.update_pulse_info("ITER:test/1", 1, 2, "completed", "x")
         self.assertFalse(result["ok"])
         self.assertIn("server refused", result["error"])
+
+
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
+class DescriptionQuotingTests(unittest.TestCase):
+    """Commas and spaces abort addPulse unless the description is quoted."""
+
+    def _created_with(self, description):
+        ds = _make_uda(write_capable=True)
+        ds.UCW.addPulse.return_value = "ITER:test/7"
+        ds.UCW.injectPulse.return_value = "ok"
+        result = ds.add_pulse_info("ITER:test", 1, 2, "completed", description)
+        self.assertTrue(result["ok"])
+        sent_add = ds.UCW.addPulse.call_args.args[1]
+        sent_inject = ds.UCW.injectPulse.call_args.args[4]
+        self.assertEqual(sent_add, sent_inject)
+        return sent_add
+
+    def test_comma_and_space_descriptions_are_quoted(self):
+        self.assertEqual(self._created_with("hello, world"), '"hello, world"')
+
+    def test_already_quoted_description_is_sent_as_is(self):
+        self.assertEqual(self._created_with('"already quoted"'), '"already quoted"')
+
+    def test_lone_quote_is_still_wrapped(self):
+        self.assertEqual(self._created_with('"'), '"' * 3)
+
+    def test_update_pulse_quotes_too(self):
+        ds = _make_uda(write_capable=True)
+        ds.UCW.injectPulse.return_value = "ok"
+        result = ds.update_pulse_info("ITER:test/1", 1, 2, "completed", "a, b")
+        self.assertTrue(result["ok"])
+        self.assertEqual(ds.UCW.injectPulse.call_args.args[4], '"a, b"')
 
 
 if __name__ == "__main__":
