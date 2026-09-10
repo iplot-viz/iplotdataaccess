@@ -78,6 +78,11 @@ class UdaParams:
 # class to interface with data source - here UDA
 class UdaAccess(DataSource):
     source_type = "CODAC_UDA"
+    # The dot only reaches the tree of the test archives (a single production
+    # variable carries one), so it can join the dash in the default layout
+    # without altering the production tree. The underscore is far more common
+    # there and stays reserved for the configured grouping.
+    _FOLDER_SEPARATOR = re.compile(r'[-.]')
     _GROUP_SEPARATOR = re.compile(r'[-._]')
 
     def __init__(self, name: str, config: dict):
@@ -1002,8 +1007,8 @@ class UdaAccess(DataSource):
         :param lines: A list of strings representing lines to be parsed.
         :param path : A string representing the pattern to be used for organizing the lines.
         :param group_limit: When given and there are more lines than this, the lines are split on every
-                            '-', '.' or '_' instead of the first '-' only, one name segment per level,
-                            until no folder holds more than group_limit variables.
+                            '-', '.' or '_' instead of the first '-' or '.' only, one name segment per
+                            level, until no folder holds more than group_limit variables.
         :return dict: A dictionary containing the parsed lines organized according to the specified pattern.
 
         Example:
@@ -1020,7 +1025,7 @@ class UdaAccess(DataSource):
             return cls._group_by_segment(list(dict.fromkeys(lines)), 0, group_limit)
 
         result = {}
-        folder_names = [line.split(':')[1].split('-')[0] for line in lines]
+        folder_names = [cls._FOLDER_SEPARATOR.split(line.split(':')[1], 1)[0] for line in lines]
         folder_counts = collections.Counter(folder_names)
         for ix, line in enumerate(lines):
             folder = folder_names[ix]

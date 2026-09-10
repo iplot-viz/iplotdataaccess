@@ -119,13 +119,20 @@ class TestLastValueBefore:
 
 class TestParseVarsToDict:
 
-    def test_without_limit_groups_on_first_dash_only(self):
+    def test_without_limit_groups_on_first_dash_or_dot_only(self):
         lines = ['x:a-b', 'x:b-c', 'x:a-c', 'x:p.1', 'x:p.2', 'x:q_1', 'x:q_2']
         assert UdaAccess.parse_vars_to_dict(lines, 'x') == {
             'x:a': {'x:a-b': '', 'x:a-c': ''},
             'x:b-c': '',
-            'x:p.1': '', 'x:p.2': '',
+            'x:p': {'x:p.1': '', 'x:p.2': ''},
             'x:q_1': '', 'x:q_2': '',
+        }
+
+    def test_without_limit_the_first_separator_wins(self):
+        lines = ['x:a-b.1', 'x:a-b.2', 'x:p.1-a', 'x:p.2-a']
+        assert UdaAccess.parse_vars_to_dict(lines, 'x') == {
+            'x:a': {'x:a-b.1': '', 'x:a-b.2': ''},
+            'x:p': {'x:p.1-a': '', 'x:p.2-a': ''},
         }
 
     def test_node_within_limit_keeps_the_dash_layout(self):
@@ -181,8 +188,9 @@ class TestParseVarsToDict:
 class TestVariableGroupLimitConfig:
 
     def _var_dict(self, config, monkeypatch):
+        # Underscore names: only the configured grouping splits on them.
         access = UdaAccess("test", config)
-        monkeypatch.setattr(access, "get_var_list", lambda pattern, field=None: ['x:a.1', 'x:a.2', 'x:b'])
+        monkeypatch.setattr(access, "get_var_list", lambda pattern, field=None: ['x:a_1', 'x:a_2', 'x:b'])
         return access.get_var_dict(pattern='x:.*', path='x')
 
     def test_grouping_is_off_when_the_key_is_absent(self):
@@ -190,15 +198,15 @@ class TestVariableGroupLimitConfig:
 
     def test_configured_limit_drives_the_split(self, monkeypatch):
         assert self._var_dict({"variable_group_limit": 2}, monkeypatch) == {
-            'x:a': {'x:a.1': '', 'x:a.2': ''},
+            'x:a': {'x:a_1': '', 'x:a_2': ''},
             'x:b': '',
         }
 
     def test_node_is_left_flat_when_the_key_is_absent(self, monkeypatch):
-        assert self._var_dict({}, monkeypatch) == {'x:a.1': '', 'x:a.2': '', 'x:b': ''}
+        assert self._var_dict({}, monkeypatch) == {'x:a_1': '', 'x:a_2': '', 'x:b': ''}
 
     def test_null_limit_keeps_every_node_flat(self, monkeypatch):
-        assert self._var_dict({"variable_group_limit": None}, monkeypatch) == {'x:a.1': '', 'x:a.2': '', 'x:b': ''}
+        assert self._var_dict({"variable_group_limit": None}, monkeypatch) == {'x:a_1': '', 'x:a_2': '', 'x:b': ''}
 
 
 class TestParseSearchToDict:
