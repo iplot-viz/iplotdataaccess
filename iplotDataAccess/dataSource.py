@@ -25,6 +25,11 @@ class DataSource(ABC):
     def __init__(self, name: str, config: dict):
         self.default = config.get("default", False)
         self.name = name
+        # Optional controls metadata REST server publishing the variables
+        # visible on HMI; widgets hide the related controls when a source
+        # does not define one.
+        self.controls_metadata = config.get("controlsmetadata")
+        self._hmi_vars = None
         # Stream config
         self.rtStatus = "UNEXISTING"
         self.errcode = 0
@@ -89,6 +94,63 @@ class DataSource(ABC):
 
     def get_var_fields(self, **kwargs):
         pass
+
+    def get_hmi_var_dict(self, refresh: bool = False) -> dict:
+        """Return the HMI variables published by the controls metadata server.
+
+        Maps each variable name to a dict with keys ``description``, ``units``
+        and ``type``. Returns an empty dict when the source has no
+        controlsmetadata server configured or the request fails; the fetched
+        list is cached until ``refresh`` is requested.
+        """
+        if not self.controls_metadata:
+            return {}
+        if self._hmi_vars is not None and not refresh:
+            return self._hmi_vars
+
+        import requests
+        url = str(self.controls_metadata)
+        if '://' not in url:
+            url = f'http://{url}'
+        try:
+            # The controls metadata server lives inside the CODAC network:
+            # bypass any http_proxy/https_proxy meant for external traffic.
+            response = requests.get(f"{url.rstrip('/')}/variable_hmi", timeout=30,
+                                    proxies={"http": None, "https": None})
+            response.raise_for_status()
+            body = response.json()
+        except Exception as exc:
+            logger.error("Controls metadata request to %s failed: %s", url, exc)
+            return {}
+
+        self._hmi_vars = self._parse_hmi_body(body)
+        return self._hmi_vars
+
+    @staticmethod
+    def _parse_hmi_body(body) -> dict:
+        """Normalize the ``variable_hmi`` response into {name: metadata}.
+
+        Accepts both a bare list of entries and a wrapper object holding one,
+        and tolerates the unit/type key variants seen across REST endpoints.
+        """
+        if isinstance(body, dict):
+            body = next((v for v in body.values() if isinstance(v, list)), None)
+        if not isinstance(body, list):
+            return {}
+
+        result = {}
+        for entry in body:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get('variable') or entry.get('name')
+            if not name:
+                continue
+            result[str(name)] = {
+                'description': entry.get('description', ''),
+                'units': entry.get('unit', entry.get('units', '')),
+                'type': entry.get('data_type', entry.get('data type', entry.get('type', ''))),
+            }
+        return result
 
     def set_rt_headers(self, headers):
         self.rth = headers
