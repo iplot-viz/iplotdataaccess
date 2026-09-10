@@ -728,13 +728,28 @@ class UdaAccess(DataSource):
         s = str(pulse_id).strip()
         return bool(s) and s != ":/" and ":" in s and "/" in s
 
+    @staticmethod
+    def _quote_description(description: str) -> str:
+        """Wrap the description in double quotes for the writer's query.
+
+        The query syntax is comma-separated, so an unquoted comma or space
+        makes addPulse fail; quoted it passes through, and the server strips
+        the quotes when storing, so callers never see them back. A description
+        already wrapped in quotes is sent as is.
+        """
+        if (len(description) >= 2 and description.startswith('"')
+                and description.endswith('"')):
+            return description
+        return f'"{description}"'
+
     def _inject_pulse(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
                       status: str, description: str):
         # injectPulse accepts raw nanosecond strings; converting through
         # convertTimeNsToISO dropped the sub-second fraction, which made it
         # impossible to create pulses shorter than one second.
         return self.UCW.injectPulse(pulse_id, str(int(ts_start_ns)),
-                                    str(int(ts_end_ns)), status, description)
+                                    str(int(ts_end_ns)), status,
+                                    self._quote_description(description))
 
     def _pulse_exists(self, pulse_id: str) -> bool:
         try:
@@ -779,7 +794,7 @@ class UdaAccess(DataSource):
                                      "leave the pulse number empty to number "
                                      "it automatically"}
                 return {"ok": True, "pulse_id": pulse_id, "raw": raw}
-            pulse_id = self.UCW.addPulse(scope, description)
+            pulse_id = self.UCW.addPulse(scope, self._quote_description(description))
             if not self._is_valid_pulse_id(pulse_id):
                 return {"ok": False,
                         "error": f"addPulse returned an empty pulse for scope {scope!r}"}
