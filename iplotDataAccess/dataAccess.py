@@ -7,7 +7,7 @@ from typing import Dict, List, Union, Type
 from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
-from iplotDataAccess.dataSource import DS_IMASPY_TYPE
+from iplotDataAccess.dataSource import DS_IMAS_TYPE
 
 logger = setupLogger.get_logger(__name__)
 
@@ -76,7 +76,7 @@ class DataAccess:
                     continue
                 try:
                     data_source = ds_class(ds_name, ds_config)
-                    if ds_type == DS_IMASPY_TYPE:
+                    if ds_type == DS_IMAS_TYPE:
                         import imas
                         data_source.connection=object() # dummy connection object 
                         self.ds_list[ds_name] = data_source
