@@ -1,7 +1,4 @@
-try:
-    import imaspy as imas
-except ImportError:
-    import imas
+import imas
 
 
 import os
@@ -48,8 +45,8 @@ More info: https://pypi.org/project/imas-python/
     )
 
 
-class IMASPYDataAccess(DataSource):
-    source_type = "IMASPY"
+class IMASDataAccess(DataSource):
+    source_type = "IMAS"
     pulse_list = None  # shared pulse list cache across all instances
 
     def __init__(self, name: str, config: dict):
@@ -312,7 +309,7 @@ class IMASPYDataAccess(DataSource):
 
         logger.info(
             f"{'-' * 80}\n"
-            f"Accessed data from IMASPY DATA Source for IDS Path: {ids_name}/{ids_path} \n"
+            f"Accessed data from IMAS DATA Source for IDS Path: {ids_name}/{ids_path} \n"
             f"X: shape={np.shape(x_dict['values'])}, unit={x_dict['unit']}, label={x_dict['name']}, values=[{_first(x_dict['values'])}, {_last(x_dict['values'])}] \n"
             f"Y: shape={np.shape(y_dict['values'])}, unit={y_dict['unit']}, label={y_dict['name']}, values=[{_first(y_dict['values'])}, {_last(y_dict['values'])}] \n"
             f"errcode={errcode}, errdesc={errdesc}\n"
@@ -498,7 +495,7 @@ class IMASPYDataAccess(DataSource):
             logger.info("Pulse table population is disabled in config")
             return EMPTY_DF.copy()
         alias_filter = str(kwargs.get("pulse", ""))
-        if IMASPYDataAccess.pulse_list is None:
+        if IMASDataAccess.pulse_list is None:
             import time
             from pathlib import Path
             from datetime import datetime, timedelta
@@ -513,18 +510,18 @@ class IMASPYDataAccess(DataSource):
                 if (datetime.now() - mtime) < cache_ttl:
                     logger.info("Loading pulse list from disk cache...")
                     try:
-                        IMASPYDataAccess.pulse_list = pd.read_parquet(cache_file)
+                        IMASDataAccess.pulse_list = pd.read_parquet(cache_file)
                     except Exception as e:
                         logger.warning(f"Failed to read parquet cache, will re-fetch: {e}")
 
-            if IMASPYDataAccess.pulse_list is None:
+            if IMASDataAccess.pulse_list is None:
                 start = time.perf_counter()
                 logger.info("Fetching pulse list from SIMDB...")
                 df = SimDBClient(self.config).fetch_pulses()
                 if not df.empty:
-                    IMASPYDataAccess.pulse_list = df.sort_values(by=["alias"])
+                    IMASDataAccess.pulse_list = df.sort_values(by=["alias"])
                     # strip local entries before writing to disk
-                    df_to_cache = IMASPYDataAccess.pulse_list
+                    df_to_cache = IMASDataAccess.pulse_list
                     if "source" in df_to_cache.columns:
                         df_to_cache = df_to_cache[df_to_cache["source"].astype(str).str.lower() != "local"].reset_index(drop=True)
                     try:
@@ -532,7 +529,7 @@ class IMASPYDataAccess(DataSource):
                     except Exception as e:
                         logger.warning(f"Failed to write parquet cache: {e}")
                 else:
-                    IMASPYDataAccess.pulse_list = pd.DataFrame()
+                    IMASDataAccess.pulse_list = pd.DataFrame()
                 logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")
 
         # Local folder
@@ -551,8 +548,8 @@ class IMASPYDataAccess(DataSource):
             _local = local_df.copy()
             _local["source"] = "local"
             parts.append(_local)
-        if IMASPYDataAccess.pulse_list is not None and not IMASPYDataAccess.pulse_list.empty:
-            _simdb = IMASPYDataAccess.pulse_list.copy()
+        if IMASDataAccess.pulse_list is not None and not IMASDataAccess.pulse_list.empty:
+            _simdb = IMASDataAccess.pulse_list.copy()
             _simdb["source"] = "simdb"
             parts.append(_simdb)
         if not parts:

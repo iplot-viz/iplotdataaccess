@@ -1,7 +1,7 @@
 """
 Test module for IMAS data access functionality.
 This module contains regression tests for the DataAccess class
-when working with IMASPY data sources.
+when working with IMAS data sources.
 """
 
 import unittest
@@ -17,8 +17,8 @@ except ImportError:
 
 
 dscfg = """{
-    "imaspy": {
-        "type": "IMASPY",
+    "imas": {
+        "type": "IMAS",
         "database": "ITER",
         "path": "public",
         "backend": "HDF5"
@@ -182,7 +182,7 @@ class TestIMASAccess(unittest.TestCase):
         )
 
         self.da = DataAccess()
-        self.ds = "imaspy"
+        self.ds = "imas"
 
         # Write configuration to temporary file
         with open(self.temp_config_path, mode="w") as fp:
