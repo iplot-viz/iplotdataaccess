@@ -1,7 +1,4 @@
-try:
-    import imaspy as imas
-except ImportError:
-    import imas
+import imas
 
 
 import os

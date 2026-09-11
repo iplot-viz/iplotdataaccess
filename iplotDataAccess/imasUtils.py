@@ -1,9 +1,6 @@
 import re
 
-try:
-    import imaspy as imas
-except ImportError:
-    import imas
+import imas
 import numpy as np
 from iplotLogging import setupLogger
 
