@@ -75,7 +75,7 @@ class TestIMASAccessByNetCDFPath:
         )
         with open(self.temp_config_path, mode="w") as fp:
             fp.write(DSCFG)
-        os.environ["DATASOURCESCONF"] = os.path.abspath(self.temp_config_path)
+        os.environ["IPLOT_SOURCES_CONFIG"] = os.path.abspath(self.temp_config_path)
 
         self.da = DataAccess()
         self.ds = "imaspy"
@@ -87,7 +87,7 @@ class TestIMASAccessByNetCDFPath:
             os.remove(self.temp_config_path)
         except (OSError, FileNotFoundError):
             pass
-        os.environ.pop("DATASOURCESCONF", None)
+        os.environ.pop("IPLOT_SOURCES_CONFIG", None)
 
     def test_core_profiles_1d_profile(self, zenodo_netcdf_pulse) -> None:
         """A 1D radial profile (electron temperature vs rho_tor_norm)."""
