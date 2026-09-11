@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock
 import numpy as np
 import inspect
 import os
@@ -85,6 +86,63 @@ class TestUDAAccess(unittest.TestCase):
         self.assertEqual(len(dobj.xdata), 1)
 
         self.assertEqual(dobj.xunit, "s")
+
+
+class TestUDAConfigParsing(unittest.TestCase):
+    # Construction only reads the config, so these run without a live UDA server.
+    def _make(self, config):
+        try:
+            from iplotDataAccess.udaAccess import UdaAccess
+        except ImportError as exc:
+            self.skipTest(f"uda_client_reader not available: {exc}")
+        return UdaAccess("codacuda", config)
+
+    def test_uda_for_export_present(self) -> None:
+        ds = self._make({"host": "srv1", "port": 3090, "uda_for_export": "srv2"})
+        self.assertEqual(ds.uda_for_export, "srv2")
+
+    def test_uda_for_export_defaults_to_none(self) -> None:
+        ds = self._make({"host": "srv1", "port": 3090})
+        self.assertIsNone(ds.uda_for_export)
+
+
+class TestArchiveWindowFallback(unittest.TestCase):
+    """get_archive_window overflow fallback, mocked — no live server needed."""
+
+    _TOO_MANY = ('Number of samples in reply exceeds available limit. '
+                 'Reduce request interval, use decimation or read data by chunks.')
+
+    def _make(self):
+        try:
+            from iplotDataAccess.udaAccess import UdaAccess
+        except ImportError as exc:
+            self.skipTest(f"uda_client_reader not available: {exc}")
+        ds = UdaAccess("codacuda", {"host": "srv1", "port": 3090})
+        ds.get_data = MagicMock()
+        ds.get_envelope = MagicMock(return_value="envelope")
+        return ds
+
+    def test_overflow_keeps_the_callers_point_budget(self):
+        ds = self._make()
+        ds.get_data.return_value = MagicMock(errcode=-1, errdesc=self._TOO_MANY)
+        out = ds.get_archive_window(varname='v', nbp=10_000, env_nbp=10_000)
+        self.assertEqual(out, "envelope")
+        self.assertEqual(ds.get_envelope.call_args.kwargs['nbp'], 10_000)
+
+    def test_overflow_defaults_to_the_coarse_envelope(self):
+        from iplotDataAccess.udaAccess import ENVELOPE_TARGET_POINTS
+        ds = self._make()
+        ds.get_data.return_value = MagicMock(errcode=-1, errdesc=self._TOO_MANY)
+        ds.get_archive_window(varname='v', nbp=100_000)
+        self.assertEqual(ds.get_envelope.call_args.kwargs['nbp'],
+                         ENVELOPE_TARGET_POINTS)
+
+    def test_env_nbp_is_not_forwarded_to_the_raw_read(self):
+        ds = self._make()
+        ds.get_data.return_value = MagicMock(errcode=0)
+        ds.get_archive_window(varname='v', nbp=5, env_nbp=7)
+        self.assertNotIn('env_nbp', ds.get_data.call_args.kwargs)
+        ds.get_envelope.assert_not_called()
 
 
 if __name__ == "__main__":

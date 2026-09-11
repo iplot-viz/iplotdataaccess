@@ -7,6 +7,7 @@ except ImportError:
 import os
 import re
 from functools import lru_cache
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -15,13 +16,13 @@ from pandas import DataFrame
 
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
 from iplotDataAccess.dataSource import DataSource
-from iplotDataAccess.imasDBMaster import IMASDBMaster
 from iplotDataAccess.imasUtils import (
     InvalidImasError,
     parse_idspath,
     parse_slice_from_string,
     partial_get,
 )
+from iplotDataAccess.simdbAccess import SimDBClient, SIMDB_COLUMNS, EMPTY_DF
 
 logger = setupLogger.get_logger(__name__)
 IMAS_ATTR = ["documentation", "data_type", "units", "dimension"]
@@ -49,11 +50,12 @@ More info: https://pypi.org/project/imas-python/
 
 class IMASPYDataAccess(DataSource):
     source_type = "IMASPY"
+    pulse_list = None  # shared pulse list cache across all instances
 
     def __init__(self, name: str, config: dict):
         super().__init__(name=name, config=config)
         self.uri = ""
-        self.pulse_list = None
+        self.config = config
         self.set_uri(config)
         self.connection = None
         self.connected = False
@@ -69,28 +71,38 @@ class IMASPYDataAccess(DataSource):
         pattern = re.compile(r'^\d+[\\/]\d+$')  
         return bool(pattern.match(s))
 
-    def set_uri(self, config: dict | str):
+    def set_uri(self, config: Union[dict, str]):
         if type(config) is dict:
-            backend = config.get("backend", "hdf5")
-            user = config.get("user", "public")
-            database = config.get("database", "ITER")
-            version = config.get("version", "3")
-            pulse_ident = config.get("pulseIdent", "134174/117")
-            try:
-                ret = pulse_ident.split("/")
-                pulse = int(ret[0])
-                if len(ret) == 2:
-                    run = int(ret[1])
-                else:
-                    run = 0
-                self.uri = (
-                    f"imas:{backend.lower()}?user={user};shot={pulse};"
-                    f"run={run};database={database};version={version}"
-                )
-            except Exception as e:
-                self.errcode = -1
-                self.errdesc = "Received an invalid pulse identifier"
-                logger.exception(f"Received an invalid pulse identifier {e}")
+            # IMAS databases
+            # For public databases, the data is in the $IMAS_HOME/public/imasdb/<database>/<version>/<pulse>/<run>/ folder.
+            # Other user’s data can be found in the <user_home>/public/imasdb/<database>/<version>/<pulse>/<run>/ folder, 
+            # where <user_home> is typically /home/<user>.
+            if "IMAS_HOME" in os.environ and os.path.isdir(os.environ["IMAS_HOME"]):
+                backend = config.get("backend", "hdf5")
+                user = config.get("user", "public")
+                database = config.get("database", "ITER")
+                version = config.get("version", "3")
+                pulse_ident = config.get("pulseIdent", "")
+
+                if not pulse_ident:
+                    self.errcode = -1
+                    self.errdesc = "Received an empty pulse identifier"
+                    return
+                try:
+                    ret = pulse_ident.split("/")
+                    pulse = int(ret[0])
+                    if len(ret) == 2:
+                        run = int(ret[1])
+                    else:
+                        run = 0
+                    self.uri = (
+                        f"imas:{backend.lower()}?user={user};pulse={pulse};"
+                        f"run={run};database={database};version={version}"
+                    )
+                except Exception as e:
+                    self.errcode = -1
+                    self.errdesc = "Received an invalid pulse identifier"
+                    logger.exception(f"Received an invalid pulse identifier {e}")
         elif type(config) is str:
             self.uri = config
         else:
@@ -120,7 +132,7 @@ class IMASPYDataAccess(DataSource):
         except Exception as e:
             self.errcode = -1
             self.errdesc = "IMAS connection error"
-            logger.exception(f"IMAS connection error: {e}")
+            logger.exception(f"IMAS connection error: uri={self.uri} {e}")
             self.connection = None
             return False
 
@@ -456,22 +468,18 @@ class IMASPYDataAccess(DataSource):
 
         return all_children
 
-    def get_pulse_info(self, pulse, run):
+    def get_pulse_info(self, uuid=None, **kwargs):
         """
-        The function `get_pulse_info` retrieves a list of available IDs and times if a connection is
-        established.
+        The function `get_pulse_info` retrieves simulation metadata for a given UUID.
 
         Returns:
-            The `ids_list` will be returned
+            A string representation of the matching row, or None if not found.
         """
-        if self.pulse_list is not None:
-            filtered = self.pulse_list[
-                (self.pulse_list["pulse"] == pulse) & (self.pulse_list["run"] == run)
-            ]
+        if self.pulse_list is not None and uuid and "uuid" in self.pulse_list.columns:
+            filtered = self.pulse_list[self.pulse_list["uuid"] == uuid]
             if not filtered.empty:
                 return filtered.iloc[0].dropna().to_string()
-            else:
-                return None
+        return None
 
     def close(self):
         """
@@ -496,52 +504,76 @@ class IMASPYDataAccess(DataSource):
         denv.ydata_avg = dobj.ydata  # dummy
         return denv
 
-    @lru_cache(maxsize=10)
-    def get_pulses_df(
-        self,
-        **kwargs,
-    ) -> pd.DataFrame:
-        pulse = kwargs["pulse"] if "pulse" in kwargs.keys() else ""
-        if self.pulse_list is None:
-            logger.info(
-                "retriving list of pulses for imaspy data source, please wait..."
-            )
-
-            directory_list = [os.environ["IMAS_HOME"] + "/shared/imasdb/ITER/3"]
-            directory_list.append(os.environ["IMAS_HOME"] + "/shared/imasdb/ITER/4")
+    def get_pulses_df(self, **kwargs) -> pd.DataFrame:
+        if not self.config.get("populate_pulse_table", False):
+            logger.info("Pulse table population is disabled in config")
+            return EMPTY_DF.copy()
+        alias_filter = str(kwargs.get("pulse", ""))
+        if IMASPYDataAccess.pulse_list is None:
             import time
+            from pathlib import Path
+            from datetime import datetime, timedelta
 
-            start_time = time.perf_counter()
-            scenarioDescriptionObj = IMASDBMaster(directory_list=directory_list)
-            df = scenarioDescriptionObj.get_dataframes_from_files(
-                extension=".yaml", add_obsolete=False
-            )
-            df["date"] = df["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+            cache_dir = os.environ.get("IPLOT_DUMP_PATH", str(Path.home() / ".local" / "1Dtool" / "cache"))
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_file = os.path.join(cache_dir, "pulses_df.parquet")
+            cache_ttl = timedelta(days=7)
 
-            df["ref_name"] = df["ref_name"].str.slice(0, 50)
-            end_time = time.perf_counter()
-            execution_time = end_time - start_time
-            logger.info(f"Retrieved list of pulses in: {execution_time:.6f} seconds")
-            df_sorted = df.sort_values(by=["pulse", "run"])
-            self.pulse_list = df_sorted
-        pulses_df = self.pulse_list[
-            self.pulse_list["pulse"].astype(str).str.startswith(pulse)
-        ][
-            [
-                "pulse",
-                "run",
-                "ref_name",
-                "ip",
-                "b0",
-                "fuelling",
-                "confinement",
-                "workflow",
-                "date",
-            ]
-        ].astype(
-            str
-        )
+            if os.path.exists(cache_file):
+                mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
+                if (datetime.now() - mtime) < cache_ttl:
+                    logger.info("Loading pulse list from disk cache...")
+                    try:
+                        IMASPYDataAccess.pulse_list = pd.read_parquet(cache_file)
+                    except Exception as e:
+                        logger.warning(f"Failed to read parquet cache, will re-fetch: {e}")
 
-        pulses_df["key"] = pulses_df["pulse"] + pulses_df["run"]
-        pulses_df.set_index("key", inplace=True)
-        return pulses_df
+            if IMASPYDataAccess.pulse_list is None:
+                start = time.perf_counter()
+                logger.info("Fetching pulse list from SIMDB...")
+                df = SimDBClient(self.config).fetch_pulses()
+                if not df.empty:
+                    IMASPYDataAccess.pulse_list = df.sort_values(by=["alias"])
+                    # strip local entries before writing to disk
+                    df_to_cache = IMASPYDataAccess.pulse_list
+                    if "source" in df_to_cache.columns:
+                        df_to_cache = df_to_cache[df_to_cache["source"].astype(str).str.lower() != "local"].reset_index(drop=True)
+                    try:
+                        df_to_cache.to_parquet(cache_file, index=False)
+                    except Exception as e:
+                        logger.warning(f"Failed to write parquet cache: {e}")
+                else:
+                    IMASPYDataAccess.pulse_list = pd.DataFrame()
+                logger.info(f"Retrieved list of pulses in: {time.perf_counter()-start:.6f} seconds")
+
+        # Local folder
+        local_df = pd.DataFrame()
+        local_folder = self.config.get("pulse_list_folder", "")
+        if local_folder:
+            from iplotDataAccess.localPulseAccess import LocalPulseScanner
+            try:
+                local_df = LocalPulseScanner(local_folder).fetch_pulses()
+            except ValueError as e:
+                logger.error(f"Invalid pulse_list_folder: {e}")
+
+        # Merge local and simdb
+        parts = []
+        if local_df is not None and not local_df.empty:
+            _local = local_df.copy()
+            _local["source"] = "local"
+            parts.append(_local)
+        if IMASPYDataAccess.pulse_list is not None and not IMASPYDataAccess.pulse_list.empty:
+            _simdb = IMASPYDataAccess.pulse_list.copy()
+            _simdb["source"] = "simdb"
+            parts.append(_simdb)
+        if not parts:
+            return EMPTY_DF.copy()
+        combined = pd.concat(parts, ignore_index=True)
+        if alias_filter:
+            alias_col = combined["alias"].astype(str).str.contains(alias_filter, case=False, regex=False)
+            desc_col = combined["description"].astype(str).str.contains(alias_filter, case=False, regex=False)
+            workflow_col = combined["workflow"].astype(str).str.contains(alias_filter, case=False, regex=False)
+            pulses_df = combined[alias_col | desc_col | workflow_col][SIMDB_COLUMNS].astype(str)
+        else:
+            pulses_df = combined[SIMDB_COLUMNS].astype(str)
+        return pulses_df.reset_index(drop=True)

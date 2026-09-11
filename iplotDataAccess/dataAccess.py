@@ -7,6 +7,7 @@ from typing import Dict, List, Union, Type
 from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
+from iplotDataAccess.dataSource import DS_IMASPY_TYPE
 
 logger = setupLogger.get_logger(__name__)
 
@@ -75,8 +76,13 @@ class DataAccess:
                     continue
                 try:
                     data_source = ds_class(ds_name, ds_config)
-                    if data_source.connect():
+                    if ds_type == DS_IMASPY_TYPE:
+                        import imas
+                        data_source.connection=object() # dummy connection object 
                         self.ds_list[ds_name] = data_source
+                    else:
+                        if data_source.connect():
+                            self.ds_list[ds_name] = data_source
                 except Exception as e:
                     logger.warning(f"Error importing class {ds_class} with error {e}")
 
@@ -173,6 +179,23 @@ class DataAccess:
                 return self.default_ds.get_envelope(**kwargs)
 
         return None
+
+    def get_archive_window(self, data_s_name, **kwargs):
+        if data_s_name is not None and data_s_name in self.ds_list.keys():
+            if self.ds_list[data_s_name] is None:
+                dobj = DataObj()
+                dobj.set_empty(f"Invalid data source pointer for ds name {data_s_name}")
+                return dobj
+            return self.ds_list[data_s_name].get_archive_window(**kwargs)
+
+        if self.default_ds is not None:
+            logger.info("default source used")
+            return self.default_ds.get_archive_window(**kwargs)
+
+        logger.warning(f"Invalid data source found {data_s_name}")
+        dobj = DataObj()
+        dobj.set_empty(f"Invalid data source name {data_s_name}")
+        return dobj
 
     def get_connected_data_source_names(self) -> List[str]:
         data_sources = [self.get_default_ds_name()]

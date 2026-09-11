@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "cachetools >= 4.2.0",
-    "iplotLogging >= 1.2.0",
+    "iplotLogging >= 1.2.2",
     "requests >= 2.25.1",
     "sseclient-py >= 1.7",
     "pyarrow >= 16.1.0",
@@ -34,8 +34,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-imaspy = ["PyYAML >= 6.0.1"]
-test = ["pytest >= 6.0"]
+
+imaspy = ["PyYAML >= 6.0.1", "imas-python", "keyring"]
+test = ["pytest >= 6.0", "pytest-cov", "PyYAML >= 6.0.1"]
 
 [project.urls]
 Homepage = "https://github.com/iplot-viz/iplotdataaccess"
@@ -51,7 +52,13 @@ include = ["iplotDataAccess*"]
 
 [tool.pytest.ini_options]
 addopts = "-rA -s -v"
-testpaths = "iplotDataAccess"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+omit = [
+    "iplotDataAccess/_version.py",
+    "iplotDataAccess/dataHandling/exportData/*",
+]
 
 [tool.versioneer]
 VCS = "git"

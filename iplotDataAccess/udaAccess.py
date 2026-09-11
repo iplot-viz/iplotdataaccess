@@ -9,6 +9,15 @@ from cachetools import cachedmethod
 
 # import uda_client_reader as uc
 from uda_client_reader import uda_client_reader_python as uc
+# Optional: pulse-creation API ships in a separate package that may not be
+# installed in every environment. Missing import disables the feature
+# cleanly via UdaAccess.is_write_capable() — no warnings.
+try:
+    from uda_client_writer import uda_client_writer_python as ucw
+    _UDA_WRITER_AVAILABLE = True
+except ImportError:
+    ucw = None
+    _UDA_WRITER_AVAILABLE = False
 import iplotLogging.setupLogger as setupLog
 import dateutil.parser as dp
 from datetime import timezone
@@ -29,6 +38,12 @@ from iplotDataAccess.realTimeStreamer import RTStreamer
 logger = setupLog.get_logger(__name__)
 
 
+# Above MAX_RAW_POINTS_PER_SIGNAL the layer falls back to an envelope of
+# ENVELOPE_TARGET_POINTS buckets.
+MAX_RAW_POINTS_PER_SIGNAL = 100_000
+ENVELOPE_TARGET_POINTS = 1920
+
+
 class RTHException(Exception):
     pass
 
@@ -45,8 +60,9 @@ class UdaParams:
         self.pStart = None
         self.pEnd = None
         self.extSamples = None
+        self.retType = None
 
-    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples):
+    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples, ret_type=None):
         self.varname = varname
         self.nbps = nbps
         self.decType = dec_type
@@ -55,6 +71,7 @@ class UdaParams:
         self.pulse = pulse
         self.tsFormat = ts_format
         self.extSamples = ext_samples
+        self.retType = ret_type
 
 
 # class to interface with data source - here UDA
@@ -65,6 +82,8 @@ class UdaAccess(DataSource):
         super().__init__(name, config)
         self.host = config.get("host")
         self.port = config.get("port")
+        # Optional alternative UDA server used only when exporting data (shares the same port).
+        self.uda_for_export = config.get("uda_for_export")
 
         self.rtu = config.get("rturl")
         self.rtheaders = config.get("rtheaders")
@@ -72,6 +91,8 @@ class UdaAccess(DataSource):
         self.errcode = 0
         self.errdesc = ""
         self.UCR = None
+        self.UCW = None
+        self._write_capable = False
         self.connected = False
         self.__NO_DATA_FOUND = ["Requested data cannot be located", "data cannot be retrieved",
                                 "could not retrieve data", "Incorrect time"]
@@ -85,6 +106,18 @@ class UdaAccess(DataSource):
         self.connected = self.UCR.isConnected()
         self.errdesc = self.UCR.getErrorMsg()
         self.errcode = self.UCR.getErrorCode()
+
+        # Try the writer client too. Failure here must never block reading;
+        # it only disables the optional pulse-creation feature.
+        if _UDA_WRITER_AVAILABLE and self.connected:
+            try:
+                self.UCW = ucw.UdaClientWriterUser(self.host, self.port)
+                self._write_capable = True
+            except Exception as exc:
+                logger.warning("UDA writer client unavailable on %s:%s -> %s",
+                               self.host, self.port, exc)
+                self.UCW = None
+                self._write_capable = False
 
         self.set_rt_handler()
 
@@ -131,8 +164,10 @@ class UdaAccess(DataSource):
                     raise RTHException("Invalid entry except 2 elements")
                 myhd[entry[0]] = entry[1]
         try:
+            # We are the UDA access: RTStreamer resolves stream units via our
+            # get_unit (daHandler is never assigned).
             self.RTHandler = RTStreamer(url=self.rtu, headers=myhd, auth=self.rta,
-                                        uda_a=self.daHandler)
+                                        uda_a=self)
             self.rterrcode = 0
             self.rtStatus = "INITIALISED"
             logger.debug("real time setRTHandler OK %s head=%s auth=%s ", self.rtu, myhd, self.rta)
@@ -175,9 +210,10 @@ class UdaAccess(DataSource):
         ts_e = kwargs.get("tsE", "0")
         ts_en = self.convert_to_nanos(ts_e)
         ext_samples = kwargs.get("extremities", False)
+        ret_type = kwargs.get("retType", None)
         ts_format = kwargs.get("tsFormat", "absolute")
         logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
-        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples)
+        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples, ret_type)
         return uda_p
 
     def check_to_add_in_cache(self, uda_p):
@@ -217,7 +253,22 @@ class UdaAccess(DataSource):
         else:
             data_obj = self.__fetch_data_x(query)
 
+        # Propagate resolved pulse number only when 0/-1
+        if getattr(uda_p, '_pulse_resolved', False):
+            data_obj.resolved_pulse = uda_p.pulse
+
         if data_obj.errcode == -1 or not uda_p.extSamples:
+            return data_obj
+
+        # UDA reports an interval with no samples as "no data"; with extremities on it must
+        # still render as a flat line held at the last known value. Fetch the preceding sample
+        # and span it across [startT, endT] instead of leaving the plot empty.
+        if data_obj.errcode == -3 and uda_p.startT is not None and uda_p.endT is not None:
+            held = self.__last_value_before(query, uda_p)
+            if held is not None:
+                data_obj.xdata = np.array([uda_p.startT, uda_p.endT])
+                data_obj.ydata = np.array([held, held])
+                data_obj.set_err(0, "OK")
             return data_obj
 
         # Ensure the data does not exceed the pulse duration. Clamp extremity points that fall
@@ -288,28 +339,57 @@ class UdaAccess(DataSource):
         else:
             x_data = data_obj.xdata
             y_data = data_obj.ydata
+            # startT/endT are kept as strings by convert_to_nanos so they can be
+            # interpolated into UDA queries; cast to int for numeric comparison
+            # against the uint64 xdata array.
+            start_t = int(uda_p.startT)
+            end_t = int(uda_p.endT)
 
-            if uda_p.startT not in x_data:
-                x_idx_start = sum(x_data < uda_p.startT) - 1
+            if start_t not in x_data:
+                x_idx_start = sum(x_data < start_t) - 1
                 if x_idx_start != -1:
                     y_value = y_data[x_idx_start]
                     x_data = x_data[x_idx_start + 1:]
                     y_data = y_data[x_idx_start + 1:]
-                    x_data = np.insert(x_data, 0, uda_p.startT)
+                    x_data = np.insert(x_data, 0, start_t)
                     y_data = np.insert(y_data, 0, y_value)
 
-            if uda_p.endT not in data_obj.xdata:
-                x_idx_end = sum(x_data < uda_p.endT) - 1
+            if end_t not in data_obj.xdata:
+                x_idx_end = sum(x_data < end_t) - 1
                 if x_idx_end != -1:
                     y_value = y_data[x_idx_end]
                     x_data = x_data[:x_idx_end + 1]
                     y_data = y_data[:x_idx_end + 1]
-                    x_data = np.append(x_data, uda_p.endT)
+                    x_data = np.append(x_data, end_t)
                     y_data = np.append(y_data, y_value)
 
             data_obj.xdata = x_data
             data_obj.ydata = y_data
         return data_obj
+
+    def __last_value_before(self, query, uda_p):
+        """Y value of the last archived sample before ``startT`` (None if there is none).
+
+        Lets the extremities option hold a flat line across an interval that has no samples of
+        its own instead of leaving the plot empty.
+        """
+        if uda_p.decType is not None and f"decType={uda_p.decType}" in query:
+            pre_query = query.replace(f"decType={uda_p.decType}", "decType=last")
+        elif "decType=" not in query:
+            pre_query = f"{query},decType=last"
+        else:
+            pre_query = query
+        # Look back from the archive start up to startT, asking for a single last-decimated
+        # sample (cheap regardless of how far back it is); extSamples is dropped so no point
+        # past startT is appended.
+        pre_query = pre_query.replace(f"decSamples={uda_p.nbps}", "decSamples=1")
+        pre_query = pre_query.replace(f"startTime={uda_p.startT}", "startTime=0")
+        pre_query = pre_query.replace(f"endTime={uda_p.endT}", f"endTime={uda_p.startT}")
+        pre_query = pre_query.replace(f",extSamples={uda_p.extSamples}", "")
+        dobj = self.__fetch_data_x(pre_query)
+        if dobj.errcode == 0 and dobj.ydata is not None and len(dobj.ydata) > 0:
+            return dobj.ydata[-1]
+        return None
 
     @staticmethod
     def max_value_index_less_than(arr, num):
@@ -347,6 +427,23 @@ class UdaAccess(DataSource):
                 unitval = i.value
                 break
         return unitval
+
+    def get_var_enum(self, varname, tsmp='-1'):
+        """Ordered tuple of enumerator labels for ``varname`` (list position is
+        the numeric index), or None when the variable is not enumerated. Lets
+        the streamer map state labels from the feed back to their index."""
+        if varname is None:
+            return None
+        if not self.connected:
+            self.connect()
+        try:
+            labels = self.UCR.getEnumLabels(varname, str(tsmp))
+        except Exception:
+            logger.warning(f"Could not fetch enum labels for {varname}")
+            return None
+        if self.UCR.getErrorCode() != 0 or not labels:
+            return None
+        return tuple(labels)
 
     def get_pulse_info(self, pulse_id="0"):
         logger.debug(f"requires a pulse {pulse_id} and the cache {self.pulses_cache}")
@@ -461,16 +558,19 @@ class UdaAccess(DataSource):
 
         return cbs_dict
 
-    def get_var_list(self, pattern='.*') -> List[str]:
-        var_list = self.UCR.getVariableList(pattern)
+    def get_var_list(self, pattern='.*', field=None) -> List[str]:
+        if field:
+            var_list = self.UCR.getVariableListWithFieldXX(field, pattern)
+        else:
+            var_list = self.UCR.getVariableList(pattern)
         if self.UCR.getErrorCode() != 0:
             logger.error(f"Response error. Error: {self.UCR.getErrorCode()} {self.UCR.getErrorMsg()}")
             return []
 
         return var_list
 
-    def get_var_dict(self, pattern='.*', path=None) -> dict:
-        var_list = self.get_var_list(pattern)
+    def get_var_dict(self, pattern='.*', path=None, field=None) -> dict:
+        var_list = self.get_var_list(pattern, field=field)
         if path:
             var_dict = self.parse_vars_to_dict(var_list, path)
         else:
@@ -514,9 +614,37 @@ class UdaAccess(DataSource):
             query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
                       f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
-            if uda_p.pulse == "0":
-                uda_p.pulse = self.UCR.getLastPulse()
-                logger.debug("LAST PULSE: %s", uda_p.pulse)
+            # Resolve special pulse numbers (0 = last, -N = N-th previous)
+            pulse_parts = uda_p.pulse.rsplit("/", 1)
+            pulse_num = pulse_parts[-1] if len(pulse_parts) > 1 else uda_p.pulse
+            pulse_prefix = pulse_parts[0] + "/" if len(pulse_parts) > 1 else ""
+
+            try:
+                n = int(pulse_num)
+            except ValueError:
+                n = 1  # non-numeric → not a relative pulse
+
+            if n <= 0:
+                uda_p._pulse_resolved = True
+                # Pulses are sequential: last_pulse + n gives the N-th previous pulse
+                search_pattern = pulse_prefix + "*" if pulse_prefix else ""
+                last_pulse = self.UCR.getLastPulse2(search_pattern, "")
+                if self.UCR.isEmptyPulse2(last_pulse):
+                    logger.warning(f"No pulses found in category '{pulse_prefix or '*'}'")
+                else:
+                    last_str = str(last_pulse)
+                    last_num_str = last_str.rsplit("/", 1)[-1] if "/" in last_str else last_str
+                    try:
+                        last_num = int(last_num_str)
+                        real_num = last_num + n  # n is 0, -1, -2, ..., -N
+                        if real_num <= 0:
+                            logger.warning(f"Requested pulse '{pulse_num}' is before the earliest "
+                                           f"available pulse in category '{pulse_prefix or '*'}'")
+                        else:
+                            uda_p.pulse = f"{pulse_prefix}{real_num}" if pulse_prefix else str(real_num)
+                            logger.debug("RESOLVED PULSE (%s): %s", pulse_num, uda_p.pulse)
+                    except ValueError:
+                        logger.warning(f"Could not parse last pulse '{last_str}' as integer")
             # we need to check if it is an-going pulse to not use the cache...
             if uda_p.pulse not in self.pulses_cache.keys():
                 pulse_i = self.get_pulse_info(uda_p.pulse)
@@ -564,11 +692,136 @@ class UdaAccess(DataSource):
             query = query1 + f",decType={uda_p.decType}"
         else:
             query = query1
+        if uda_p.retType is not None:
+            query += f",retType={uda_p.retType}"
         return query
 
     def clear_cache(self):
         self.access_cache.clear()
         self.pulses_cache.clear()
+
+    # --- Pulse creation (optional, feature-gated on uda_client_writer) ---
+
+    def is_write_capable(self) -> bool:
+        return self._write_capable and self.UCW is not None
+
+    def get_pulse_categories(self) -> List[str]:
+        # Empty list when reader is missing or server unreachable; the
+        # dialog handles that gracefully.
+        if self.UCR is None:
+            return []
+        try:
+            categories = self.UCR.getPulseCategories()
+        except Exception:
+            logger.exception("getPulseCategories failed on %s:%s", self.host, self.port)
+            return []
+        if self.UCR.getErrorCode() != 0:
+            logger.warning("getPulseCategories: %s", self.UCR.getErrorMsg())
+            return []
+        return [str(c) for c in (categories or [])]
+
+    @staticmethod
+    def _is_valid_pulse_id(pulse_id) -> bool:
+        # addPulse returns ":/" (or similar empty marker) on failure.
+        if pulse_id is None:
+            return False
+        s = str(pulse_id).strip()
+        return bool(s) and s != ":/" and ":" in s and "/" in s
+
+    @staticmethod
+    def _quote_description(description: str) -> str:
+        """Wrap the description in double quotes for the writer's query.
+
+        The query syntax is comma-separated, so an unquoted comma or space
+        makes addPulse fail; quoted it passes through, and the server strips
+        the quotes when storing, so callers never see them back. A description
+        already wrapped in quotes is sent as is.
+        """
+        if (len(description) >= 2 and description.startswith('"')
+                and description.endswith('"')):
+            return description
+        return f'"{description}"'
+
+    def _inject_pulse(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
+                      status: str, description: str):
+        # injectPulse accepts raw nanosecond strings; converting through
+        # convertTimeNsToISO dropped the sub-second fraction, which made it
+        # impossible to create pulses shorter than one second.
+        return self.UCW.injectPulse(pulse_id, str(int(ts_start_ns)),
+                                    str(int(ts_end_ns)), status,
+                                    self._quote_description(description))
+
+    def _pulse_exists(self, pulse_id: str) -> bool:
+        try:
+            return self.get_pulse_info(pulse_id) is not None
+        except Exception:
+            logger.exception("existence check failed for %s", pulse_id)
+            return False
+
+    def add_pulse_info(self, scope: str, ts_start_ns: int, ts_end_ns: int,
+                       status: str, description: str,
+                       pulse_number=None) -> dict:
+        """Create a new pulse and inject its data.
+
+        Returns ``{ok, pulse_id?, raw?, error?}``. Timestamps are in
+        nanoseconds.
+
+        Without ``pulse_number`` the server numbers the pulse itself
+        (``addPulse``); with it the pulse is written at
+        ``scope/pulse_number`` after checking the id is free.
+        """
+        if not self.is_write_capable():
+            return {"ok": False, "error": "uda_client_writer is not installed "
+                                          "on this host; pulse creation is disabled."}
+        if len(description) > 200:
+            return {"ok": False, "error": "description exceeds 200 characters"}
+        try:
+            if pulse_number is not None:
+                pulse_id = f"{scope}/{pulse_number}"
+                if not self._is_valid_pulse_id(pulse_id):
+                    return {"ok": False, "error": f"invalid pulse id {pulse_id!r}"}
+                if self._pulse_exists(pulse_id):
+                    return {"ok": False,
+                            "error": f"pulse {pulse_id} already exists; "
+                                     "pick another number or leave it empty "
+                                     "to number it automatically"}
+                raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                         status, description)
+                # Re-read to confirm the server really created the pulse.
+                if not self._pulse_exists(pulse_id):
+                    return {"ok": False,
+                            "error": f"server did not create pulse {pulse_id}; "
+                                     "leave the pulse number empty to number "
+                                     "it automatically"}
+                return {"ok": True, "pulse_id": pulse_id, "raw": raw}
+            pulse_id = self.UCW.addPulse(scope, self._quote_description(description))
+            if not self._is_valid_pulse_id(pulse_id):
+                return {"ok": False,
+                        "error": f"addPulse returned an empty pulse for scope {scope!r}"}
+            raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                     status, description)
+            return {"ok": True, "pulse_id": pulse_id, "raw": raw}
+        except Exception as exc:
+            logger.exception("addPulse/injectPulse failed on %s:%s", self.host, self.port)
+            return {"ok": False, "error": str(exc)}
+
+    def update_pulse_info(self, pulse_id: str, ts_start_ns: int, ts_end_ns: int,
+                          status: str, description: str) -> dict:
+        """Update an existing pulse via injectPulse. Returns ``{ok, raw?, error?}``."""
+        if not self.is_write_capable():
+            return {"ok": False, "error": "uda_client_writer is not installed "
+                                          "on this host; pulse update is disabled."}
+        if len(description) > 200:
+            return {"ok": False, "error": "description exceeds 200 characters"}
+        if not self._is_valid_pulse_id(pulse_id):
+            return {"ok": False, "error": f"invalid pulse id {pulse_id!r}"}
+        try:
+            raw = self._inject_pulse(pulse_id, ts_start_ns, ts_end_ns,
+                                     status, description)
+            return {"ok": True, "raw": raw}
+        except Exception as exc:
+            logger.exception("injectPulse failed on %s:%s", self.host, self.port)
+            return {"ok": False, "error": str(exc)}
 
     @cachedmethod(operator.attrgetter('access_cache'))
     def __fetch_data_with_cache(self, query):
@@ -604,7 +857,7 @@ class UdaAccess(DataSource):
         # self.dataR.clearData()
         dobj.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
                    self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
-                   self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
+                   self.UCR.getLabelY(handle), "Time", self.UCR.getUnitsY(handle),
                    self.UCR.getRank(handle))
 
         if dobj.ytype == dataCommon.DataType.DA_TYPE_STRING:
@@ -660,7 +913,7 @@ class UdaAccess(DataSource):
         # self.dataR.clearData()
         d_env.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
                     self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
-                    self.UCR.getLabelY(handle), self.UCR.getUnitsX(handle), self.UCR.getUnitsY(handle),
+                    self.UCR.getLabelY(handle), "Time", self.UCR.getUnitsY(handle),
                     self.UCR.getRank(handle))
 
         data = self.UCR.getDataNativeRank(handle)
@@ -684,6 +937,23 @@ class UdaAccess(DataSource):
         d_env.set_err(0, "OK")
         return d_env
 
+    def get_archive_window(self, **kwargs):
+        """Return raw ``DataObj`` up to MAX_RAW_POINTS_PER_SIGNAL, or a
+        ``DataEnvelope`` when UDA reports the request exceeds its limit. The
+        fallback envelope keeps ``env_nbp`` buckets when given, so callers with
+        a per-signal point budget are not decimated below it."""
+        env_nbp = kwargs.pop('env_nbp', None)
+        kwargs.setdefault('nbp', MAX_RAW_POINTS_PER_SIGNAL)
+        dobj = self.get_data(**kwargs)
+
+        too_many = ('Number of samples in reply exceeds available limit. '
+                    'Reduce request interval, use decimation or read data by chunks.')
+        if dobj.errcode != 0 and dobj.errdesc == too_many:
+            kwargs['nbp'] = env_nbp or ENVELOPE_TARGET_POINTS
+            return self.get_envelope(**kwargs)
+
+        return dobj
+
     def get_envelope(self, **kwargs):
         kwargs['decType'] = "env"
 
@@ -701,6 +971,8 @@ class UdaAccess(DataSource):
             d_env = self.__fetch_envelope_with_cache(query)
         else:
             d_env = self.__fetch_envelope(query)
+        if getattr(uda_p, '_pulse_resolved', False):
+            d_env.resolved_pulse = uda_p.pulse
         logger.debug("getEnveloppe exiting pulse does exist ")
         return d_env
 
