@@ -32,6 +32,7 @@ class DataSource(ABC):
         self._hmi_vars = None
         # Stream config
         self.rtStatus = "UNEXISTING"
+        self._rt_start_cancelled = False
         self.errcode = 0
         self.rterrcode = 0
         self.errdesc = ""
@@ -201,39 +202,43 @@ class DataSource(ABC):
         return True
 
     def start_subscription(self, **kwargs):
-        for _ in range(20):  # Time to update real status if it is STARTED (2 s)
-            if self.rtStatus != "STARTED":
+        if self.rtStatus == "UNEXISTING":
+            logger.warning('ignored starting subscription: no real time handler')
+            return
+        # The receiver thread completes a stop on its own, so the previous
+        # subscription may still be winding down when the next start
+        # arrives; let it settle, unless a stop cancels this start meanwhile.
+        self._rt_start_cancelled = False
+        for _ in range(100):  # 10 s
+            if self._rt_start_cancelled or self.RTHandler.get_status() != "STOPPING":
                 break
             time.sleep(0.1)
-        else:
-            logger.warning('Started subscription with status STARTED')
+        rt_status = self.RTHandler.get_status()
+        if self._rt_start_cancelled or rt_status in ("STARTING", "STARTED", "STOPPING"):
+            logger.warning(f'ignored starting subscription: RT handler is {rt_status}')
+            return
+        try:
+            self.rtStatus = "STARTED"
+            logger.debug("startSubscription ")
+            newparams = kwargs.get("params")
 
-        if self.rtStatus in ["STARTED", "STOPPED"]:
-            for _ in range(60):  # Wait for real status (60 s)
-                if self.rtStatus == self.RTHandler.get_status():
-                    break
-                logger.debug('Waiting status sync for RTHandler')
-                time.sleep(1)
-            else:
-                logger.warning('Subscription and RT handler have different status')
-
-        if self.rtStatus in ["INITIALISED", "STOPPED"]:
-            try:
-                self.rtStatus = "STARTED"
-                logger.debug("startSubscription ")
-                newparams = kwargs.get("params")
-
-                kwargs["origparams"] = copy.deepcopy(kwargs.get("params"))
-                kwargs["params"] = newparams
-                logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
-                self.RTHandler.start_subscription(**kwargs)
-            except RTStreamerException:
-                self.rtStatus = "ERROR"
-                self.rterrcode = -2
+            kwargs["origparams"] = copy.deepcopy(kwargs.get("params"))
+            kwargs["params"] = newparams
+            logger.debug("start sub with params=%s and origparams=%s", kwargs["params"], kwargs["origparams"])
+            self.RTHandler.start_subscription(**kwargs)
+        except RTStreamerException:
+            self.rtStatus = "ERROR"
+            self.rterrcode = -2
 
     def stop_subscription(self):
         logger.debug("stopSubscription Y %s ", self.rtStatus)
-        if self.rtStatus == "STARTED":
+        if self.rtStatus == "UNEXISTING":
+            return
+        self._rt_start_cancelled = True
+        # Stop whenever the handler is running, whatever the mirrored status
+        # says: a start that failed once the handler had connected leaves
+        # rtStatus in ERROR with a live subscription behind it.
+        if self.rtStatus == "STARTED" or self.RTHandler.get_status() in ("STARTING", "STARTED"):
             try:
                 logger.debug("stopSubscription Z ")
                 self.RTHandler.stop_subscription()
