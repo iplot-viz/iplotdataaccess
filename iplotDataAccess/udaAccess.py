@@ -79,7 +79,7 @@ class UdaParams:
 class UdaAccess(DataSource):
     source_type = "CODAC_UDA"
     # Data queries kept in memory when the data source config gives no cache_size.
-    DEFAULT_CACHE_SIZE = 100
+    DEFAULT_CACHE_SIZE = 300
     # The dot only reaches the tree of the test archives (a single production
     # variable carries one), so it can join the dash in the default layout
     # without altering the production tree. The underscore is far more common
