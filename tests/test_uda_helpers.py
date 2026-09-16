@@ -185,6 +185,19 @@ class TestParseVarsToDict:
         }
 
 
+class TestCacheSizeConfig:
+
+    def test_defaults_to_one_hundred_queries(self):
+        assert UdaAccess("test", {}).access_cache.maxsize == 100
+
+    def test_configured_size_drives_the_cache(self):
+        assert UdaAccess("test", {"cache_size": 500}).access_cache.maxsize == 500
+
+    def test_unusable_values_fall_back(self):
+        assert UdaAccess("test", {"cache_size": "many"}).access_cache.maxsize == 100
+        assert UdaAccess("test", {"cache_size": 0}).access_cache.maxsize == 1
+
+
 class TestVariableGroupLimitConfig:
 
     def _var_dict(self, config, monkeypatch):
