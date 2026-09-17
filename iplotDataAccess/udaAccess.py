@@ -78,6 +78,8 @@ class UdaParams:
 # class to interface with data source - here UDA
 class UdaAccess(DataSource):
     source_type = "CODAC_UDA"
+    # Data queries kept in memory when the data source config gives no cache_size.
+    DEFAULT_CACHE_SIZE = 300
     # The dot only reaches the tree of the test archives (a single production
     # variable carries one), so it can join the dash in the default layout
     # without altering the production tree. The underscore is far more common
@@ -106,7 +108,7 @@ class UdaAccess(DataSource):
         self.connected = False
         self.__NO_DATA_FOUND = ["Requested data cannot be located", "data cannot be retrieved",
                                 "could not retrieve data", "Incorrect time"]
-        self.access_cache = ct.LRUCache(maxsize=100)
+        self.access_cache = ct.LRUCache(maxsize=self._cache_size(config))
         self.pulses_cache = {}
 
     def connect(self) -> bool:
@@ -225,6 +227,13 @@ class UdaAccess(DataSource):
         logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
         uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples, ret_type)
         return uda_p
+
+    @classmethod
+    def _cache_size(cls, config: dict) -> int:
+        try:
+            return max(1, int(config.get("cache_size", cls.DEFAULT_CACHE_SIZE)))
+        except (TypeError, ValueError):
+            return cls.DEFAULT_CACHE_SIZE
 
     def check_to_add_in_cache(self, uda_p):
         if uda_p.tsFormat == "relative" and uda_p.pulse is not None:
