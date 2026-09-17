@@ -18,15 +18,15 @@ Install the package from PyPi:
 
 ### Installation with optional dependencies
 
-You can also install optional dependencies (e.g. imaspy and test):
+You can also install optional dependencies (e.g. imas and test):
 
   ```bash
-  pip install "iplotDataAccess[imaspy, test]"
+  pip install "iplotDataAccess[imas, test]"
   ```
 
 #### List of optional dependencies
 
-- ```imaspy```:  installs required packages.
+- ```imas```:  installs required packages.
 - ```test```: installs required packages to run the tests with pytest.
 
 ### Usage Example
