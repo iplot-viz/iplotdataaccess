@@ -410,3 +410,94 @@ class TestStopUnblocksReceiver:
             with pytest.raises(RTStreamerException):
                 rt.start_subscription(params=["VAR-A"], origparams=["VAR-A"])
             assert rt.get_status() == "ERROR"
+
+
+class TestReadTimeout:
+    """A network change leaves the old connection blackholed, with no FIN or
+    RST to end the blocking read: silence longer than the read timeout must
+    surface as a connection loss."""
+
+    def test_default_read_timeout_outlasts_one_missed_heartbeat(self, monkeypatch):
+        from iplotDataAccess import realTimeStreamer as rts_mod
+
+        monkeypatch.delenv("IPLOT_STREAM_READ_TIMEOUT", raising=False)
+        assert rts_mod._read_timeout_s() == 60.0
+
+    @pytest.mark.parametrize("value, expected", [("90", 90.0), ("1", 5.0), ("abc", 60.0)])
+    def test_read_timeout_follows_the_environment(self, monkeypatch, value, expected):
+        from iplotDataAccess import realTimeStreamer as rts_mod
+
+        monkeypatch.setenv("IPLOT_STREAM_READ_TIMEOUT", value)
+        assert rts_mod._read_timeout_s() == expected
+
+    def test_request_carries_connect_and_read_timeouts(self, monkeypatch):
+        from iplotDataAccess import realTimeStreamer as rts_mod
+
+        captured = {}
+
+        def fake_get(url, stream=None, headers=None, timeout=None):
+            captured["timeout"] = timeout
+            return SimpleNamespace(close=lambda: None, status_code=200)
+
+        class FakeClient:
+            def __init__(self, response):
+                pass
+
+            def events(self):
+                return iter(())
+
+            def close(self):
+                pass
+
+        monkeypatch.delenv("IPLOT_STREAM_READ_TIMEOUT", raising=False)
+        monkeypatch.setattr(rts_mod.requests, "get", fake_get)
+        monkeypatch.setattr(rts_mod.sseclient, "SSEClient", FakeClient)
+
+        rt = RTStreamer(url="http://x/sse", uda_a=_UdaUnitStub({"VAR_A": "V"}))
+        rt.start_subscription(params=["VAR_A"], origparams=["VAR_A"])
+        assert captured["timeout"] == (10.0, 60.0)
+
+    def test_requests_error_while_receiving_is_reported_and_closes_the_connection(self, monkeypatch):
+        from iplotDataAccess import realTimeStreamer as rts_mod
+
+        closed = []
+
+        def fake_get(url, stream=None, headers=None, timeout=None):
+            return SimpleNamespace(close=lambda: closed.append("response"), status_code=200)
+
+        class FakeClient:
+            def __init__(self, response):
+                pass
+
+            def events(self):
+                yield SimpleNamespace(data="VAR_A 0 D 1 1631513472231 0.5")
+                # What requests raises when the read times out: its own
+                # ConnectionError, an OSError but not the builtin one.
+                raise rts_mod.requests.exceptions.ConnectionError("Read timed out.")
+
+            def close(self):
+                closed.append("client")
+
+        monkeypatch.setattr(rts_mod.requests, "get", fake_get)
+        monkeypatch.setattr(rts_mod.sseclient, "SSEClient", FakeClient)
+
+        rt = RTStreamer(url="http://x/sse", uda_a=_UdaUnitStub({"VAR_A": "V"}))
+        with pytest.raises(RTStreamerException):
+            rt.start_subscription(params=["VAR_A"], origparams=["VAR_A"])
+        assert rt.get_status() == "ERROR"
+        assert closed == ["client", "response"]
+
+    def test_silence_longer_than_the_read_timeout_is_a_connection_loss(self, quiet_feed, monkeypatch):
+        from iplotDataAccess import realTimeStreamer as rts_mod
+
+        monkeypatch.setattr(rts_mod, "_read_timeout_s", lambda: 0.5)
+        rt = RTStreamer(url=quiet_feed.url, headers={"REMOTE_USER": "u", "User-Agent": "py"})
+        # The feed answers, sends its stale sample and then goes quiet for far
+        # longer than the read timeout, exactly like a blackholed connection.
+        for _ in range(2):
+            started = time.monotonic()
+            with pytest.raises(RTStreamerException):
+                rt.start_subscription(params=["VAR-A"], origparams=["VAR-A"])
+            assert time.monotonic() - started < 5.0
+            assert rt.get_status() == "ERROR"
+        assert quiet_feed.requests == 2
