@@ -14,6 +14,8 @@ logger = setupLogger.get_logger(__name__)
 DS_CODAC_TYPE = "CODAC_UDA"
 DS_IMAS_TYPE = "IMAS"
 DS_CSV_TYPE = "CSV"
+# Old name, for code written against iplotDataAccess 1.5.2 and earlier.
+DS_IMASPY_TYPE = DS_IMAS_TYPE
 
 class RTHException(Exception):
     pass

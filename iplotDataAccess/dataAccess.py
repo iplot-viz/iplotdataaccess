@@ -70,6 +70,11 @@ class DataAccess:
                 return False
             for ds_name, ds_config in config.items():
                 ds_type = ds_config.get("type")
+                if ds_type == "IMASPY":
+                    # Configuration files written before the IMAS type got its name.
+                    logger.warning(f"DataSource '{ds_name}': type IMASPY is now called {DS_IMAS_TYPE}, "
+                                   f"please update {dspath}")
+                    ds_type = DS_IMAS_TYPE
                 ds_class = self.proto.get(ds_type)
                 if not ds_class:
                     logger.warning(f"DataSource '{ds_name}' has an unsupported data source type-> {ds_type}")
