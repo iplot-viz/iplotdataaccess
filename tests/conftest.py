@@ -1,8 +1,62 @@
+import hashlib
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+# Public IMAS-Data-Dictionary sample (core-edge JINTRAC simulation, ITER #53298
+# seq 1, converted to DD 4.0.0) used to exercise reading a pulse identified by a
+# plain netCDF file path. See https://zenodo.org/records/17062700
+ZENODO_NETCDF_URL = (
+    "https://zenodo.org/records/17062700/files/iter_scenario_53298_seq1_DD4.nc"
+)
+ZENODO_NETCDF_SHA256 = (
+    "6837a0c0f56f8feea880fe4c89aae95397de237cfca0033f0b434c26a32c4f8e"
+)
+
+
+@pytest.fixture(scope="session")
+def zenodo_netcdf_pulse():
+    """Download (and cache) the sample netCDF pulse file used by netCDF-path tests.
+
+    The file is cached in a persistent local directory so repeated local/CI runs
+    do not re-download it. Skips the test if the file cannot be retrieved (e.g. no
+    network access) rather than failing.
+    """
+    import requests
+
+    cache_dir = Path(
+        os.environ.get("IPLOT_TEST_DATA_CACHE", Path.home() / ".cache" / "iplotdataaccess-tests")
+    )
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    file_path = cache_dir / "iter_scenario_53298_seq1_DD4.nc"
+
+    def _sha256(path: Path) -> str:
+        h = hashlib.sha256()
+        with open(path, "rb") as fp:
+            for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    if not file_path.exists() or _sha256(file_path) != ZENODO_NETCDF_SHA256:
+        try:
+            response = requests.get(ZENODO_NETCDF_URL, timeout=60)
+            response.raise_for_status()
+        except Exception as e:
+            pytest.skip(f"Could not download test data from Zenodo: {e}")
+
+        tmp_path = file_path.with_suffix(".nc.tmp")
+        tmp_path.write_bytes(response.content)
+
+        if _sha256(tmp_path) != ZENODO_NETCDF_SHA256:
+            tmp_path.unlink(missing_ok=True)
+            pytest.skip("Downloaded test data from Zenodo failed checksum verification")
+
+        tmp_path.replace(file_path)
+
+    return str(file_path)
 
 
 @pytest.fixture
