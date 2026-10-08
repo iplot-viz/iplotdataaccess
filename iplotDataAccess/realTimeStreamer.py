@@ -1,3 +1,7 @@
+import os
+import socket
+import sys
+import threading
 import numpy as np
 from enum import Enum
 from collections import deque
@@ -28,6 +32,27 @@ class RTStreamerException(Exception):
     pass
 
 
+# Socket timeouts for the SSE subscription. A network change (corporate LAN
+# to wifi/VPN, suspend/resume, VPN re-key) leaves the old TCP connection
+# blackholed: the peer never sends a FIN or a RST, so a blocking read on it
+# never returns. With no read timeout the receiver stays parked forever, the
+# subscription stays "STARTED" and nothing anywhere can tell that the feed
+# is dead. The server emits heartbeat events, so silence longer than the
+# heartbeat period means the connection is gone: time the read out and let
+# the normal error path report it. Set IPLOT_STREAM_READ_TIMEOUT just above
+# the feed's heartbeat period.
+_CONNECT_TIMEOUT_S = 10.0
+_DEFAULT_READ_TIMEOUT_S = 60.0
+
+
+def _read_timeout_s() -> float:
+    try:
+        return max(5.0, float(os.environ.get("IPLOT_STREAM_READ_TIMEOUT",
+                                             _DEFAULT_READ_TIMEOUT_S)))
+    except (TypeError, ValueError):
+        return _DEFAULT_READ_TIMEOUT_S
+
+
 class ProtoHeader(Enum):
     VARNAME = 0
     TIME_DT = 1
@@ -42,6 +67,9 @@ class VarType(Enum):
 
 
 class RTStreamer:
+    # States in which a subscription is being set up or served.
+    _RUNNING = ("STARTING", "STARTED")
+
     def __init__(self, url=None, headers=None, auth=None, uda_a=None):
         self.urlX = url or 'https://controls.iter.org/dashboard/backend/sse'
         self.params = None
@@ -53,6 +81,11 @@ class RTStreamer:
         self.response = None
         self.client = None
         self.__status = "INIT"
+        # Status transitions are shared between the receiver thread and the
+        # thread issuing the stop. The generation counter lets a receiver
+        # superseded by a newer subscription leave the shared state alone.
+        self.__lock = threading.Lock()
+        self.__generation = 0
         self.__units = {}
         self.__enums = {}
         # self.headers = {'User-Agent': 'it_script_basic'}
@@ -245,48 +278,99 @@ class RTStreamer:
             origparams = []
         if params is None:
             params = []
-        if self.__status == "STARTED":
-            logger.error("Subscription is already started, needs to be stopped first or launch a new RTStreamer")
-            raise RTStreamerException(" Streamer already started")
-        self.__set_params(params)
-        url1 = self.urlX + '?' + self.params
-        logger.debug("starting sub header=%s and uri=%s", self.headers, url1)
-
-        # response = requests.get(url=url1, stream=True, headers=self.headers, auth=self.auth, timeout=None)
+        with self.__lock:
+            if self.__status in self._RUNNING:
+                logger.error("Subscription is already started, needs to be stopped first or launch a new RTStreamer")
+                raise RTStreamerException(" Streamer already started")
+            # Setting up takes real time (one metadata request per variable,
+            # then the connection) and a stop requested meanwhile must still
+            # win, so the setup is a state of its own.
+            self.__status = "STARTING"
+            self.__generation += 1
+            generation = self.__generation
         try:
-            self.response = requests.get(url=url1, stream=True, headers=self.headers, timeout=None)
-        except ConnectionError as ce:
-            logger.error("got connection error %s with errcode = %d ", ce, self.response.status_code)
-            self.__status = "ERROR"
-            raise RTStreamerException(" could not connect - see log for more details")
-        # print(response.headers)
+            self.__set_params(params)
+            url1 = self.urlX + '?' + self.params
+            logger.debug("starting sub header=%s and uri=%s", self.headers, url1)
+            response = requests.get(url=url1, stream=True, headers=self.headers,
+                                    timeout=(_CONNECT_TIMEOUT_S, _read_timeout_s()))
+        except Exception as exc:
+            with self.__lock:
+                if generation != self.__generation:
+                    return
+                if self.__status == "STOPPING":
+                    self.__status = "STOPPED"
+                    return
+                self.__status = "ERROR"
+            logger.error("could not start the subscription: %s", exc)
+            raise RTStreamerException(" could not connect - see log for more details") from exc
         self.origparams = origparams
         paramsT = params
         logger.debug(" origparm %s  param=%s ", self.origparams, self.params)
-        self.client = sseclient.SSEClient(self.response)
-        self.__status = "STARTED"
+        client = sseclient.SSEClient(response)
+        with self.__lock:
+            if generation != self.__generation:
+                self.__close(client, response)
+                return
+            self.response = response
+            self.client = client
+            stopped = self.__status == "STOPPING"
+            if not stopped:
+                self.__status = "STARTED"
+        if stopped:
+            self.__finish(generation, client, response)
+            return
         try:
-            for event in self.client.events():
+            for event in client.events():
                 logger.debug(f'found new data {event.data}')
-                if self.__status == "STOPPING":
+                if self.__status == "STOPPING" or generation != self.__generation:
                     logger.info("receiving stop request")
                     break
                 self.__parse_data(event.data, params=paramsT)
-        except ConnectionError as _:
-            self.__status = "ERROR"
-            raise RTStreamerException(" connection lost - see log for more details")
-        except Exception:
-            # stop_subscription() closes the response to unblock this loop;
-            # the resulting read error is a normal stop, not a failure.
-            if self.__status != "STOPPING":
-                self.__status = "ERROR"
+        except Exception as exc:
+            # stop_subscription() shuts the connection down to unblock this
+            # loop; whatever the read raises then is a normal stop, not a
+            # failure.
+            with self.__lock:
+                superseded = generation != self.__generation
+                failed = not superseded and self.__status != "STOPPING"
+                if failed:
+                    self.__status = "ERROR"
+            if superseded:
+                self.__close(client, response)
+                return
+            if failed:
+                # Release the socket before reporting: a caller that
+                # resubscribes would otherwise leak one connection per drop.
+                self.__close(client, response)
+                # requests wraps read timeouts and resets in its own
+                # ConnectionError/Timeout, which are RequestException (an
+                # OSError) but NOT builtin ConnectionError -- so testing the
+                # builtin alone never matched the case this handles.
+                if isinstance(exc, (ConnectionError, OSError)):
+                    logger.warning("stream connection lost: %s", exc)
+                    raise RTStreamerException(" connection lost - see log for more details") from exc
                 raise
-        self.client.close()
-        self.response.close()
-        if self.vardata is not None:
-            for k in self.vardata.keys():
-                self.vardata[k].clear()
-        self.__status = "STOPPED"
+        self.__finish(generation, client, response)
+
+    @staticmethod
+    def __close(client, response):
+        for closer in (getattr(client, "close", None), getattr(response, "close", None)):
+            try:
+                if closer is not None:
+                    closer()
+            except Exception:
+                logger.debug("closing the SSE client raised", exc_info=True)
+
+    def __finish(self, generation, client, response):
+        self.__close(client, response)
+        with self.__lock:
+            if generation != self.__generation:
+                return
+            if self.vardata is not None:
+                for k in self.vardata.keys():
+                    self.vardata[k].clear()
+            self.__status = "STOPPED"
 
     def __get_next_data_i(self, vname):
         try:
@@ -330,15 +414,38 @@ class RTStreamer:
 
     def stop_subscription(self):
         logger.debug("receving stop subscription")
-        if self.__status == "STARTED":
+        with self.__lock:
+            if self.__status not in self._RUNNING:
+                if self.__status != "STOPPING":
+                    logger.warning(f'ignored stopping subscription because of status of {self.__status}')
+                return
             self.__status = "STOPPING"
-            logger.debug('stopping subscription')
-            # Close the SSE response so the blocking events() loop unblocks
-            # immediately instead of waiting for the next server event.
-            try:
-                if self.response is not None:
-                    self.response.close()
-            except Exception:
-                logger.debug("closing SSE response raised; loop will exit on next event")
-        elif self.__status != "STOPPING":
-            logger.warning(f'ignored stopping subscription because of status of {self.__status}')
+            response = self.response
+        logger.debug('stopping subscription')
+        if response is None:
+            return
+        # Wake the receiver before closing the response: close() alone waits
+        # for its blocking read to return, i.e. for the next server event,
+        # which on a feed with no live data is the heartbeat tens of seconds
+        # away.
+        try:
+            sock = getattr(getattr(getattr(response, "raw", None), "connection", None), "sock", None)
+            if sock is not None:
+                self.__wake_reader(sock)
+        except Exception:
+            logger.debug("waking the SSE reader raised; loop will exit on next event", exc_info=True)
+        try:
+            response.close()
+        except Exception:
+            logger.debug("closing SSE response raised; loop will exit on next event", exc_info=True)
+
+    @staticmethod
+    def __wake_reader(sock):
+        """Make a recv() blocked on ``sock`` in another thread return now."""
+        if sys.platform == "win32":
+            # Windows ignores shutdown() for a pending recv; only closing the
+            # handle aborts it. detach() keeps the socket object itself
+            # harmless for the later close() calls.
+            socket.close(sock.detach())
+        else:
+            sock.shutdown(socket.SHUT_RDWR)

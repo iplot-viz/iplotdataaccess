@@ -1,5 +1,8 @@
 # Description: Unit tests for the DataSource abstract base class and its RT subscription state machine.
 
+import threading
+import time
+
 import pytest
 
 from iplotDataAccess.dataSource import (
@@ -150,6 +153,73 @@ class TestStartSubscription:
             type(ds).source_type = "TEST"
 
 
+    def test_start_is_ignored_while_handler_is_running(self, concrete_data_source_class, fake_rt):
+        ds = concrete_data_source_class()
+        type(ds).source_type = DS_CODAC_TYPE
+        try:
+            ds.set_rt_url("http://x/sse")
+            ds.set_rt_headers("REMOTE_USER:u")
+            ds.set_rt_handler()
+            ds.RTHandler._status = "STARTED"
+            ds.start_subscription(params=["v1"])
+            assert ds.RTHandler.start_called_with is None
+            assert ds.rtStatus == "INITIALISED"
+        finally:
+            type(ds).source_type = "TEST"
+
+    def test_start_is_allowed_after_an_error(self, concrete_data_source_class, fake_rt):
+        ds = concrete_data_source_class()
+        type(ds).source_type = DS_CODAC_TYPE
+        try:
+            ds.set_rt_url("http://x/sse")
+            ds.set_rt_headers("REMOTE_USER:u")
+            ds.set_rt_handler()
+            ds.rtStatus = "ERROR"
+            ds.start_subscription(params=["v1"])
+            assert ds.rtStatus == "STARTED"
+            assert ds.RTHandler.start_called_with["params"] == ["v1"]
+        finally:
+            type(ds).source_type = "TEST"
+
+    def test_stop_cancels_a_start_waiting_for_the_previous_stop(self, concrete_data_source_class, fake_rt):
+        ds = concrete_data_source_class()
+        type(ds).source_type = DS_CODAC_TYPE
+        try:
+            ds.set_rt_url("http://x/sse")
+            ds.set_rt_headers("REMOTE_USER:u")
+            ds.set_rt_handler()
+            ds.RTHandler._status = "STOPPING"
+            starter = threading.Thread(target=ds.start_subscription, kwargs={"params": ["v1"]}, daemon=True)
+            starter.start()
+            time.sleep(0.3)
+            assert starter.is_alive()
+            ds.stop_subscription()
+            starter.join(2.0)
+            assert not starter.is_alive()
+            assert ds.RTHandler.start_called_with is None
+        finally:
+            type(ds).source_type = "TEST"
+
+    def test_start_waits_for_the_previous_stop_to_settle(self, concrete_data_source_class, fake_rt):
+        ds = concrete_data_source_class()
+        type(ds).source_type = DS_CODAC_TYPE
+        try:
+            ds.set_rt_url("http://x/sse")
+            ds.set_rt_headers("REMOTE_USER:u")
+            ds.set_rt_handler()
+            ds.RTHandler._status = "STOPPING"
+            starter = threading.Thread(target=ds.start_subscription, kwargs={"params": ["v1"]}, daemon=True)
+            starter.start()
+            time.sleep(0.3)
+            ds.RTHandler._status = "STOPPED"
+            starter.join(2.0)
+            assert not starter.is_alive()
+            assert ds.rtStatus == "STARTED"
+            assert ds.RTHandler.start_called_with["params"] == ["v1"]
+        finally:
+            type(ds).source_type = "TEST"
+
+
 class TestStopSubscription:
 
     def test_stop_after_start_transitions_to_stopped(self, concrete_data_source_class, fake_rt):
@@ -163,6 +233,21 @@ class TestStopSubscription:
             ds.stop_subscription()
             assert ds.rtStatus == "STOPPED"
             assert ds.RTHandler.stop_called is True
+        finally:
+            type(ds).source_type = "TEST"
+
+    def test_stop_acts_on_a_running_handler_after_a_failed_start(self, concrete_data_source_class, fake_rt):
+        ds = concrete_data_source_class()
+        type(ds).source_type = DS_CODAC_TYPE
+        try:
+            ds.set_rt_url("http://x/sse")
+            ds.set_rt_headers("REMOTE_USER:u")
+            ds.set_rt_handler()
+            ds.rtStatus = "ERROR"
+            ds.RTHandler._status = "STARTED"
+            ds.stop_subscription()
+            assert ds.RTHandler.stop_called is True
+            assert ds.rtStatus == "STOPPED"
         finally:
             type(ds).source_type = "TEST"
 
