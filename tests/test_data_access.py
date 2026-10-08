@@ -1,11 +1,14 @@
 # Description: Unit tests for the DataAccess orchestrator.
 
 import json
+import sys
+import types
 
 import pytest
 
 from iplotDataAccess.dataAccess import DataAccess
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
+from iplotDataAccess.dataSource import DS_IMAS_TYPE
 
 
 @pytest.fixture
@@ -62,6 +65,16 @@ class TestLoadConfigFile:
                          {"good": {"type": "TEST"}, "bad": {"type": "UNKNOWN"}})
         assert patched_data_access.load_config_file(str(cfg)) is True
         assert list(patched_data_access.ds_list.keys()) == ["good"]
+
+    def test_old_imaspy_type_is_read_as_imas(self, tmp_path, monkeypatch, concrete_data_source_class):
+        # An IMAS source imports imas, which the test extra does not install.
+        monkeypatch.setitem(sys.modules, "imas", types.ModuleType("imas"))
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda: {DS_IMAS_TYPE: concrete_data_source_class}))
+        cfg = _write_cfg(tmp_path / "old.cfg", {"imaspy": {"type": "IMASPY"}})
+        data_access = DataAccess()
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list.keys()) == ["imaspy"]
 
     def test_default_data_source_is_picked_when_flagged(self, tmp_path, patched_data_access):
         cfg = _write_cfg(tmp_path / "default.cfg", {

@@ -7,7 +7,7 @@ from typing import Dict, List, Union, Type
 from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
 from iplotDataAccess.dataCommon import DataObj, DataEnvelope
-from iplotDataAccess.dataSource import DS_IMASPY_TYPE
+from iplotDataAccess.dataSource import DS_IMAS_TYPE
 
 logger = setupLogger.get_logger(__name__)
 
@@ -70,13 +70,18 @@ class DataAccess:
                 return False
             for ds_name, ds_config in config.items():
                 ds_type = ds_config.get("type")
+                if ds_type == "IMASPY":
+                    # Configuration files written before the IMAS type got its name.
+                    logger.warning(f"DataSource '{ds_name}': type IMASPY is now called {DS_IMAS_TYPE}, "
+                                   f"please update {dspath}")
+                    ds_type = DS_IMAS_TYPE
                 ds_class = self.proto.get(ds_type)
                 if not ds_class:
                     logger.warning(f"DataSource '{ds_name}' has an unsupported data source type-> {ds_type}")
                     continue
                 try:
                     data_source = ds_class(ds_name, ds_config)
-                    if ds_type == DS_IMASPY_TYPE:
+                    if ds_type == DS_IMAS_TYPE:
                         import imas
                         data_source.connection=object() # dummy connection object 
                         self.ds_list[ds_name] = data_source
