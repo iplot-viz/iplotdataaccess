@@ -189,7 +189,7 @@ class TestIMASAccess(unittest.TestCase):
             fp.write(dscfg)
 
         # Set environment variable for data sources configuration
-        os.environ["DATASOURCESCONF"] = os.path.abspath(self.temp_config_path)
+        os.environ["IPLOT_SOURCES_CONFIG"] = os.path.abspath(self.temp_config_path)
         print(f"Created temporary config file: {self.temp_config_path}")
 
         # Load configuration and verify it's valid
@@ -213,8 +213,8 @@ class TestIMASAccess(unittest.TestCase):
             )
 
         # Clean up environment variable
-        if "DATASOURCESCONF" in os.environ:
-            del os.environ["DATASOURCESCONF"]
+        if "IPLOT_SOURCES_CONFIG" in os.environ:
+            del os.environ["IPLOT_SOURCES_CONFIG"]
 
         super().tearDown()
 
