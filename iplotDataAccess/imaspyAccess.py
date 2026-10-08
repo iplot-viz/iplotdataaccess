@@ -203,7 +203,8 @@ class IMASPYDataAccess(DataSource):
         if ":" in ids_path:
             if ids.ids_properties.homogeneous_time == 1:
                 slice_object = parse_slice_from_string(ids_path)
-                ydata, xdata, yunit, xunit = partial_get(ids, ids_path)
+                ydata, xdata, yunit, xunit, secondary_xdata, secondary_xunit = partial_get(
+                    ids, ids_path, include_secondary_coordinate=True)
 
                 x_dict["object"] = xdata
 
@@ -219,6 +220,8 @@ class IMASPYDataAccess(DataSource):
                 y_dict["values"] = ydata
                 y_dict["unit"] = yunit
                 y_dict["name"] = ylabel
+                y_dict["secondary_xdata"] = secondary_xdata
+                y_dict["secondary_xunit"] = secondary_xunit
             else:
                 errcode = -1
                 errdesc = "Non homogeneous time"
@@ -349,6 +352,8 @@ class IMASPYDataAccess(DataSource):
         data_obj.xunit = x_dict["unit"]
         data_obj.errcode = errcode
         data_obj.errdesc = errdesc
+        data_obj.secondary_xdata = y_dict.get("secondary_xdata", [])
+        data_obj.secondary_xunit = y_dict.get("secondary_xunit", "")
 
         return data_obj
 

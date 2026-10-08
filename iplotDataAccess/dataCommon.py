@@ -74,6 +74,8 @@ class DataObj(DataCore):
 
         self.xdata = []
         self.ydata = []
+        self.secondary_xdata = []
+        self.secondary_xunit = ""
 
     def set_data(self, data, dtype):
         if dtype == 1:
@@ -85,11 +87,15 @@ class DataObj(DataCore):
         super().set_empty(mess)
         self.xdata = []
         self.ydata = []
+        self.secondary_xdata = []
+        self.secondary_xunit = ""
 
     def clear_data(self):
         super().clear_data()
         self.xdata = None
         self.ydata = None
+        self.secondary_xdata = None
+        self.secondary_xunit = ""
 
 
 class DataEnvelopeException(Exception):
