@@ -1,11 +1,16 @@
 # Description: Unit tests for the static helpers exposed by UdaAccess.
 
+import time
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
 
 uc = pytest.importorskip("uda_client_reader.uda_client_reader_python",
                          reason="uda_client_reader package required")
 
+from iplotDataAccess import udaAccess
 from iplotDataAccess.dataCommon import DataObj, DataType
 from iplotDataAccess.udaAccess import UdaAccess, UdaParams
 
@@ -69,15 +74,104 @@ class TestUdaParamsContainer:
         assert p.tsFormat == "absolute"
         assert p.extSamples is False
         assert p.retType == "double"
+        assert p.fallbackNbps is None
+
+    @pytest.mark.parametrize("nbps,fallback,expected", [
+        (-1, 1920, "-1|1920"),
+        (-1, None, "-1"),
+        (-1, 0, "-1"),
+        (1000, 1920, "1000"),
+        (1, 1920, "1"),
+    ])
+    def test_dec_samples_falls_back_only_when_every_sample_is_asked_for(self, nbps, fallback, expected):
+        p = UdaParams()
+        p.set_params("var", nbps, None, "0", "1", None, "absolute", False, None, fallback)
+        assert p.decSamples == expected
+
+
+class TestDecSamplesFallback:
+    """An interval with more samples than UDA sends in one reply comes back decimated, not as an error."""
+
+    PULSE = "ITER:CAT/5"
+
+    @staticmethod
+    def _query(access, **request):
+        access.connected = True
+        return access.get_data_i(access.get_uda_params(varname="V", **request))
+
+    def test_time_window(self):
+        query = self._query(UdaAccess("test", {}), nbp=-1, fallback_nbp=1920, tsS="100", tsE="200")
+        assert "decSamples=-1|1920,startTime=100,endTime=200" in query
+
+    @pytest.mark.parametrize("ends_in,ts_e", [
+        pytest.param(3600, None, id="ongoing"),
+        pytest.param(-3600, None, id="completed"),
+        pytest.param(-3600, "10", id="completed-up-to-a-time"),
+    ])
+    def test_pulse(self, ends_in, ts_e):
+        access = UdaAccess("test", {})
+        now = time.time_ns()
+        access.pulses_cache[self.PULSE] = SimpleNamespace(timeFrom=now - 7200 * 10**9,
+                                                          timeTo=now + ends_in * 10**9)
+        query = self._query(access, nbp=-1, fallback_nbp=1920, pulse=self.PULSE, tsS="0", tsE=ts_e,
+                            tsFormat="relative")
+        assert f"decSamples=-1|1920,pulse={self.PULSE}," in query
+
+    def test_without_fallback_every_sample_is_asked_for(self):
+        query = self._query(UdaAccess("test", {}), nbp=-1, tsS="100", tsE="200")
+        assert "decSamples=-1," in query
+
+    def test_explicit_sample_count_is_kept(self):
+        query = self._query(UdaAccess("test", {}), nbp=1000, fallback_nbp=1920, tsS="100", tsE="200")
+        assert "decSamples=1000," in query
+
+    def test_clients_that_cannot_report_decimation_get_no_fallback(self, monkeypatch):
+        monkeypatch.setattr(udaAccess, "_UDA_REPORTS_DECIMATION", False)
+        query = self._query(UdaAccess("test", {}), nbp=-1, fallback_nbp=1920, tsS="100", tsE="200")
+        assert "decSamples=-1," in query
+
+
+class TestDecimationFlag:
+    """Replies say whether UDA decimated them."""
+
+    @staticmethod
+    def _access(data, decimated):
+        access = UdaAccess("test", {})
+        access.UCR = MagicMock()
+        access.UCR.fetchData.return_value = 0
+        access.UCR.getFetchedTimeType.return_value = uc.RAW_TYPE_LONG
+        access.UCR.getFetchedType.return_value = uc.RAW_TYPE_DOUBLE
+        access.UCR.getDataNativeRank.return_value = data
+        access.UCR.getTimeStampsAsLong.return_value = np.arange(len(data))
+        access.UCR.isDecimated.return_value = decimated
+        return access
+
+    @pytest.mark.parametrize("decimated", [True, False])
+    def test_data_reply(self, decimated):
+        dobj = self._access(np.ones(4), decimated)._UdaAccess__fetch_data_x("q")
+        assert dobj.errcode == 0
+        assert dobj.isdecimated is decimated
+
+    @pytest.mark.parametrize("decimated", [True, False])
+    def test_envelope_reply(self, decimated):
+        d_env = self._access(np.ones((4, 3)), decimated)._UdaAccess__fetch_envelope("q")
+        assert d_env.errcode == 0
+        assert d_env.isdecimated is decimated
+
+    def test_clients_without_the_flag_report_raw(self, monkeypatch):
+        monkeypatch.setattr(udaAccess, "_UDA_REPORTS_DECIMATION", False)
+        access = self._access(np.ones(4), True)
+        assert access._UdaAccess__fetch_data_x("q").isdecimated is False
+        access.UCR.isDecimated.assert_not_called()
 
 
 class TestLastValueBefore:
     """Extremities must hold a flat line over intervals that contain no samples of their own."""
 
     @staticmethod
-    def _params(start_t, end_t, dec_type=None):
+    def _params(start_t, end_t, dec_type=None, fallback=None):
         p = UdaParams()
-        p.set_params("FD", -1, dec_type, start_t, end_t, None, "absolute", True)
+        p.set_params("FD", -1, dec_type, start_t, end_t, None, "absolute", True, None, fallback)
         return p
 
     def test_looks_back_to_startt_and_returns_last_sample(self, monkeypatch):
@@ -104,6 +198,22 @@ class TestLastValueBefore:
         assert "decType=last" in captured["query"]
         assert "extSamples" not in captured["query"]
 
+    def test_fallback_query_still_asks_for_a_single_sample(self, monkeypatch):
+        access = UdaAccess("test", {})
+        captured = {}
+
+        def fake_fetch(query):
+            captured["query"] = query
+            dobj = DataObj()
+            dobj.set_err(-3, "no data")
+            return dobj
+
+        monkeypatch.setattr(access, "_UdaAccess__fetch_data_x", fake_fetch)
+        query = "variable=FD,tsFormat=absolute,decSamples=-1|1920,startTime=6000,endTime=7000,extSamples=True"
+        access._UdaAccess__last_value_before(query, self._params(6000, 7000, fallback=1920))
+        assert "decSamples=1," in captured["query"]
+        assert "1920" not in captured["query"]
+
     def test_returns_none_when_no_earlier_sample(self, monkeypatch):
         access = UdaAccess("test", {})
 
@@ -115,6 +225,29 @@ class TestLastValueBefore:
         monkeypatch.setattr(access, "_UdaAccess__fetch_data_x", fake_fetch)
         query = "variable=FD,tsFormat=absolute,decSamples=-1,startTime=100,endTime=200,extSamples=True"
         assert access._UdaAccess__last_value_before(query, self._params(100, 200)) is None
+
+
+class TestClientSideExtremities:
+    """Extremities added by the client (MINT_GET_EXTRE=true)."""
+
+    def test_look_back_keeps_the_plain_dec_samples(self, monkeypatch):
+        monkeypatch.setenv("MINT_GET_EXTRE", "true")
+        access = UdaAccess("test", {})
+        access.connected = True
+        queries = []
+
+        def fake_fetch(query):
+            queries.append(query)
+            dobj = DataObj()
+            dobj.xdata = np.array([150])
+            dobj.ydata = np.array([1.0])
+            dobj.set_err(0, "OK")
+            return dobj
+
+        monkeypatch.setattr(access, "_UdaAccess__fetch_data_x", fake_fetch)
+        access.get_data(varname="V", nbp=-1, fallback_nbp=1920, tsS="100", tsE="200", extremities=True)
+        assert "decSamples=-1|1920," in queries[0]
+        assert "decSamples=-1,startTime=0,endTime=100" in queries[1]
 
 
 class TestParseVarsToDict:

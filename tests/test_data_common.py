@@ -41,6 +41,7 @@ class TestDataCore:
         assert core.errcode == 0
         assert core.errdesc is None
         assert core.resolved_pulse is None
+        assert core.isdecimated is False
 
     def test_set_a_assigns_known_types_and_clears_error(self):
         core = DataCore()
@@ -56,6 +57,14 @@ class TestDataCore:
         assert core.drank == 1
         assert core.errcode == 0
         assert core.errdesc == ""
+
+    def test_set_a_records_whether_the_reply_is_decimated(self):
+        core = DataCore()
+        core.set_a(DataType.DA_TYPE_DOUBLE, DataType.DA_TYPE_FLOAT, "t", "v", "s", "V", 1, True)
+        assert core.isdecimated is True
+        # A later reply set without the flag is raw.
+        core.set_a(DataType.DA_TYPE_DOUBLE, DataType.DA_TYPE_FLOAT, "t", "v", "s", "V", 1)
+        assert core.isdecimated is False
 
     def test_set_a_ignores_non_datatype_values_for_xtype_ytype(self):
         core = DataCore()
@@ -78,13 +87,14 @@ class TestDataCore:
     def test_clear_data_resets_metadata(self):
         core = DataCore()
         core.set_a(DataType.DA_TYPE_DOUBLE, DataType.DA_TYPE_DOUBLE,
-                   "t", "v", "s", "V", 1)
+                   "t", "v", "s", "V", 1, True)
         core.resolved_pulse = "pulse-1"
         core.clear_data()
         assert core.xlabel == ""
         assert core.yunit == ""
         assert core.errcode == 0
         assert core.resolved_pulse is None
+        assert core.isdecimated is False
 
 
 class TestDataObj:
