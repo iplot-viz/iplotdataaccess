@@ -2,7 +2,7 @@ import json
 import os
 import importlib.util
 import importlib.resources as pkg_resources
-from typing import Dict, List, Union, Type
+from typing import Dict, Iterable, List, Optional, Union, Type
 
 from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
@@ -16,13 +16,17 @@ logger = setupLogger.get_logger(__name__)
 class DataAccess:
     DEFAULT_DATA_SOURCES_CFG_FILE: str = 'mydatasources.cfg'
 
-    def __init__(self):
-        self.proto: Dict[str, Type[DataSource]] = self.get_supported_data_source()
+    def __init__(self, source_types: Optional[Iterable[str]] = None):
+        # The data source types to load, all if None: a process that reads only some of them
+        # needs neither the modules nor the connections of the others.
+        self.source_types = None if source_types is None else frozenset(source_types)
+        self.proto: Dict[str, Type[DataSource]] = (self.get_supported_data_source() if self.source_types is None
+                                                   else self.get_supported_data_source(self.source_types))
         self.ds_list: Dict[str, DataSource] = {}
         self.default_ds: Union[DataSource, None] = None
 
     @staticmethod
-    def get_supported_data_source() -> Dict[str, Type[DataSource]]:
+    def get_supported_data_source(source_types: Optional[Iterable[str]] = None) -> Dict[str, Type[DataSource]]:
         supported_data_sources = {}
 
         try:
@@ -31,6 +35,8 @@ class DataAccess:
 
                 data_sources = json.load(file)
                 for key, value in data_sources.items():
+                    if source_types is not None and key not in source_types:
+                        continue
                     try:
                         module = importlib.import_module(value['pymodule'])
                         imported_class = getattr(module, value['class'])
@@ -70,11 +76,15 @@ class DataAccess:
                 return False
             for ds_name, ds_config in config.items():
                 ds_type = ds_config.get("type")
-                if ds_type == "IMASPY":
-                    # Configuration files written before the IMAS type got its name.
+                # Configuration files written before the IMAS type got its name.
+                renamed = ds_type == "IMASPY"
+                if renamed:
+                    ds_type = DS_IMAS_TYPE
+                if self.source_types is not None and ds_type not in self.source_types:
+                    continue
+                if renamed:
                     logger.warning(f"DataSource '{ds_name}': type IMASPY is now called {DS_IMAS_TYPE}, "
                                    f"please update {dspath}")
-                    ds_type = DS_IMAS_TYPE
                 ds_class = self.proto.get(ds_type)
                 if not ds_class:
                     logger.warning(f"DataSource '{ds_name}' has an unsupported data source type-> {ds_type}")

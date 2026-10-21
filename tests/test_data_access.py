@@ -1,11 +1,13 @@
 # Description: Unit tests for the DataAccess orchestrator.
 
 import json
+import subprocess
 import sys
 import types
 
 import pytest
 
+import iplotDataAccess.dataAccess as data_access_module
 from iplotDataAccess.dataAccess import DataAccess
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
 from iplotDataAccess.dataSource import DS_IMAS_TYPE
@@ -32,6 +34,70 @@ class TestGetSupportedDataSource:
     def test_real_registry_contains_csv_backend(self):
         registry = DataAccess.get_supported_data_source()
         assert "CSV" in registry
+
+    def test_registry_of_some_types_has_only_those(self):
+        assert set(DataAccess.get_supported_data_source(["CSV"])) == {"CSV"}
+
+
+class TestSourceTypes:
+
+    def test_the_modules_of_the_other_types_are_not_imported(self):
+        # In a process of its own: another test may have imported them in this one.
+        code = ("import json, sys\n"
+                "from iplotDataAccess.dataAccess import DataAccess\n"
+                "data_access = DataAccess(source_types=['CSV'])\n"
+                "print(json.dumps([sorted(data_access.proto), 'iplotDataAccess.udaAccess' in sys.modules,\n"
+                "                  'iplotDataAccess.imasAccess' in sys.modules]))\n")
+        output = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout
+        assert json.loads(output.strip().splitlines()[-1]) == [["CSV"], False, False]
+
+    def test_data_sources_of_the_other_types_are_left_out_quietly(self, tmp_path, monkeypatch,
+                                                                  concrete_data_source_class):
+        connected = []
+
+        class OtherSource(concrete_data_source_class):
+            source_type = "OTHER"
+
+            def connect(self):
+                connected.append(self.name)
+                return True
+
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda source_types=None: {"TEST": concrete_data_source_class,
+                                                                    "OTHER": OtherSource}))
+        warnings = []
+        monkeypatch.setattr(data_access_module.logger, "warning", lambda message, *args, **kwargs: warnings.append(message))
+        cfg = _write_cfg(tmp_path / "two_types.cfg", {"mine": {"type": "TEST"}, "theirs": {"type": "OTHER"}})
+        data_access = DataAccess(source_types=["TEST"])
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list) == ["mine"]
+        assert connected == []
+        assert warnings == []
+
+    def test_an_old_imaspy_entry_left_out_gives_no_warning(self, tmp_path, monkeypatch, concrete_data_source_class):
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda source_types=None: {"TEST": concrete_data_source_class}))
+        warnings = []
+        monkeypatch.setattr(data_access_module.logger, "warning", lambda message, *args, **kwargs: warnings.append(message))
+        cfg = _write_cfg(tmp_path / "old.cfg", {"mine": {"type": "TEST"}, "imaspy": {"type": "IMASPY"}})
+        data_access = DataAccess(source_types=["TEST"])
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list) == ["mine"]
+        assert warnings == []
+
+    def test_without_types_every_type_is_loaded(self, tmp_path, monkeypatch, concrete_data_source_class):
+        class OtherSource(concrete_data_source_class):
+            source_type = "OTHER"
+
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda: {"TEST": concrete_data_source_class, "OTHER": OtherSource}))
+        cfg = _write_cfg(tmp_path / "two_types.cfg", {"mine": {"type": "TEST"}, "theirs": {"type": "OTHER"}})
+        data_access = DataAccess()
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list) == ["mine", "theirs"]
 
 
 class TestLoadConfigFallbackChain:
