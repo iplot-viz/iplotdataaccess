@@ -1,11 +1,13 @@
 # Description: Unit tests for the DataAccess orchestrator.
 
 import json
+import subprocess
 import sys
 import types
 
 import pytest
 
+import iplotDataAccess.dataAccess as data_access_module
 from iplotDataAccess.dataAccess import DataAccess
 from iplotDataAccess.dataCommon import DataEnvelope, DataObj
 from iplotDataAccess.dataSource import DS_IMAS_TYPE
@@ -32,6 +34,70 @@ class TestGetSupportedDataSource:
     def test_real_registry_contains_csv_backend(self):
         registry = DataAccess.get_supported_data_source()
         assert "CSV" in registry
+
+    def test_registry_of_some_types_has_only_those(self):
+        assert set(DataAccess.get_supported_data_source(["CSV"])) == {"CSV"}
+
+
+class TestSourceTypes:
+
+    def test_the_modules_of_the_other_types_are_not_imported(self):
+        # In a process of its own: another test may have imported them in this one.
+        code = ("import json, sys\n"
+                "from iplotDataAccess.dataAccess import DataAccess\n"
+                "data_access = DataAccess(source_types=['CSV'])\n"
+                "print(json.dumps([sorted(data_access.proto), 'iplotDataAccess.udaAccess' in sys.modules,\n"
+                "                  'iplotDataAccess.imasAccess' in sys.modules]))\n")
+        output = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout
+        assert json.loads(output.strip().splitlines()[-1]) == [["CSV"], False, False]
+
+    def test_data_sources_of_the_other_types_are_left_out_quietly(self, tmp_path, monkeypatch,
+                                                                  concrete_data_source_class):
+        connected = []
+
+        class OtherSource(concrete_data_source_class):
+            source_type = "OTHER"
+
+            def connect(self):
+                connected.append(self.name)
+                return True
+
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda source_types=None: {"TEST": concrete_data_source_class,
+                                                                    "OTHER": OtherSource}))
+        warnings = []
+        monkeypatch.setattr(data_access_module.logger, "warning", lambda message, *args, **kwargs: warnings.append(message))
+        cfg = _write_cfg(tmp_path / "two_types.cfg", {"mine": {"type": "TEST"}, "theirs": {"type": "OTHER"}})
+        data_access = DataAccess(source_types=["TEST"])
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list) == ["mine"]
+        assert connected == []
+        assert warnings == []
+
+    def test_an_old_imaspy_entry_left_out_gives_no_warning(self, tmp_path, monkeypatch, concrete_data_source_class):
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda source_types=None: {"TEST": concrete_data_source_class}))
+        warnings = []
+        monkeypatch.setattr(data_access_module.logger, "warning", lambda message, *args, **kwargs: warnings.append(message))
+        cfg = _write_cfg(tmp_path / "old.cfg", {"mine": {"type": "TEST"}, "imaspy": {"type": "IMASPY"}})
+        data_access = DataAccess(source_types=["TEST"])
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list) == ["mine"]
+        assert warnings == []
+
+    def test_without_types_every_type_is_loaded(self, tmp_path, monkeypatch, concrete_data_source_class):
+        class OtherSource(concrete_data_source_class):
+            source_type = "OTHER"
+
+        monkeypatch.setattr(DataAccess, "get_supported_data_source",
+                            staticmethod(lambda: {"TEST": concrete_data_source_class, "OTHER": OtherSource}))
+        cfg = _write_cfg(tmp_path / "two_types.cfg", {"mine": {"type": "TEST"}, "theirs": {"type": "OTHER"}})
+        data_access = DataAccess()
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert list(data_access.ds_list) == ["mine", "theirs"]
 
 
 class TestLoadConfigFallbackChain:
@@ -119,6 +185,94 @@ class TestLoadConfigFile:
             assert "bad" not in patched_data_access.ds_list
         finally:
             concrete_data_source_class.connect = original_connect
+
+
+class TestUnconnectedDataSources:
+
+    @pytest.fixture
+    def warnings(self, monkeypatch):
+        logged = []
+        monkeypatch.setattr(data_access_module.logger, "warning", lambda message, *args, **kwargs: logged.append(message))
+        return logged
+
+    def test_a_data_source_that_cannot_connect_is_kept_aside_with_a_warning(self, tmp_path, monkeypatch, warnings,
+                                                                           patched_data_access,
+                                                                           concrete_data_source_class):
+        def connect(self):
+            # As UdaAccess.connect() does, with the error of the UDA client.
+            if self.name == "down":
+                self.errdesc = "Unable to Connect to Server Stream Socket"
+                return False
+            return True
+
+        monkeypatch.setattr(concrete_data_source_class, "connect", connect)
+        cfg = _write_cfg(tmp_path / "one_down.cfg", {"up": {"type": "TEST"}, "down": {"type": "TEST"}})
+
+        assert patched_data_access.load_config_file(str(cfg)) is True
+        assert list(patched_data_access.ds_list) == ["up"]
+        assert patched_data_access.unconnected == {"down"}
+        assert warnings == ["DataSource 'down' could not connect: Unable to Connect to Server Stream Socket"]
+
+    def test_a_data_source_that_cannot_connect_is_never_the_default(self, tmp_path, monkeypatch, patched_data_access,
+                                                                    concrete_data_source_class):
+        monkeypatch.setattr(concrete_data_source_class, "connect", lambda self: self.name != "down")
+        cfg = _write_cfg(tmp_path / "default_down.cfg", {"down": {"type": "TEST", "default": True},
+                                                         "up": {"type": "TEST"}})
+
+        assert patched_data_access.load_config_file(str(cfg)) is True
+        assert patched_data_access.default_ds.name == "up"
+        assert patched_data_access.get_connected_data_source_names() == ["up"]
+
+    def test_data_sources_to_leave_unconnected_are_neither_made_nor_connected(self, tmp_path, monkeypatch, warnings,
+                                                                              concrete_data_source_class):
+        made, connected = [], []
+
+        class Source(concrete_data_source_class):
+            def __init__(self, name, config):
+                made.append(name)
+                super().__init__(name, config)
+
+            def connect(self):
+                connected.append(self.name)
+                return True
+
+        monkeypatch.setattr(DataAccess, "get_supported_data_source", staticmethod(lambda: {"TEST": Source}))
+        cfg = _write_cfg(tmp_path / "one_down.cfg", {"up": {"type": "TEST"}, "down": {"type": "TEST"}})
+        data_access = DataAccess(leave_unconnected=["down"])
+
+        assert data_access.load_config_file(str(cfg)) is True
+        assert made == ["up"]
+        assert connected == ["up"]
+        assert list(data_access.ds_list) == ["up"]
+        assert data_access.unconnected == {"down"}
+        assert warnings == []
+
+    def test_a_data_source_that_connects_when_loaded_again_is_no_longer_unconnected(self, tmp_path, monkeypatch,
+                                                                                    patched_data_access,
+                                                                                    concrete_data_source_class):
+        reachable = []
+        monkeypatch.setattr(concrete_data_source_class, "connect", lambda self: bool(reachable))
+        cfg = _write_cfg(tmp_path / "later.cfg", {"later": {"type": "TEST"}})
+
+        assert patched_data_access.load_config_file(str(cfg)) is False
+        assert patched_data_access.unconnected == {"later"}
+        reachable.append(True)
+        assert patched_data_access.load_config_file(str(cfg)) is True
+        assert list(patched_data_access.ds_list) == ["later"]
+        assert patched_data_access.unconnected == set()
+
+    def test_a_connected_data_source_that_fails_when_loaded_again_stays_connected(self, tmp_path, monkeypatch,
+                                                                                  patched_data_access,
+                                                                                  concrete_data_source_class):
+        reachable = [True]
+        monkeypatch.setattr(concrete_data_source_class, "connect", lambda self: bool(reachable))
+        cfg = _write_cfg(tmp_path / "flaky.cfg", {"flaky": {"type": "TEST"}})
+
+        assert patched_data_access.load_config_file(str(cfg)) is True
+        reachable.clear()
+        assert patched_data_access.load_config_file(str(cfg)) is True
+        assert list(patched_data_access.ds_list) == ["flaky"]
+        assert patched_data_access.unconnected == set()
 
 
 class TestGetDataSource:

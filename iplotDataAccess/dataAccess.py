@@ -2,7 +2,7 @@ import json
 import os
 import importlib.util
 import importlib.resources as pkg_resources
-from typing import Dict, List, Union, Type
+from typing import Dict, Iterable, List, Optional, Set, Union, Type
 
 from iplotDataAccess.dataSource import DataSource
 from iplotLogging import setupLogger
@@ -16,13 +16,23 @@ logger = setupLogger.get_logger(__name__)
 class DataAccess:
     DEFAULT_DATA_SOURCES_CFG_FILE: str = 'mydatasources.cfg'
 
-    def __init__(self):
-        self.proto: Dict[str, Type[DataSource]] = self.get_supported_data_source()
+    def __init__(self, source_types: Optional[Iterable[str]] = None, leave_unconnected: Iterable[str] = ()):
+        # The data source types to load, all if None: a process that reads only some of them
+        # needs neither the modules nor the connections of the others.
+        self.source_types = None if source_types is None else frozenset(source_types)
+        # Data sources not to connect to, such as those another process could not connect to: a connection
+        # that fails can take over a minute.
+        self.leave_unconnected = frozenset(leave_unconnected)
+        self.proto: Dict[str, Type[DataSource]] = (self.get_supported_data_source() if self.source_types is None
+                                                   else self.get_supported_data_source(self.source_types))
         self.ds_list: Dict[str, DataSource] = {}
+        # Names of the data sources of the configuration that are not connected: left unconnected, or that
+        # could not connect.
+        self.unconnected: Set[str] = set()
         self.default_ds: Union[DataSource, None] = None
 
     @staticmethod
-    def get_supported_data_source() -> Dict[str, Type[DataSource]]:
+    def get_supported_data_source(source_types: Optional[Iterable[str]] = None) -> Dict[str, Type[DataSource]]:
         supported_data_sources = {}
 
         try:
@@ -31,6 +41,8 @@ class DataAccess:
 
                 data_sources = json.load(file)
                 for key, value in data_sources.items():
+                    if source_types is not None and key not in source_types:
+                        continue
                     try:
                         module = importlib.import_module(value['pymodule'])
                         imported_class = getattr(module, value['class'])
@@ -70,11 +82,18 @@ class DataAccess:
                 return False
             for ds_name, ds_config in config.items():
                 ds_type = ds_config.get("type")
-                if ds_type == "IMASPY":
-                    # Configuration files written before the IMAS type got its name.
+                # Configuration files written before the IMAS type got its name.
+                renamed = ds_type == "IMASPY"
+                if renamed:
+                    ds_type = DS_IMAS_TYPE
+                if self.source_types is not None and ds_type not in self.source_types:
+                    continue
+                if ds_name in self.leave_unconnected:
+                    self.unconnected.add(ds_name)
+                    continue
+                if renamed:
                     logger.warning(f"DataSource '{ds_name}': type IMASPY is now called {DS_IMAS_TYPE}, "
                                    f"please update {dspath}")
-                    ds_type = DS_IMAS_TYPE
                 ds_class = self.proto.get(ds_type)
                 if not ds_class:
                     logger.warning(f"DataSource '{ds_name}' has an unsupported data source type-> {ds_type}")
@@ -85,9 +104,15 @@ class DataAccess:
                         import imas
                         data_source.connection=object() # dummy connection object 
                         self.ds_list[ds_name] = data_source
+                    elif data_source.connect():
+                        self.ds_list[ds_name] = data_source
+                        self.unconnected.discard(ds_name)
                     else:
-                        if data_source.connect():
-                            self.ds_list[ds_name] = data_source
+                        logger.warning(f"DataSource '{ds_name}' could not connect"
+                                       + (f": {data_source.errdesc}" if data_source.errdesc else ""))
+                        # A data source that an earlier load of the configuration connected stays connected.
+                        if ds_name not in self.ds_list:
+                            self.unconnected.add(ds_name)
                 except Exception as e:
                     logger.warning(f"Error importing class {ds_class} with error {e}")
 
