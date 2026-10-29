@@ -38,6 +38,7 @@ dynamic = ["version"]
 imas = ["PyYAML >= 6.0.1", "imas-python >= 2.0", "keyring"]
 # Old name of the imas extra.
 imaspy = ["PyYAML >= 6.0.1", "imas-python >= 2.0", "keyring"]
+pyuda = ["uda >= 2.9.2", "uda-mast"]
 test = ["pytest >= 6.0", "pytest-cov", "PyYAML >= 6.0.1"]
 
 [project.urls]
