@@ -1,5 +1,6 @@
 import fnmatch
 import re
+from typing import ClassVar
 
 import cachetools as ct
 import iplotLogging.setupLogger as setupLog
@@ -25,6 +26,8 @@ class PyudaAccess(DataSource):
     DEFAULT_PULSE_LIST_SIZE = 200
     DEFAULT_ENVELOPE_POINTS = 1000
     GENERIC_FOLDER = "GENERIC"
+    # UDA signal type codes, as given by some servers instead of the full word.
+    SIGNAL_TYPES: ClassVar[dict] = {"A": "Analysed", "R": "Raw", "M": "Modelled", "I": "Image"}
 
     def __init__(self, name: str, config: dict):
         super().__init__(name, config)
@@ -37,6 +40,7 @@ class PyudaAccess(DataSource):
         self.connected = False
         self.signal_cache = ct.LRUCache(maxsize=self._cache_size(config))
         self._signal_list = None
+        self._signal_index = None
 
     @classmethod
     def _cache_size(cls, config: dict) -> int:
@@ -68,6 +72,7 @@ class PyudaAccess(DataSource):
     def clear_cache(self):
         self.signal_cache.clear()
         self._signal_list = None
+        self._signal_index = None
 
     @staticmethod
     def parse_shot(pulse):
@@ -221,7 +226,12 @@ class PyudaAccess(DataSource):
 
     def get_pulse_info(self, pulse=None, run=None, **kwargs):
         shot = self.parse_shot(pulse)
-        return {"shot": shot, "run": run, "latest_shot": self.latest_shot()}
+        info = {"shot": shot, "run": run, "latest_shot": self.latest_shot()}
+        try:
+            info["date"], info["time"] = (str(v) for v in self.client.get_shot_date_time(shot))
+        except Exception as e:
+            logger.debug("pyuda could not get the date and time of shot %s -> %s", shot, e)
+        return info
 
     def _list_signals(self):
         if self._signal_list is None:
@@ -229,10 +239,25 @@ class PyudaAccess(DataSource):
             self._signal_list = list(self.client.list_signals(shot=shot))
         return self._signal_list
 
+    def _get_signal_index(self) -> dict:
+        """Return the listed signals keyed by signal name and by generic name."""
+        if self._signal_index is None:
+            index = {}
+            for item in self._list_signals():
+                generic = getattr(item, "generic_name", "")
+                if generic:
+                    index.setdefault(generic, item)
+                if item.signal_name:
+                    index[item.signal_name] = item
+            self._signal_index = index
+        return self._signal_index
+
     def get_var_dict(self, pattern=".*", **kwargs) -> dict:
         """Return the signal names grouped by source alias: {ALIAS: {signal_name: ''}}.
 
         Signals that have a generic name (``IP``, ``BT``) also go in the GENERIC folder.
+        ``pattern`` is a case-insensitive regex. It finds a signal by its name, its generic
+        name or its description.
         """
         try:
             signals = self._list_signals()
@@ -244,10 +269,12 @@ class PyudaAccess(DataSource):
         tree = {}
         for item in signals:
             generic = getattr(item, "generic_name", "")
-            if generic and regex.search(generic):
+            description = getattr(item, "description", "") or ""
+            in_description = bool(regex.search(description))
+            if generic and (in_description or regex.search(generic)):
                 tree.setdefault(self.GENERIC_FOLDER, {})[generic] = ""
             name = item.signal_name
-            if not name or not regex.search(name):
+            if not name or not (in_description or regex.search(name)):
                 continue
             alias = (item.source_alias or "other").upper()
             tree.setdefault(alias, {})[name] = ""
@@ -256,5 +283,20 @@ class PyudaAccess(DataSource):
     def get_cbs_dict(self, **kwargs) -> dict:
         return self.get_var_dict()
 
-    def get_var_fields(self, **kwargs):
-        return {}
+    def get_var_fields(self, variable=None, **kwargs):
+        """Return the description and type of a listed signal, in the form the variable browser reads.
+
+        Units are not in the signal list, so they stay empty. Unknown signals give {}.
+        """
+        try:
+            item = self._get_signal_index().get(variable)
+        except Exception as e:
+            logger.error("pyuda could not list signals -> %s", e)
+            return {}
+        if item is None:
+            return {}
+        signal_type = str(getattr(item, "type", "") or "")
+        return {"value": {"type": self.SIGNAL_TYPES.get(signal_type, signal_type),
+                          "units": "",
+                          "description": str(getattr(item, "description", "") or ""),
+                          "dimensionality": []}}

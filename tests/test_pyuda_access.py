@@ -36,10 +36,16 @@ class FakeClient:
 
     def list_signals(self, shot):
         return [
-            SimpleNamespace(signal_name="AMC_PLASMA CURRENT", generic_name="IP", source_alias="amc"),
-            SimpleNamespace(signal_name="ANE_DENSITY", generic_name="", source_alias="ane"),
-            SimpleNamespace(signal_name="ANE_DENSITY_ERR", generic_name="", source_alias="ane"),
+            SimpleNamespace(signal_name="AMC_PLASMA CURRENT", generic_name="IP", source_alias="amc",
+                            type="Analysed", description="Plasma current"),
+            SimpleNamespace(signal_name="ANE_DENSITY", generic_name="", source_alias="ane",
+                            type="A", description="Line integrated electron density"),
+            SimpleNamespace(signal_name="ANE_DENSITY_ERR", generic_name="", source_alias="ane",
+                            type="R", description="Density error"),
         ]
+
+    def get_shot_date_time(self, shot):
+        return "2013-07-04", "11:52:00"
 
 
 @pytest.fixture
@@ -187,8 +193,39 @@ class TestVariables:
     def test_pattern_filters_case_insensitive(self, pyuda_access):
         assert pyuda_access.get_var_dict(pattern="density$") == {"ANE": {"ANE_DENSITY": ""}}
 
-    def test_var_fields_is_empty(self, pyuda_access):
-        assert pyuda_access.get_var_fields(variable="ANE_DENSITY") == {}
+    def test_pattern_matches_description(self, pyuda_access):
+        assert pyuda_access.get_var_dict(pattern="electron") == {"ANE": {"ANE_DENSITY": ""}}
+        assert pyuda_access.get_var_dict(pattern="plasma current$") == {
+            "AMC": {"AMC_PLASMA CURRENT": ""}, "GENERIC": {"IP": ""}}
+
+    def test_var_fields_give_description_and_type(self, pyuda_access):
+        assert pyuda_access.get_var_fields(variable="ANE_DENSITY") == {
+            "value": {"type": "Analysed", "units": "", "description": "Line integrated electron density",
+                      "dimensionality": []}}
+        assert pyuda_access.get_var_fields(variable="ANE_DENSITY_ERR")["value"]["type"] == "Raw"
+
+    def test_var_fields_of_generic_name(self, pyuda_access):
+        fields = pyuda_access.get_var_fields(variable="IP")
+        assert fields["value"]["description"] == "Plasma current"
+        assert fields["value"]["type"] == "Analysed"
+
+    def test_var_fields_of_unknown_variable_is_empty(self, pyuda_access):
+        assert pyuda_access.get_var_fields(variable="missing") == {}
+
+
+class TestPulseInfo:
+
+    def test_contains_date_and_time(self, pyuda_access):
+        info = pyuda_access.get_pulse_info(pulse=30420, run=0)
+        assert info == {"shot": 30420, "run": 0, "latest_shot": LATEST_SHOT,
+                        "date": "2013-07-04", "time": "11:52:00"}
+
+    def test_works_without_date_and_time(self, pyuda_access, monkeypatch):
+        def fail(self, shot):
+            raise RuntimeError("no shot date")
+        monkeypatch.setattr(FakeClient, "get_shot_date_time", fail)
+        info = pyuda_access.get_pulse_info(pulse=30420, run=0)
+        assert info == {"shot": 30420, "run": 0, "latest_shot": LATEST_SHOT}
 
 
 @pytest.mark.skipif(not os.environ.get("PYUDA_LIVE_TESTS"), reason="set PYUDA_LIVE_TESTS=1 to use a live UDA server")
@@ -200,3 +237,12 @@ def test_live_mast_plasma_current():
     assert d.errcode == 0
     assert len(d.xdata) == 30000
     assert d.yunit == "kA"
+
+
+@pytest.mark.skipif(not os.environ.get("PYUDA_LIVE_TESTS"), reason="set PYUDA_LIVE_TESTS=1 to use a live UDA server")
+def test_live_mast_signal_metadata():
+    pytest.importorskip("pyuda")
+    src = PyudaAccess("mast", {"list_shot": 30420})
+    assert src.connect() is True
+    assert src.get_var_fields(variable="ANE_DENSITY")["value"]["description"]
+    assert "date" in src.get_pulse_info(pulse=30420, run=0)
