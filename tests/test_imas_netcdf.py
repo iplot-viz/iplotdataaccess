@@ -1,8 +1,8 @@
 """
 Unit tests for reading a pulse identified directly by a netCDF file path.
 
-This covers the feature added in imaspyAccess.IMASPYDataAccess where a pulse ID
-that is neither in the "pulse/run" form nor a full "imas:" URI is treated as a
+This covers the feature added in imasAccess.IMASDataAccess where a pulse ID
+that is neither in the "pulse" or "pulse/run" form nor a full "imas:" URI is treated as a
 path (e.g. to a self-described netCDF file) and passed straight to imas.DBEntry.
 
 The sample data used here is a small, public IMAS-Data-Dictionary netCDF file
@@ -21,16 +21,16 @@ import numpy as np
 import pytest
 
 # These tests need imas-python; skip cleanly if it is not installed.
-if importlib.util.find_spec("imaspy") is None and importlib.util.find_spec("imas") is None:
-    pytest.skip("imas/imaspy package required", allow_module_level=True)
+if importlib.util.find_spec("imas") is None:
+    pytest.skip("imas package required", allow_module_level=True)
 
 from iplotDataAccess.dataAccess import DataAccess
-from iplotDataAccess.imaspyAccess import IMASPYDataAccess
+from iplotDataAccess.imasAccess import IMASDataAccess
 
 DSCFG = json.dumps(
     {
-        "imaspy": {
-            "type": "IMASPY",
+        "imas": {
+            "type": "IMAS",
             "database": "ITER",
             "path": "public",
             "backend": "HDF5",
@@ -40,13 +40,13 @@ DSCFG = json.dumps(
 
 
 class TestIsPulseRun:
-    """Direct unit tests for IMASPYDataAccess.is_pulse_run."""
+    """Direct unit tests for IMASDataAccess.is_pulse_run."""
 
     @pytest.fixture
     def access(self):
-        return IMASPYDataAccess(name="imaspy_test", config={})
+        return IMASDataAccess(name="imas_test", config={})
 
-    @pytest.mark.parametrize("value", ["53298/1", "130012/5", "1/1", "0/0", "53298\\1"])
+    @pytest.mark.parametrize("value", ["53298", "53298/1","130012/5", "1/1", "0/0", "53298\\1"])
     def test_pulse_run_forms_are_detected(self, access, value):
         assert access.is_pulse_run(value) is True
 
@@ -56,7 +56,6 @@ class TestIsPulseRun:
             "imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/105027/2",
             "/tmp/iter_scenario_53298_seq1_DD4.nc",
             "iter_scenario_53298_seq1_DD4.nc",
-            "53298",
             "53298/1/2",
             "abc/1",
             "",
@@ -64,6 +63,12 @@ class TestIsPulseRun:
     )
     def test_non_pulse_run_forms_are_rejected(self, access, value):
         assert access.is_pulse_run(value) is False
+
+    @pytest.mark.parametrize("value, run", [("53298", 0), ("53298/1", 1), ("53298\\2", 2)])
+    def test_pulse_run_forms_give_the_pulse_and_run(self, access, value, run, tmp_path, monkeypatch):
+        monkeypatch.setenv("IMAS_HOME", str(tmp_path))
+        access.set_uri({"pulseIdent": value})
+        assert f"pulse=53298;run={run};" in access.uri
 
 
 class TestIMASAccessByNetCDFPath:
@@ -78,7 +83,7 @@ class TestIMASAccessByNetCDFPath:
         os.environ["IPLOT_SOURCES_CONFIG"] = os.path.abspath(self.temp_config_path)
 
         self.da = DataAccess()
-        self.ds = "imaspy"
+        self.ds = "imas"
         assert self.da.load_config(), "Failed to load data source configuration"
 
     def teardown_method(self) -> None:

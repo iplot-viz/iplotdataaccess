@@ -58,17 +58,17 @@ class IMASDataAccess(DataSource):
         self.connected = False
 
     def is_pulse_run(self, s: str)->bool :
-        """ 
-        Detects int_A/int_B or int_A\int_B.
-        Usefull for detecting pulseID in the form of pulse/run
+        r"""
+        Detects int_A, int_A/int_B or int_A\int_B.
+        Usefull for detecting pulseID in the form of pulse/run, a pulse without run being run 0
         """
 
-        # re pattern: start of string; digit one or more; \ or /; digit one or more; end of string
+        # re pattern: start of string; digit one or more; optionally \ or / and digit one or more; end of string
         # note: \\ for literal backslash
-        pattern = re.compile(r'^\d+[\\/]\d+$')  
+        pattern = re.compile(r'^\d+([\\/]\d+)?$')
         return bool(pattern.match(s))
 
-    def set_uri(self, config: dict | str):
+    def set_uri(self, config: Union[dict, str]):
         if type(config) is dict:
             # IMAS databases
             # For public databases, the data is in the $IMAS_HOME/public/imasdb/<database>/<version>/<pulse>/<run>/ folder.
@@ -86,7 +86,7 @@ class IMASDataAccess(DataSource):
                     self.errdesc = "Received an empty pulse identifier"
                     return
                 try:
-                    ret = pulse_ident.split("/")
+                    ret = re.split(r"[\\/]", pulse_ident)
                     pulse = int(ret[0])
                     if len(ret) == 2:
                         run = int(ret[1])
