@@ -57,6 +57,17 @@ class IMASDataAccess(DataSource):
         self.connection = None
         self.connected = False
 
+    def is_pulse_run(self, s: str)->bool :
+        r"""
+        Detects int_A, int_A/int_B or int_A\int_B.
+        Usefull for detecting pulseID in the form of pulse/run, a pulse without run being run 0
+        """
+
+        # re pattern: start of string; digit one or more; optionally \ or / and digit one or more; end of string
+        # note: \\ for literal backslash
+        pattern = re.compile(r'^\d+([\\/]\d+)?$')
+        return bool(pattern.match(s))
+
     def set_uri(self, config: Union[dict, str]):
         if type(config) is dict:
             # IMAS databases
@@ -75,7 +86,7 @@ class IMASDataAccess(DataSource):
                     self.errdesc = "Received an empty pulse identifier"
                     return
                 try:
-                    ret = pulse_ident.split("/")
+                    ret = re.split(r"[\\/]", pulse_ident)
                     pulse = int(ret[0])
                     if len(ret) == 2:
                         run = int(ret[1])
@@ -395,10 +406,10 @@ class IMASDataAccess(DataSource):
             self.connect()
         if kwargs.get("pulse"):
             pulse_ident = kwargs.get("pulse")
-            if pulse_ident.startswith("imas:"):
-                self.set_uri(pulse_ident)
-            else:
+            if self.is_pulse_run(pulse_ident): # pass it as a dict for pulse/run identification
                 self.set_uri({"pulseIdent": pulse_ident})
+            else: # anything else is a path or imas URI:
+                self.set_uri(pulse_ident)
             self.connect()
         if self.connection:
             data_obj = self.get_data_object(ids_path, time_start, time_end)
