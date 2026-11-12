@@ -21,6 +21,8 @@ BASE_NS = 1_641_760_133_123_456_789
 TIMES_NS = np.array([BASE_NS, BASE_NS + 100_000_000, BASE_NS + 250_000_000],
                     dtype=np.uint64)
 VALUES = np.array([1.0, 2.0, 3.0])
+FLOAT_VALUES = np.array([-0.00207991, 1.5, 2.25], dtype=np.float32)
+LONG_VALUES = np.array([-1, 70000, 3], dtype=np.int64)
 
 
 class _StubReader:
@@ -37,6 +39,26 @@ class _StubReader:
         return VALUES
 
 
+class _FloatStubReader(_StubReader):
+    """A signal of floats, as some data sources store theirs."""
+
+    def getFetchedType(self, handle):
+        return exportData.RAW_TYPE_FLOAT
+
+    def getDataAsFloat(self, handle):
+        return FLOAT_VALUES
+
+
+class _LongStubReader(_StubReader):
+    """A signal of integers, which UDA gives as longs, of any sign and size."""
+
+    def getFetchedType(self, handle):
+        return exportData.RAW_TYPE_LONG
+
+    def getDataAsLong(self, handle):
+        return LONG_VALUES
+
+
 @unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
 class ExportTimeColumnTests(unittest.TestCase):
     def setUp(self):
@@ -48,7 +70,7 @@ class ExportTimeColumnTests(unittest.TestCase):
     def _reset_globals():
         exportData.relative_start_ns = None
 
-    def _write_chunk(self, file_format, relative_start_ns, path):
+    def _write_chunk(self, file_format, relative_start_ns, path, reader=None):
         exportData.file_format = file_format
         exportData.relative_start_ns = relative_start_ns
         exportData.currVarname = "VAR-A"
@@ -59,7 +81,7 @@ class ExportTimeColumnTests(unittest.TestCase):
             exportData.dataWriter = exportData.createH5file(
                 path, {"VAR-A": "desc"}, str(BASE_NS), str(TIMES_NS[-1]))
         callback = exportData.ChunkProcessingCallback()
-        callback.ProcessDataBlock(_StubReader(), 0, 0)
+        callback.ProcessDataBlock(reader or _StubReader(), 0, 0)
         if file_format == "parquet":
             exportData.dataWriter.writer.close()
         else:
@@ -80,6 +102,21 @@ class ExportTimeColumnTests(unittest.TestCase):
         np.testing.assert_allclose(table['timestamp'].to_numpy(),
                                    [0.0, 0.1, 0.25], atol=1e-12)
         np.testing.assert_array_equal(table['anal_value'].to_numpy(), VALUES)
+
+    def test_parquet_keeps_float_samples_in_the_analog_column(self):
+        path = os.path.join(self.tmpdir.name, "float.parquet")
+        self._write_chunk("parquet", None, path, _FloatStubReader())
+        table = pq.read_table(path)
+        np.testing.assert_array_equal(table['anal_value'].to_numpy(), FLOAT_VALUES)
+        np.testing.assert_array_equal(table['digit_value'].to_numpy(), [0, 0, 0])
+
+    def test_parquet_keeps_integer_samples_of_any_value_in_the_digital_column(self):
+        path = os.path.join(self.tmpdir.name, "long.parquet")
+        self._write_chunk("parquet", None, path, _LongStubReader())
+        table = pq.read_table(path)
+        self.assertEqual(table.schema.field('digit_value').type, 'int64')
+        np.testing.assert_array_equal(table['digit_value'].to_numpy(), LONG_VALUES)
+        np.testing.assert_array_equal(table['anal_value'].to_numpy(), [0.0, 0.0, 0.0])
 
     def test_hdf5_absolute_keeps_ns_uint64(self):
         path = os.path.join(self.tmpdir.name, "abs.hdf5")

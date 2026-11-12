@@ -80,7 +80,7 @@ def createParquetFile(parquetFile):
         ('description', pa.string()),
         ('unit', pa.string()),
         ('anal_value', pa.float64()),
-        ('digit_value', pa.uint16())])
+        ('digit_value', pa.int64())])
     parquetContent.writer = pq.ParquetWriter(parquetFile, parquetContent.ponvar_schema)
     return parquetContent
 
@@ -185,16 +185,16 @@ class ChunkProcessingCallback(UdaClientCallback):
 
         if ytype == RAW_TYPE_DOUBLE:
             var_ana = reader.getDataAsDouble(handle)
-            var_dig = np.full(currlen, 0, dtype=np.uint16)
+            var_dig = np.full(currlen, 0, dtype=np.int64)
             data_val = np.zeros(currlen, dtype=dtD)
             data_val['time'] = timeV
             data_val['value'] = var_ana
         elif ytype == RAW_TYPE_FLOAT:
-            var_dig = reader.getDataAsFloat(handle)
-            var_ana = np.full(currlen, 0, dtype=np.uint16)
+            var_ana = reader.getDataAsFloat(handle)
+            var_dig = np.full(currlen, 0, dtype=np.int64)
             data_val = np.zeros(currlen, dtype=dtF)
             data_val['time'] = timeV
-            data_val['value'] = var_dig
+            data_val['value'] = var_ana
         else:
             var_dig = reader.getDataAsLong(handle)
             var_ana = np.full(currlen, 0, dtype=np.float64)
