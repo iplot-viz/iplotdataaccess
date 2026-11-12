@@ -42,3 +42,14 @@ class TestAppDataAccess:
         monkeypatch.setattr(DataAccess, "load_config", fake_load)
         AppDataAccess.initialize(config_file="/tmp/myconf.cfg")
         assert captured["arg"] == "/tmp/myconf.cfg"
+
+    def test_initialize_loads_only_the_source_types_given(self, reset_app_data_access, monkeypatch):
+        monkeypatch.setattr(DataAccess, "load_config", lambda self, conf=None: True)
+        AppDataAccess.initialize(source_types=["CSV"])
+        assert AppDataAccess.get_data_access().source_types == frozenset({"CSV"})
+        assert set(AppDataAccess.get_data_access().proto) == {"CSV"}
+
+    def test_initialize_leaves_unconnected_the_data_sources_named(self, reset_app_data_access, monkeypatch):
+        monkeypatch.setattr(DataAccess, "load_config", lambda self, conf=None: True)
+        AppDataAccess.initialize(leave_unconnected=["down"])
+        assert AppDataAccess.get_data_access().leave_unconnected == frozenset({"down"})
