@@ -57,6 +57,11 @@ class DataSource(ABC):
     def clear_cache(self) -> None:
         pass
 
+    def cancel(self) -> bool:
+        """Stop the read in progress, from any thread: it then raises ReadCancelled. Whether the data source can; one
+        that cannot lets the read end."""
+        return False
+
     @abstractmethod
     def is_connected(self) -> bool:
         pass

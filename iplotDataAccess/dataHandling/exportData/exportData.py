@@ -85,13 +85,21 @@ def createParquetFile(parquetFile):
     return parquetContent
 
 
-def readDataChunks(reader, callback, request, chunkSize):
+def _stop_if_requested(stopRequested):
+    if stopRequested is not None and stopRequested():
+        raise DataExportError("Cancelled", "The export was cancelled")
+
+
+def readDataChunks(reader, callback, request, chunkSize, stopRequested=None):
     """Read the data of `request` in chunks of `chunkSize` samples, giving each to `callback`, as
     UdaClientIterator.readDataChunk does, in any thread: the UDA clients that can cancel a read wrap each one
     in a SIGINT handler, which only the main thread can set, and MINT exports in a worker thread. A read that
-    fails, or that cancelAPI() stops, ends it with -1."""
+    fails, or that cancelAPI() stops, ends it with -1, and so does `stopRequested()`, if given, once it is true:
+    cancelAPI() stops only the chunk being read."""
     continueFrom = 0
     while True:
+        if stopRequested is not None and stopRequested():
+            return -1
         handle = reader.fetchData(f"{request},ddContinueFrom={continueFrom},ddSamples={chunkSize}")
         if handle < 0:
             return -1
@@ -110,14 +118,14 @@ def readDataChunks(reader, callback, request, chunkSize):
     return 0
 
 
-def getAndFillData(varn, res, vlist, dataW, conn, chunkS):
+def getAndFillData(varn, res, vlist, dataW, conn, chunkS, stopRequested=None):
     query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, res.s1, res.e1)
     CallbackFct = ChunkProcessingCallback()
-    readDataChunks(conn.UCR, CallbackFct, query, chunkS)
+    readDataChunks(conn.UCR, CallbackFct, query, chunkS, stopRequested)
 
 
 def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, chunkS=50000,
-                              progressCallback=None):
+                              progressCallback=None, stopRequested=None):
     res = result()
     res.errc = -1
     res.s1 = startT
@@ -129,14 +137,16 @@ def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, 
 
     dataWriter = createParquetFile(parquetFile)
 
-    for varn in varMap:
-        if progressCallback is not None:
-            progressCallback(varn)
-        currVarname = varn
-        currVarDesc = varMap[varn]
-        getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
-
-    dataWriter.writer.close()
+    try:
+        for varn in varMap:
+            _stop_if_requested(stopRequested)
+            if progressCallback is not None:
+                progressCallback(varn)
+            currVarname = varn
+            currVarDesc = varMap[varn]
+            getAndFillData(varn, res, varMap, dataWriter, conn, chunkS, stopRequested)
+    finally:
+        dataWriter.writer.close()
 
 
 def createH5file(h5file, varmap, start, end):
@@ -162,7 +172,7 @@ def createH5file(h5file, varmap, start, end):
 
 
 def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=50000,
-                         progressCallback=None):
+                         progressCallback=None, stopRequested=None):
     res = result()
     res.errc = -1
     res.s1 = startT
@@ -176,15 +186,17 @@ def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=500
 
     dataWriter = createH5file(h5File, varMap, res.s1, res.e1)
 
-    for varn in varMap:
-        if progressCallback is not None:
-            progressCallback(varn)
-        currVarname = varn
-        currVarDesc = varMap[varn]
-        period_counter = 0
-        getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
-
-    dataWriter.close()
+    try:
+        for varn in varMap:
+            _stop_if_requested(stopRequested)
+            if progressCallback is not None:
+                progressCallback(varn)
+            currVarname = varn
+            currVarDesc = varMap[varn]
+            period_counter = 0
+            getAndFillData(varn, res, varMap, dataWriter, conn, chunkS, stopRequested)
+    finally:
+        dataWriter.close()
 
 
 class ChunkProcessingCallback(UdaClientCallback):
@@ -485,29 +497,34 @@ def _finalize_resampled(varn, callback, writer, grid, rlog):
 
 
 def extractAndGenerateResampled(varMap, conn, startT, endT, outFile, freq_hz, chunkS,
-                                progressCallback=None):
+                                progressCallback=None, stopRequested=None):
     grid = resampling.build_grid(startT, endT, freq_hz)
     if file_format == 'parquet':
         writer = _ResampledParquetWriter(outFile, grid)
     else:
         writer = _ResampledH5Writer(outFile, grid, startT, endT, freq_hz)
-    with open(f"{outFile}.resampling.log", 'wt') as rlog:
-        rlog.write(f"Resampled export at {freq_hz} Hz: {grid[2]} intervals of "
-                   f"{grid[1]} ns from {_iso_utc(grid[0])}\n")
-        for varn in varMap:
-            if progressCallback is not None:
-                progressCallback(varn)
-            seed = _last_value_before(conn, varn, startT)
-            callback = _ResampleChunkCallback(varn, grid, writer, seed)
-            query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
-            readDataChunks(conn.UCR, callback, query, chunkS)
-            _finalize_resampled(varn, callback, writer, grid, rlog)
-    writer.close()
+    try:
+        with open(f"{outFile}.resampling.log", 'wt') as rlog:
+            rlog.write(f"Resampled export at {freq_hz} Hz: {grid[2]} intervals of "
+                       f"{grid[1]} ns from {_iso_utc(grid[0])}\n")
+            for varn in varMap:
+                _stop_if_requested(stopRequested)
+                if progressCallback is not None:
+                    progressCallback(varn)
+                seed = _last_value_before(conn, varn, startT)
+                callback = _ResampleChunkCallback(varn, grid, writer, seed)
+                query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
+                readDataChunks(conn.UCR, callback, query, chunkS, stopRequested)
+                _finalize_resampled(varn, callback, writer, grid, rlog)
+    finally:
+        writer.close()
 
 
 def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputFolder, chunkS=100000,
-                 progressCallback=None, relativeTime=False, resampleFreq=None):
+                 progressCallback=None, relativeTime=False, resampleFreq=None, stopRequested=None):
     """`progressCallback`, if given, is invoked with the variable name as each variable starts exporting.
+    `stopRequested`, if given, stops the export once it returns true, before the next chunk it reads: the file it
+    was writing is left closed as far as it got.
 
     With `relativeTime`, timestamps are written as float seconds relative to
     `startTime` instead of absolute nanosecond counts.
@@ -528,13 +545,13 @@ def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputF
         ###csv variable with description
         if resampleFreq:
             extractAndGenerateResampled(varMap, conn, startTime, endTime, outputFolder,
-                                        int(resampleFreq), chunkS, progressCallback)
+                                        int(resampleFreq), chunkS, progressCallback, stopRequested)
         elif formatType == 'parquet':
             ret = extractAndGenerateParquet(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS,
-                                            progressCallback)
+                                            progressCallback, stopRequested)
         else:
             ret = extractAndGenerateH5(varMap, conn, logfile, startTime, endTime, outputFolder, chunkS,
-                                       progressCallback)
+                                       progressCallback, stopRequested)
         return True, ""
     except DataExportError as dee:
         return False, dee.message
