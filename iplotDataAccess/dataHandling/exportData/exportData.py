@@ -85,10 +85,35 @@ def createParquetFile(parquetFile):
     return parquetContent
 
 
+def readDataChunks(reader, callback, request, chunkSize):
+    """Read the data of `request` in chunks of `chunkSize` samples, giving each to `callback`, as
+    UdaClientIterator.readDataChunk does, in any thread: the UDA clients that can cancel a read wrap each one
+    in a SIGINT handler, which only the main thread can set, and MINT exports in a worker thread. A read that
+    fails, or that cancelAPI() stops, ends it with -1."""
+    continueFrom = 0
+    while True:
+        handle = reader.fetchData(f"{request},ddContinueFrom={continueFrom},ddSamples={chunkSize}")
+        if handle < 0:
+            return -1
+        try:
+            samplesCount = reader.getSamplesNumber(handle)
+            if samplesCount == 0:
+                break
+            res = callback.ProcessDataBlock(reader, handle, continueFrom)
+            if res is not None and res < 0:
+                return res
+            if reader.isLastChunk(handle):
+                break
+            continueFrom += samplesCount
+        finally:
+            reader.releaseData(handle)
+    return 0
+
+
 def getAndFillData(varn, res, vlist, dataW, conn, chunkS):
     query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, res.s1, res.e1)
     CallbackFct = ChunkProcessingCallback()
-    UdaClientIterator.readDataChunk(conn.UCR, CallbackFct, query, chunkS)
+    readDataChunks(conn.UCR, CallbackFct, query, chunkS)
 
 
 def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, chunkS=50000,
@@ -377,7 +402,7 @@ def _last_value_before(conn, varn, startT):
     query = "variable=%s,startTime=0,endTime=%s,decSamples=1,decType=last" % (varn, startT)
     callback = _LastValueCallback()
     try:
-        UdaClientIterator.readDataChunk(conn.UCR, callback, query, 16)
+        readDataChunks(conn.UCR, callback, query, 16)
     except Exception:
         return None
     if callback.value is None:
@@ -475,7 +500,7 @@ def extractAndGenerateResampled(varMap, conn, startT, endT, outFile, freq_hz, ch
             seed = _last_value_before(conn, varn, startT)
             callback = _ResampleChunkCallback(varn, grid, writer, seed)
             query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
-            UdaClientIterator.readDataChunk(conn.UCR, callback, query, chunkS)
+            readDataChunks(conn.UCR, callback, query, chunkS)
             _finalize_resampled(varn, callback, writer, grid, rlog)
     writer.close()
 
