@@ -145,7 +145,7 @@ def test_an_export_stopped_between_variables_leaves_its_file_closed(tmp_path):
 
     target = tmp_path / "out.parquet"
     exportData.relative_start_ns = None
-    with patch.object(exportData.UdaClientIterator, "readDataChunk", lambda *args: None):
+    with patch.object(exportData, "readDataChunks", lambda *args: 0):
         with pytest.raises(Stop):
             exportData.extractAndGenerateParquet({"A": "", "B": ""}, _source(_Reader()), None, START, START + 1,
                                                  str(target),
