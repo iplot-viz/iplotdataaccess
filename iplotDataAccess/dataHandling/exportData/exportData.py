@@ -129,14 +129,15 @@ def extractAndGenerateParquet(varMap, conn, logfile, startT, endT, parquetFile, 
 
     dataWriter = createParquetFile(parquetFile)
 
-    for varn in varMap:
-        if progressCallback is not None:
-            progressCallback(varn)
-        currVarname = varn
-        currVarDesc = varMap[varn]
-        getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
-
-    dataWriter.writer.close()
+    try:
+        for varn in varMap:
+            if progressCallback is not None:
+                progressCallback(varn)
+            currVarname = varn
+            currVarDesc = varMap[varn]
+            getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
+    finally:
+        dataWriter.writer.close()
 
 
 def createH5file(h5file, varmap, start, end):
@@ -176,15 +177,16 @@ def extractAndGenerateH5(varMap, conn, logfile, startT, endT, h5File, chunkS=500
 
     dataWriter = createH5file(h5File, varMap, res.s1, res.e1)
 
-    for varn in varMap:
-        if progressCallback is not None:
-            progressCallback(varn)
-        currVarname = varn
-        currVarDesc = varMap[varn]
-        period_counter = 0
-        getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
-
-    dataWriter.close()
+    try:
+        for varn in varMap:
+            if progressCallback is not None:
+                progressCallback(varn)
+            currVarname = varn
+            currVarDesc = varMap[varn]
+            period_counter = 0
+            getAndFillData(varn, res, varMap, dataWriter, conn, chunkS)
+    finally:
+        dataWriter.close()
 
 
 class ChunkProcessingCallback(UdaClientCallback):
@@ -491,18 +493,20 @@ def extractAndGenerateResampled(varMap, conn, startT, endT, outFile, freq_hz, ch
         writer = _ResampledParquetWriter(outFile, grid)
     else:
         writer = _ResampledH5Writer(outFile, grid, startT, endT, freq_hz)
-    with open(f"{outFile}.resampling.log", 'wt') as rlog:
-        rlog.write(f"Resampled export at {freq_hz} Hz: {grid[2]} intervals of "
-                   f"{grid[1]} ns from {_iso_utc(grid[0])}\n")
-        for varn in varMap:
-            if progressCallback is not None:
-                progressCallback(varn)
-            seed = _last_value_before(conn, varn, startT)
-            callback = _ResampleChunkCallback(varn, grid, writer, seed)
-            query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
-            readDataChunks(conn.UCR, callback, query, chunkS)
-            _finalize_resampled(varn, callback, writer, grid, rlog)
-    writer.close()
+    try:
+        with open(f"{outFile}.resampling.log", 'wt') as rlog:
+            rlog.write(f"Resampled export at {freq_hz} Hz: {grid[2]} intervals of "
+                       f"{grid[1]} ns from {_iso_utc(grid[0])}\n")
+            for varn in varMap:
+                if progressCallback is not None:
+                    progressCallback(varn)
+                seed = _last_value_before(conn, varn, startT)
+                callback = _ResampleChunkCallback(varn, grid, writer, seed)
+                query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
+                readDataChunks(conn.UCR, callback, query, chunkS)
+                _finalize_resampled(varn, callback, writer, grid, rlog)
+    finally:
+        writer.close()
 
 
 def generateData(logfile, conn, csvfile, formatType, startTime, endTime, outputFolder, chunkS=100000,

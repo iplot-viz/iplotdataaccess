@@ -246,3 +246,16 @@ class DataAccess:
         for ds in self.ds_list.values():
             if ds.is_connected():
                 ds.clear_cache()
+
+    def cancel(self) -> bool:
+        """Stop the reads in progress of the data sources that can, from any thread (see DataSource.cancel); whether
+        one could."""
+        cancelled = False
+        for ds in self.ds_list.values():
+            if ds is None:
+                continue
+            try:
+                cancelled = ds.cancel() or cancelled
+            except Exception:
+                logger.exception(f"Cannot cancel the read of the data source {ds.name}")
+        return cancelled
