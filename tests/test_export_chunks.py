@@ -92,6 +92,32 @@ class ExportChunksTest(unittest.TestCase):
                          ['0,ddSamples=10', '10,ddSamples=10', '20,ddSamples=10'])
         os.remove(target)
 
+    def test_a_stop_requested_ends_the_chunks_before_the_next_one(self):
+        reader = _Reader(25)
+        conn = exportData.connH()
+        conn.UCR = reader
+        target = os.path.join(tempfile.mkdtemp(), 'out.parquet')
+        exportData.relative_start_ns = None
+        exportData.file_format = 'parquet'
+        stop = []
+        csv = os.path.join(os.path.dirname(target), 'vars.csv')
+        with open(csv, 'w') as f:
+            f.writelines(['VAR,about' + chr(10), 'OTHER,about' + chr(10)])
+        real_fetch = reader.fetchData
+
+        def fetch(request):
+            stop.append(True)
+            return real_fetch(request)
+
+        reader.fetchData = fetch
+        valid, message = exportData.generateData(None, conn, csv, 'parquet', T0, T0 + 25, target, 10,
+                                                 stopRequested=lambda: bool(stop))
+
+        self.assertEqual((valid, message), (False, "The export was cancelled"))
+        self.assertEqual(len(reader.requests), 1)
+        self.assertEqual(pq.read_table(target).num_rows, 10)
+        os.remove(target)
+
     def test_a_read_that_fails_ends_the_chunks(self):
         reader = _Reader(25)
         reader.fetchData = lambda request: -1

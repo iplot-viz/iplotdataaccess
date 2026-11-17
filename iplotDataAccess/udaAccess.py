@@ -110,6 +110,8 @@ class UdaAccess(DataSource):
                                 "could not retrieve data", "Incorrect time"]
         self.access_cache = ct.LRUCache(maxsize=self._cache_size(config))
         self.pulses_cache = {}
+        # Set by cancel() for the read in progress (see __fetch).
+        self._cancelled = False
 
     def connect(self) -> bool:
 
@@ -719,6 +721,16 @@ class UdaAccess(DataSource):
         self.access_cache.clear()
         self.pulses_cache.clear()
 
+    def cancel(self) -> bool:
+        """Stop the read in progress with the UDA clients that can (cancelAPI): it then raises ReadCancelled, instead of
+        giving an error that the cache would keep for its query."""
+        cancel_api = getattr(self.UCR, 'cancelAPI', None)
+        if cancel_api is None:
+            return False
+        self._cancelled = True
+        cancel_api()
+        return True
+
     # --- Pulse creation (optional, feature-gated on uda_client_writer) ---
 
     def is_write_capable(self) -> bool:
@@ -850,9 +862,18 @@ class UdaAccess(DataSource):
     def __fetch_envelope_with_cache(self, query):
         return self.__fetch_envelope(query)
 
+    def __fetch(self, query) -> int:
+        """The handle of the data of the query, as fetchData() gives it; raises ReadCancelled if cancel() stopped the
+        read."""
+        self._cancelled = False
+        handle = self.UCR.fetchData(query)
+        if handle < 0 and self._cancelled:
+            raise dataCommon.ReadCancelled(f"The read was cancelled: {query}")
+        return handle
+
     def __fetch_data_x(self, query):
         logger.debug("Query ZZ: %s", query)
-        handle = self.UCR.fetchData(query)
+        handle = self.__fetch(query)
         self.errcode = 0
         self.errdesc = ""
         found = 0
@@ -905,7 +926,7 @@ class UdaAccess(DataSource):
     # @cached(cache=LRUCache(maxsize=100))
     def __fetch_envelope(self, query):
         logger.debug("Query ZZ: %s", query)
-        handle = self.UCR.fetchData(query)
+        handle = self.__fetch(query)
         self.errcode = 0
         self.errdesc = ""
         found = 0

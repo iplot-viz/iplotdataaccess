@@ -96,6 +96,10 @@ class DataEnvelopeException(Exception):
     pass
 
 
+class ReadCancelled(Exception):
+    """Raised by a read that DataSource.cancel() stopped: it gives no data, and its data source keeps nothing of it."""
+
+
 class DataEnvelope(DataCore):
 
     def __init__(self):
