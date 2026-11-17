@@ -43,6 +43,8 @@ logger = setupLog.get_logger(__name__)
 # ENVELOPE_TARGET_POINTS buckets.
 MAX_RAW_POINTS_PER_SIGNAL = 100_000
 ENVELOPE_TARGET_POINTS = 1920
+# Without isDecimated a reply to the decSamples fallback would pass for raw data.
+_UDA_REPORTS_DECIMATION = hasattr(uc.UdaClientReaderPython, "isDecimated")
 
 
 class RTHException(Exception):
@@ -62,8 +64,10 @@ class UdaParams:
         self.pEnd = None
         self.extSamples = None
         self.retType = None
+        self.fallbackNbps = None
 
-    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples, ret_type=None):
+    def set_params(self, varname, nbps, dec_type, start_t, end_t, pulse, ts_format, ext_samples, ret_type=None,
+                   fallback_nbps=None):
         self.varname = varname
         self.nbps = nbps
         self.decType = dec_type
@@ -73,6 +77,14 @@ class UdaParams:
         self.tsFormat = ts_format
         self.extSamples = ext_samples
         self.retType = ret_type
+        self.fallbackNbps = fallback_nbps
+
+    @property
+    def decSamples(self) -> str:
+        """decSamples of the query: nbps, where -1 (every sample) falls back to fallbackNbps if they do not fit."""
+        if self.nbps == -1 and self.fallbackNbps:
+            return f"-1|{self.fallbackNbps}"
+        return f"{self.nbps}"
 
 
 # class to interface with data source - here UDA
@@ -215,6 +227,7 @@ class UdaAccess(DataSource):
         pulse_nb = kwargs.get("pulse", None)
         pulse = self.__parse_pulse(pulse_nb)
         nbp = kwargs.get("nbp", 1000)
+        fallback_nbp = kwargs.get("fallback_nbp") if _UDA_REPORTS_DECIMATION else None
         dec_type = kwargs.get("decType", None)
 
         ts_s = kwargs.get("tsS", "0")
@@ -225,7 +238,8 @@ class UdaAccess(DataSource):
         ret_type = kwargs.get("retType", None)
         ts_format = kwargs.get("tsFormat", "absolute")
         logger.debug(f"init timestamp tSS={ts_s} and tsE={ts_e} and ts_format={ts_format}")
-        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples, ret_type)
+        uda_p.set_params(varname, nbp, dec_type, ts_sn, ts_en, pulse, ts_format, ext_samples, ret_type,
+                         fallback_nbp)
         return uda_p
 
     @classmethod
@@ -314,6 +328,8 @@ class UdaAccess(DataSource):
 
         if os.getenv("MINT_GET_EXTRE", "").lower() == "true":
             # we retrieve the extremities
+            # The look-back below asks for the plain decSamples, not the fallback.
+            query = query.replace(f"decSamples={uda_p.decSamples}", f"decSamples={uda_p.nbps}")
             if "decType=" in query:
                 query_l1 = query.replace("decType" + uda_p.decType, "decType=last")
             else:
@@ -401,7 +417,7 @@ class UdaAccess(DataSource):
         # Look back from the archive start up to startT, asking for a single last-decimated
         # sample (cheap regardless of how far back it is); extSamples is dropped so no point
         # past startT is appended.
-        pre_query = pre_query.replace(f"decSamples={uda_p.nbps}", "decSamples=1")
+        pre_query = pre_query.replace(f"decSamples={uda_p.decSamples}", "decSamples=1")
         pre_query = pre_query.replace(f"startTime={uda_p.startT}", "startTime=0")
         pre_query = pre_query.replace(f"endTime={uda_p.endT}", f"endTime={uda_p.startT}")
         pre_query = pre_query.replace(f",extSamples={uda_p.extSamples}", "")
@@ -630,7 +646,7 @@ class UdaAccess(DataSource):
 
         # we query always absolute to ease adding first and last data point, and we transform the data afterward
         if uda_p.pulse is None or uda_p.pulse == "None":
-            query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+            query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.decSamples},"
                       f"startTime={uda_p.startT},endTime={uda_p.endT}{ext_query}")
         else:
             # Resolve special pulse numbers (0 = last, -N = N-th previous)
@@ -689,7 +705,7 @@ class UdaAccess(DataSource):
                 logger.debug("current pulse et=%d st=%d", uda_p.endT, uda_p.startT)
 
                 # to bypass the cache we explicitly move the end time...udaP.tsFormat,
-                query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.decSamples},"
                           f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
 
             else:
@@ -697,10 +713,10 @@ class UdaAccess(DataSource):
                     self.pulses_cache.update({uda_p.pulse: pulse_i})
                     logger.debug(f"completed pulse tsE={uda_p.endT},tsS={uda_p.startT} and added to the cache")
                 if uda_p.endT is None:
-                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.decSamples},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S{ext_query}")
                 else:
-                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.nbps},"
+                    query1 = (f"variable={uda_p.varname},tsFormat={uda_p.tsFormat},decSamples={uda_p.decSamples},"
                               f"pulse={uda_p.pulse},startTime={uda_p.startT}S,endTime={uda_p.endT}S{ext_query}")
 
             # Set pStart and pEnd for pulse
@@ -877,7 +893,7 @@ class UdaAccess(DataSource):
         dobj.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
                    self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
                    self.UCR.getLabelY(handle), "Time", self.UCR.getUnitsY(handle),
-                   self.UCR.getRank(handle))
+                   self.UCR.getRank(handle), _UDA_REPORTS_DECIMATION and self.UCR.isDecimated(handle))
 
         if dobj.ytype == dataCommon.DataType.DA_TYPE_STRING:
             dobj.set_data(self.UCR.getDataAsStrings(handle), 2)
@@ -933,7 +949,7 @@ class UdaAccess(DataSource):
         d_env.set_a(self.convert_uda_types(self.UCR.getFetchedTimeType(handle)),
                     self.convert_uda_types(self.UCR.getFetchedType(handle)), self.UCR.getLabelX(handle),
                     self.UCR.getLabelY(handle), "Time", self.UCR.getUnitsY(handle),
-                    self.UCR.getRank(handle))
+                    self.UCR.getRank(handle), _UDA_REPORTS_DECIMATION and self.UCR.isDecimated(handle))
 
         data = self.UCR.getDataNativeRank(handle)
 

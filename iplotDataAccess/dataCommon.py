@@ -28,8 +28,9 @@ class DataCore:
         self.errcode = 0
         self.errdesc = None
         self.resolved_pulse = None
+        self.isdecimated = False
 
-    def set_a(self, xtype, ytype, xlabel, ylabel, xunit, yunit, drank):
+    def set_a(self, xtype, ytype, xlabel, ylabel, xunit, yunit, drank, isdecimated=False):
         if isinstance(xtype, DataType):
             self.xtype = xtype
         if isinstance(ytype, DataType):
@@ -39,6 +40,7 @@ class DataCore:
         self.xunit = xunit
         self.yunit = yunit
         self.drank = drank
+        self.isdecimated = isdecimated
         self.errcode = 0
         self.errdesc = ""
 
@@ -58,6 +60,7 @@ class DataCore:
         self.errcode = 0
         self.errdesc = ""
         self.resolved_pulse = None
+        self.isdecimated = False
 
     def set_err(self, errc, errd):
         self.errcode = errc
