@@ -484,6 +484,47 @@ def _finalize_resampled(varn, callback, writer, grid, rlog):
         rlog.write(f"{varn}: skipped, no data in the window and none before it\n")
 
 
+#: Windows shorter than this, resampled at one of these frequencies, are averaged by the UDA server: one sample per
+#: interval of the grid, far fewer than the raw samples.
+SERVER_AVERAGE_MAX_WINDOW_NS = 6 * 3600 * resampling.NS_PER_SECOND
+SERVER_AVERAGE_FREQUENCIES_HZ = (1, 10, 100)
+
+# What UDA answers when the window holds no data.
+_NO_DATA_MESSAGES = ("Requested interval is empty", "Requested data cannot be located", "data cannot be retrieved",
+                     "could not retrieve data", "Incorrect time")
+
+
+def _server_averages(startT, endT, freq_hz, ytype) -> bool:
+    """Whether the UDA server averages the samples of the window into the intervals of the grid: integer signals
+    keep the last sample of each interval instead (see _RESAMPLE_KIND), and a signal of unknown type is read raw."""
+    return (int(endT) - int(startT) < SERVER_AVERAGE_MAX_WINDOW_NS and freq_hz in SERVER_AVERAGE_FREQUENCIES_HZ
+            and _RESAMPLE_KIND.get(ytype, (None, False))[1])
+
+
+def _averaged_query(varn, grid, endT, freq_hz):
+    """The query of the averages of `varn` over the intervals of the grid. The server counts its intervals from the
+    start it is given and stamps each with its beginning, so they start with the grid, on a whole second."""
+    return "variable=%s,startTime=%s,endTime=%s,decIntervalTime=%gS,decType=avg_tr" % (varn, grid[0], endT,
+                                                                                      1 / freq_hz)
+
+
+def _fetch_averaged(conn, query, callback):
+    """Read the reply of an averaged query in one request: the paging of the chunked read (ddSamples,
+    ddContinueFrom) does not apply to it. A reply saying the window has no data leaves the variable to the handling of
+    no data; any other error fails the export."""
+    handle = conn.UCR.fetchData(query)
+    if handle < 0:
+        message = conn.UCR.getErrorMsg()
+        if any(no_data in message for no_data in _NO_DATA_MESSAGES):
+            return
+        conn.UCR.resetAll()
+        raise DataExportError(query, f"UDA request failed: {message}")
+    try:
+        callback.ProcessDataBlock(conn.UCR, handle, 0)
+    finally:
+        conn.UCR.releaseData(handle)
+
+
 def extractAndGenerateResampled(varMap, conn, startT, endT, outFile, freq_hz, chunkS,
                                 progressCallback=None):
     grid = resampling.build_grid(startT, endT, freq_hz)
@@ -499,8 +540,15 @@ def extractAndGenerateResampled(varMap, conn, startT, endT, outFile, freq_hz, ch
                 progressCallback(varn)
             seed = _last_value_before(conn, varn, startT)
             callback = _ResampleChunkCallback(varn, grid, writer, seed)
-            query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
-            readDataChunks(conn.UCR, callback, query, chunkS)
+            ytype = seed.ytype if seed is not None else None
+            if _server_averages(startT, endT, freq_hz, ytype):
+                _fetch_averaged(conn, _averaged_query(varn, grid, endT, freq_hz), callback)
+            else:
+                if _server_averages(startT, endT, freq_hz, RAW_TYPE_DOUBLE):
+                    reason = "type unknown" if ytype is None else "integer signal"
+                    rlog.write(f"{varn}: raw samples fetched ({reason}), not averaged by the server\n")
+                query = "variable=%s,startTime=%s,endTime=%s,decSamples=-1" % (varn, startT, endT)
+                readDataChunks(conn.UCR, callback, query, chunkS)
             _finalize_resampled(varn, callback, writer, grid, rlog)
     writer.close()
 

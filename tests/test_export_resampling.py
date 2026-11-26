@@ -8,6 +8,8 @@ import io
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -168,6 +170,116 @@ class _StubReader:
     getDataAsDouble = _values
     getDataAsFloat = _values
     getDataAsLong = _values
+
+
+class _FakeUCR(_StubReader):
+    """A UDA client of one request: fetchData returns a handle, or -1 with an error."""
+
+    def __init__(self, ytype, chunks, error=None):
+        super().__init__(ytype, chunks)
+        self.error = error
+        self.queries, self.released, self.reset = [], [], False
+
+    def fetchData(self, query):
+        self.queries.append(query)
+        return -1 if self.error else 7
+
+    def getErrorMsg(self):
+        return self.error
+
+    def releaseData(self, handle):
+        self.released.append(handle)
+
+    def resetAll(self):
+        self.reset = True
+
+
+@unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
+class ServerAveragedTests(unittest.TestCase):
+    """Windows shorter than 6 hours resampled at 1, 10 or 100 Hz are averaged by the UDA server (mint#229)."""
+    GRID = (BASE_NS, NS, 5)  # 4 s at 1 Hz
+    HOURS = 3600 * NS
+
+    def _conn(self, ucr):
+        conn = exportData.connH()
+        conn.UCR = ucr
+        return conn
+
+    def test_the_server_averages_short_windows_of_analog_signals_at_1_10_and_100_hz(self):
+        def averages(hours, freq_hz, ytype=exportData.RAW_TYPE_DOUBLE):
+            return exportData._server_averages(BASE_NS, BASE_NS + int(hours * self.HOURS), freq_hz, ytype)
+
+        self.assertEqual([averages(5.9, f) for f in (1, 10, 100, 10.0)], [True] * 4)
+        self.assertTrue(averages(5.9, 10, exportData.RAW_TYPE_FLOAT))
+        self.assertEqual([averages(6, 10), averages(5.9, 5), averages(5.9, 1000)], [False] * 3)
+        self.assertEqual([averages(1, 10, exportData.RAW_TYPE_LONG), averages(1, 10, None)], [False, False])
+
+    def test_the_averaged_query_counts_its_intervals_from_the_grid(self):
+        grid = exportData.resampling.build_grid(BASE_NS + 300_000_000, BASE_NS + 2 * NS, 10)
+        self.assertEqual(exportData._averaged_query("VAR-A", grid, BASE_NS + 2 * NS, 10),
+                         f"variable=VAR-A,startTime={BASE_NS},endTime={BASE_NS + 2 * NS},"
+                         f"decIntervalTime=0.1S,decType=avg_tr")
+        self.assertIn("decIntervalTime=1S,", exportData._averaged_query("V", grid, BASE_NS, 1))
+        self.assertIn("decIntervalTime=0.01S,", exportData._averaged_query("V", grid, BASE_NS, 100))
+
+    def test_an_averaged_reply_is_read_in_one_request_and_fills_the_grid(self):
+        ucr = _FakeUCR(exportData.RAW_TYPE_DOUBLE,
+                       [([BASE_NS + i * NS for i in range(5)], [1.0, 2.0, 3.0, 4.0, 5.0])])
+        column = {}
+
+        class Writer:
+            def add_variable(self, varn, dtype, unit):
+                column['v'] = np.zeros(5)
+                return column['v']
+
+        callback = exportData._ResampleChunkCallback("VAR-A", self.GRID, Writer(), None)
+        exportData._fetch_averaged(self._conn(ucr), "q", callback)
+        exportData._finalize_resampled("VAR-A", callback, None, self.GRID, io.StringIO())
+        self.assertEqual((ucr.queries, ucr.released), (["q"], [7]))
+        np.testing.assert_array_equal(column['v'], [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_a_reply_without_data_is_not_an_error(self):
+        # The first one is what codacuda answers for a window without data.
+        for error in ("ERROR udaPlugin: Requested interval is empty", "Requested data cannot be located"):
+            with self.subTest(error=error):
+                ucr = _FakeUCR(exportData.RAW_TYPE_DOUBLE, [], error=error)
+                callback = exportData._ResampleChunkCallback("VAR-A", self.GRID, None, None)
+                exportData._fetch_averaged(self._conn(ucr), "q", callback)
+                self.assertIsNone(callback.acc)
+                self.assertFalse(ucr.reset)
+
+    def test_another_error_fails_the_export(self):
+        ucr = _FakeUCR(exportData.RAW_TYPE_DOUBLE, [], error="server exploded")
+        callback = exportData._ResampleChunkCallback("VAR-A", self.GRID, None, None)
+        with self.assertRaises(exportData.DataExportError):
+            exportData._fetch_averaged(self._conn(ucr), "q", callback)
+        self.assertTrue(ucr.reset)
+
+    def test_an_export_asks_the_server_for_the_averages_of_analog_signals_and_reads_the_others_raw(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        exportData.file_format = "parquet"
+        self.addCleanup(setattr, exportData, 'relative_start_ns', None)
+        kinds = {"VAR-A": exportData.RAW_TYPE_DOUBLE, "STATE-B": exportData.RAW_TYPE_LONG}
+        ucr = _FakeUCR(None, [([BASE_NS], [1.0])])
+        raw = []
+
+        def seed(conn, varn, startT):
+            return SimpleNamespace(ytype=kinds[varn], value=0.0, unit="V")
+
+        def read_raw(reader, callback, query, chunk):
+            raw.append(query)
+            return 0
+
+        out = os.path.join(folder.name, "out.parquet")
+        with patch.object(exportData, '_last_value_before', seed),                 patch.object(exportData, 'readDataChunks', read_raw):
+            exportData.extractAndGenerateResampled(kinds, self._conn(ucr), BASE_NS, BASE_NS + 4 * NS, out, 1, 1000)
+
+        self.assertEqual([q.split(',')[0] for q in ucr.queries], ["variable=VAR-A"])
+        self.assertIn("decType=avg_tr", ucr.queries[0])
+        self.assertEqual([q.split(',')[0] for q in raw], ["variable=STATE-B"])
+        with open(f"{out}.resampling.log") as log:
+            self.assertIn("STATE-B: raw samples fetched (integer signal), not averaged by the server", log.read())
 
 
 @unittest.skipUnless(uda_imported, "uda_client_reader not available for CI tests")
